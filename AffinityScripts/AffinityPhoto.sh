@@ -1,29 +1,28 @@
 #!/bin/bash
 
-# Check for required dependencies
-missing_deps=""
+# Example: Set _distro variable manually for testing
+# In practice, you might get this from a command like lsb_release or /etc/os-release
+_distro=$(lsb_release -si)
 
-check_dependency() {
-  if ! command -v "$1" &> /dev/null; then
-    missing_deps+="$1 "
-  fi
+install_deps() {
+    if [ "$_distro" = "Debian" ] || [ "$_distro" = "Pikaos" ]; then
+        echo "Installing dependencies for $_distro"
+        sudo apt install jq winehq-staging winetricks wget curl -y
+    elif [ "$_distro" = "Arch" ] || [ "$_distro" = "CachyOS" ]; then
+        echo "Installing dependencies for $_distro"
+        sudo pacman -S wine-staging wget winetricks jq -y
+    elif [ "$_distro" = "Fedora" ] || [ "$_distro" = "Nobara" ]; then
+        echo "Installing dependencies for $_distro"
+        sudo dnf install jq wine-common wget winetricks curl -y
+    elif [ "$_distro" = "Suse" ]; then
+        echo "Installing dependencies for $_distro"
+        sudo zypper install -y jq winetricks wgetwine-staging curl
+    fi
 }
 
-check_dependency "wine"
-check_dependency "winetricks"
-check_dependency "wget"
-check_dependency "curl"
-check_dependency "7z"
-check_dependency "tar"
+# Main script execution
+install_deps
 
-if [ -n "$missing_deps" ]; then
-  echo "The following dependencies are missing: $missing_deps"
-  echo "Please install them and rerun the script."
-  exit 1
-fi
-
-echo "All dependencies are installed!"
-sleep 2
 
 directory="$HOME/.AffinityLinux"
 repo="Twig6943/ElementalWarrior-Wine-binaries" #Owner/Repo
@@ -66,8 +65,7 @@ unzip "$directory/$filename" -d "$directory"
 rm "$directory/$filename"
 
 # WINETRICKS stuff
-WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts
-WINEPREFIX="$directory" winetricks renderer=vulkan
+WINEPREFIX="$directory" winetricks -q dotnet48 corefonts allfonts vcrun2015 renderer=vulkan --force
 
 # Extract & delete WinMetadata.zip
 7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32"
