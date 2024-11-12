@@ -3,20 +3,32 @@
 # Example: Set _distro variable manually for testing
 # In practice, you might get this from a command like lsb_release or /etc/os-release
 _distro=$(lsb_release -si)
+_version=$(lsb_release -sr)
 
 install_deps() {
-    if [ "$_distro" = "Debian" ] || [ "$_distro" = "Pikaos" ]; then
+    if [ "$_distro" = "ubuntu" ] || [ "$_distro" = "Mint" ]; then
         echo "Installing dependencies for $_distro"
-        sudo apt install jq winehq-staging winetricks wget curl -y
+        sudo apt install jq wine winetricks wget curl -y
+   elif [ "$_distro" = "Pikaos" ]; then
+        echo "Installing dependencies for $_distro"
+        sudo apt install jq winehq-staging winetricks -y
     elif [ "$_distro" = "Arch" ] || [ "$_distro" = "CachyOS" ]; then
         echo "Installing dependencies for $_distro"
         sudo pacman -S wine-staging wget winetricks jq -y
-    elif [ "$_distro" = "Fedora" ] || [ "$_distro" = "Nobara" ]; then
-        echo "Installing dependencies for $_distro"
-        sudo dnf install jq wine-common wget winetricks curl -y
+    -y elif [ "$_distro" = "Fedora" ] || [ "$_distro" = "Nobara" ]; then
+    if [ "$_version" = "40" ]; then echo "Installing dependencies for $_distro 40" 
+         sudo dnf config-manager addrepo --from-repofile=https://dl.winehq.org/wine-builds/fedora/40/winehq.repo --overwrite
+         sudo dnf install jq -y wget https://download.copr.fedorainfracloud.org/results/gloriouseggroll/nobara-40/fedora-40-x86_64/08247867-winetricks/winetricks-20240105-1.fc40.noarch.rpm
+         sudo dnf install winetricks-20240105-1.fc40.noarch.rpm -y
+         rm winetricks-20240105-1.fc40.noarch.rpm
+    elif [ "$_version" = "41" ]; then echo "Installing dependencies for $_distro 41"
+         sudo dnf config-manager addrepo --from-repofile=https://dl.winehq.org/wine-builds/fedora/41/winehq.repo --overwrite
+         sudo dnf install jq -y wget https://download.copr.fedorainfracloud.org/results/gloriouseggroll/nobara-41/fedora-41-x86_64/08247867-winetricks/winetricks-20240105-1.fc41.noarch.rpm
+         sudo dnf install winetricks-20240105-1.fc41.noarch.rpm -y
+         rm  winetricks-20240105-1.fc41.noarch.rpm
     elif [ "$_distro" = "Suse" ]; then
         echo "Installing dependencies for $_distro"
-        sudo zypper install -y jq winetricks wgetwine-staging curl
+        sudo zypper install -y jq winetricks wget wine-staging curl
     fi
 }
 
@@ -64,7 +76,7 @@ unzip "$directory/$filename" -d "$directory"
 # Erase the ElementalWarriorWine.tar.gz
 rm "$directory/$filename"
 
-# WINETRICKS stuff
+# WINETRICKS
 WINEPREFIX="$directory" winetricks -q dotnet48 corefonts allfonts vcrun2015 renderer=vulkan --force
 
 # Extract & delete WinMetadata.zip
