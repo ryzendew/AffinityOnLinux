@@ -15,6 +15,7 @@ check_dependency "wget"
 check_dependency "curl"
 check_dependency "7z"
 check_dependency "tar"
+check_dependency "jq"
 
 if [ -n "$missing_deps" ]; then
   echo "The following dependencies are missing: $missing_deps"
