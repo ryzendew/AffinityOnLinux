@@ -219,18 +219,26 @@ install_affinity() {
     WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts vcrun2022 allfonts
     WINEPREFIX="$directory" winetricks renderer=vulkan
 
-    # Prompt for installer
-    echo "Download the Affinity $app_name .exe from https://store.serif.com/account/licences/"
-    echo "Once downloaded place the .exe in $directory and press any key when ready."
-    read -n 1
+    # Prompt for installer with drag-and-drop instructions
+    echo "Please download the Affinity $app_name .exe from https://store.serif.com/account/licences/"
+    echo "Then drag and drop the .exe file into this terminal window and press Enter."
+    echo "The file will be automatically copied to the correct location and installed."
+    read -p "Drag and drop the .exe file here: " installer_path
 
-    echo "Click No if you get any errors. Press any key to continue."
-    read -n 1
-
-    # Set Windows version and run installer
-    WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
-    WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory"/*.exe
-    rm "$directory"/affinity*.exe
+    # Remove quotes if present and copy the file
+    installer_path=$(echo "$installer_path" | tr -d '"')
+    if [ -f "$installer_path" ]; then
+        cp "$installer_path" "$directory/affinity_installer.exe"
+        echo "Installer copied successfully. Starting installation..."
+        
+        # Set Windows version and run installer
+        WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
+        WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory/affinity_installer.exe"
+        rm "$directory/affinity_installer.exe"
+    else
+        echo "Error: File not found at $installer_path"
+        exit 1
+    fi
 
     # Apply dark theme
     download_with_progress "https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-theme.reg" "$directory/wine-dark-theme.reg" "Dark theme"
@@ -298,14 +306,25 @@ update_affinity() {
         exit 1
     fi
 
-    # Prompt for new installer
-    echo "Download the new Affinity $app_name .exe from https://store.serif.com/account/licences/"
-    echo "Once downloaded place the .exe in $directory and press any key when ready."
-    read -n 1
+    # Prompt for new installer with drag-and-drop instructions
+    echo "Please download the new Affinity $app_name .exe from https://store.serif.com/account/licences/"
+    echo "Then drag and drop the .exe file into this terminal window and press Enter."
+    echo "The file will be automatically copied to the correct location and installed."
+    read -p "Drag and drop the .exe file here: " installer_path
 
-    # Run the new installer
-    WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory"/*.exe
-    rm "$directory"/affinity*.exe
+    # Remove quotes if present and copy the file
+    installer_path=$(echo "$installer_path" | tr -d '"')
+    if [ -f "$installer_path" ]; then
+        cp "$installer_path" "$directory/affinity_installer.exe"
+        echo "Installer copied successfully. Starting update..."
+        
+        # Run the new installer
+        WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory/affinity_installer.exe"
+        rm "$directory/affinity_installer.exe"
+    else
+        echo "Error: File not found at $installer_path"
+        exit 1
+    fi
 
     echo "Update of Affinity $app_name completed!"
 }
