@@ -20,6 +20,8 @@ This script allows you to:
 - Update your Affinity installation with a new `.exe` without reinstalling everything
 - Enjoy progress bars for downloads and extraction steps
 
+**AIO One-liner:**
+
 **To use:**
 1. Make the script executable:
    ```bash
