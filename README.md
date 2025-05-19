@@ -21,6 +21,9 @@ This script allows you to:
 - Enjoy progress bars for downloads and extraction steps
 
 **AIO One-liner:**
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityInstaller.sh)"
+```
 
 **To use:**
 1. Make the script executable:
