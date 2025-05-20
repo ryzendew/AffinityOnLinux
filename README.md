@@ -1,10 +1,8 @@
 # AffinityOnLinux 🌹
 
-<img src="https://github.com/Twig6943/AffinityOnLinux/blob/main/AffinityOnLinux.png?raw=true" alt="Affinity on Linux" width="250"/>
-
 A repository that helps users get affinity software working on GNU/Linux 🐧
 
-[Discord](https://discord.gg/t5V9ecpJWZ)
+[Discord](https://discord.gg/DW2X8MHQuh)
 
 # All-in-One (AIO) Installer Script 🚀 (BETA)
 
