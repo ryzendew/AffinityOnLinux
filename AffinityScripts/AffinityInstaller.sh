@@ -27,7 +27,10 @@ download_with_progress() {
            --timeout=30 \
            --auto-file-renaming=false \
            --allow-overwrite=true \
-           --quiet=false \
+           --summary-interval=1 \
+           --human-readable=true \
+           --show-console-readout=true \
+           --console-log-level=notice \
            -d "$(dirname "$output")" \
            -o "$(basename "$output")" \
            "$url"
@@ -62,10 +65,7 @@ install_dependencies() {
                 aria2 \
                 wine-mono \
                 wine-gecko \
-                lib32-nvidia-utils \
-                lib32-mesa \
-                lib32-vulkan-icd-loader \
-                vulkan-icd-loader
+                lib32-nvidia-utils
             ;;
         "Fedora"|"Nobara"|"Ultramarine")
             if ! command_exists dnf; then
@@ -84,13 +84,7 @@ install_dependencies() {
                 pv \
                 aria2 \
                 wine-mono \
-                wine-gecko \
-                vulkan-loader \
-                vulkan-loader.i686 \
-                mesa-libGL \
-                mesa-libGL.i686 \
-                mesa-libEGL \
-                mesa-libEGL.i686
+                wine-gecko
             ;;
         "PikaOS")
             if ! command_exists apt; then
@@ -109,11 +103,7 @@ install_dependencies() {
                 pv \
                 aria2 \
                 wine-mono \
-                wine-gecko \
-                libvulkan1 \
-                libvulkan1:i386 \
-                libgl1 \
-                libgl1:i386
+                wine-gecko
             ;;
         "Ubuntu"|"Linux Mint")
             if ! command_exists apt; then
@@ -140,11 +130,7 @@ install_dependencies() {
                 pv \
                 aria2 \
                 wine-mono \
-                wine-gecko \
-                libvulkan1 \
-                libvulkan1:i386 \
-                libgl1 \
-                libgl1:i386
+                wine-gecko
             ;;
         *)
             echo "Unsupported distribution: $distro"
@@ -157,8 +143,8 @@ install_dependencies() {
 install_affinity() {
     local app=$1
     local directory="$HOME/.AffinityLinux"
-    local repo="Twig6943/ElementalWarrior-Wine-binaries"
-    local filename="ElementalWarriorWine.zip"
+    local repo="daegalus/wine-tkg-affinity"
+    local filename="wine-tkg-affinity-fedorabuilt.tar.zst"
 
     echo "Installing $app..."
     
@@ -172,60 +158,85 @@ install_affinity() {
     echo "Downloading Wine binary..."
     release_info=$(curl -s "https://api.github.com/repos/$repo/releases/latest")
     download_url=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .browser_download_url")
-    [ -z "$download_url" ] && { echo "File not found in the latest release"; exit 1; }
+    
+    if [ -z "$download_url" ]; then
+        echo "Error: Could not find download URL for $filename"
+        exit 1
+    fi
 
     # Download Wine binary with progress
     download_with_progress "$download_url" "$directory/$filename" "Wine binary"
 
     # Verify download
-    github_size=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .size")
-    local_size=$(wc -c < "$directory/$filename")
-
-    if [ "$github_size" -ne "$local_size" ]; then
-        echo "File sizes do not match: GitHub size: $github_size bytes, Local size: $local_size bytes"
-        echo "Download $filename from $download_url move to $directory and hit any button to continue"
-        read -n 1
+    if [ ! -f "$directory/$filename" ]; then
+        echo "Error: Failed to download Wine binary"
+        exit 1
     fi
 
     # Extract files
     echo "Extracting files..."
     echo "Extracting Wine binary..."
-    # Create the target directory if it doesn't exist
-    mkdir -p "$directory/ElementalWarriorWine"
     
-    # Extract the zip file to a temporary directory first
-    temp_extract_dir="$directory/temp_extract"
-    mkdir -p "$temp_extract_dir"
-    unzip -q "$directory/$filename" -d "$temp_extract_dir"
+    # Create a temporary directory for extraction
+    temp_dir="$directory/temp_extract"
+    mkdir -p "$temp_dir"
+    
+    # Extract the tar.zst file to temp directory
+    if ! tar --use-compress-program=zstd -xf "$directory/$filename" -C "$temp_dir"; then
+        echo "Error: Failed to extract Wine binary"
+        exit 1
+    fi
     
     # Move the contents to the correct location
-    if [ -d "$temp_extract_dir/ElementalWarriorWine" ]; then
-        # If the zip contains the ElementalWarriorWine directory
-        mv "$temp_extract_dir/ElementalWarriorWine"/* "$directory/ElementalWarriorWine/"
+    if [ -d "$temp_dir/wine-tkg-affinity" ]; then
+        # If the archive contains the wine-tkg-affinity directory
+        mv "$temp_dir/wine-tkg-affinity" "$directory/"
     else
-        # If the zip contains the contents directly
-        mv "$temp_extract_dir"/* "$directory/ElementalWarriorWine/"
+        # If the archive contains the contents directly
+        mkdir -p "$directory/wine-tkg-affinity"
+        mv "$temp_dir"/* "$directory/wine-tkg-affinity/"
+    fi
+    
+    # Flatten directory if needed (move up contents if only one subdir)
+    subdir_count=$(find "$directory/wine-tkg-affinity" -mindepth 1 -maxdepth 1 -type d | wc -l)
+    file_count=$(find "$directory/wine-tkg-affinity" -mindepth 1 -maxdepth 1 | wc -l)
+    if [ "$subdir_count" -eq 1 ] && [ "$file_count" -eq 1 ]; then
+        only_subdir=$(find "$directory/wine-tkg-affinity" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+        echo "Flattening: moving contents of $only_subdir up to $directory/wine-tkg-affinity"
+        mv "$only_subdir"/* "$directory/wine-tkg-affinity/"
+        rmdir "$only_subdir"
     fi
     
     # Clean up
-    rm -rf "$temp_extract_dir"
-    rm "$directory/$filename"
+    rm -rf "$temp_dir"
+    rm -f "$directory/$filename"
+
+    # Find the wine binary
+    echo "Searching for Wine binary..."
+    WINE=$(find "$directory/wine-tkg-affinity" -name "wine" -type f -executable | head -n 1)
+    if [ -z "$WINE" ]; then
+        echo "Error: Could not find Wine binary in the extracted files"
+        echo "Directory contents:"
+        find "$directory/wine-tkg-affinity" -type f -ls
+        exit 1
+    fi
+    echo "Found Wine binary at: $WINE"
 
     # Download and extract WinMetadata
     echo "Downloading Windows metadata..."
-    download_with_progress "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata"
-    
-    echo "Extracting Windows metadata..."
-    if [ -f "$directory/Winmetadata.zip" ]; then
-        7z x -y "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" 2>&1 | pv -l -s $(7z l "$directory/Winmetadata.zip" | grep -c "^[0-9]") > /dev/null
-        rm "$directory/Winmetadata.zip"
+    if ! download_with_progress "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata"; then
+        echo "Warning: Failed to download Windows metadata, continuing without it..."
     else
-        echo "Warning: Winmetadata.zip not found, skipping metadata extraction"
+        echo "Extracting Windows metadata..."
+        if [ -f "$directory/Winmetadata.zip" ]; then
+            mkdir -p "$directory/drive_c/windows/system32"
+            if ! 7z x -y "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32"; then
+                echo "Warning: Failed to extract Windows metadata, continuing without it..."
+            fi
+            rm -f "$directory/Winmetadata.zip"
+        fi
     fi
 
-    # Use the correct Wine binary path for all commands
-    WINE="$directory/ElementalWarriorWine/bin/wine"
-    
     # Configure Wine environment
     echo "Configuring Wine environment..."
     WINEPREFIX="$directory" "$WINE" winecfg -v win11
@@ -233,8 +244,8 @@ install_affinity() {
     # Always run winetricks, no matter what
     echo "Installing .NET Framework and dependencies..."
     export WINEPREFIX="$directory"
-    export WINE="$directory/ElementalWarriorWine/bin/wine"
-    export WINESERVER="$directory/ElementalWarriorWine/bin/wineserver"
+    export WINE="$WINE"
+    export WINESERVER="$(dirname "$WINE")/wineserver"
     winetricks --unattended dotnet35
     winetricks --unattended dotnet48
     winetricks --unattended corefonts vcrun2022 allfonts
@@ -285,10 +296,20 @@ install_affinity() {
     cp "$HOME/.AffinityLinux_temp/affinity_installer.exe" "$directory/affinity_installer.exe"
     
     echo "Running Affinity installer..."
-    echo "Please follow the installation wizard. Click 'Next' to proceed with the installation."
-    echo "If you see any error messages, click 'No' to continue."
+    echo "========================================================"
+    echo "IMPORTANT: A new window should open with the Affinity installer."
+    echo "Please follow these steps:"
+    echo "1. Complete the installation process in the new window"
+    echo "2. If you see any error messages, click 'No' to continue"
+    echo "3. Wait for the installation to complete"
+    echo "4. Come back to this terminal and press Enter"
+    echo "========================================================"
     echo "Press Enter when the installation is complete..."
-    WINEPREFIX="$directory" "$WINE" "$directory/affinity_installer.exe"
+    
+    # Run the installer with error handling
+    if ! WINEPREFIX="$directory" "$WINE" "$directory/affinity_installer.exe"; then
+        echo "Warning: Wine process exited with an error, but continuing..."
+    fi
     
     # Wait for user to complete installation
     read -p "Press Enter when the installation is complete..."
@@ -297,31 +318,45 @@ install_affinity() {
     echo "Waiting for installation to complete..."
     "$WINE" wineserver -w
     
+    # Verify installation
+    if [ ! -d "$directory/drive_c/Program Files/Affinity/$app_name 2" ]; then
+        echo "Error: Affinity installation not found in expected location"
+        echo "Please make sure the installation completed successfully"
+        exit 1
+    fi
+    
     # Clean up installer
-    rm "$directory/affinity_installer.exe"
+    rm -f "$directory/affinity_installer.exe"
 
     # Apply dark theme using curl instead of aria2c
     echo "Downloading Dark theme..."
     if ! curl -L -o "$directory/wine-dark-theme.reg" "https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-theme.reg"; then
         echo "Warning: Failed to download dark theme, skipping..."
     else
-        if [ -f "$directory/ElementalWarriorWine/bin/regedit" ]; then
+        if [ -f "$directory/wine-tkg-affinity/bin/regedit" ]; then
             WINEPREFIX="$directory" "$WINE" regedit "$directory/wine-dark-theme.reg"
         fi
         rm "$directory/wine-dark-theme.reg"
     fi
 
     # Remove old desktop entry if it exists
-    rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
+    rm -f "$HOME/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
 
-    # Create new desktop entry
-    cat > ~/.local/share/applications/$desktop_name.desktop << EOF
+    # Create new desktop entry with absolute paths and proper quoting
+    user_home="$HOME"
+    wine_bin_path="$user_home/.AffinityLinux/wine-tkg-affinity/bin/wine"
+    wine_prefix="$user_home/.AffinityLinux"
+    affinity_exe="$user_home/.AffinityLinux/drive_c/Program Files/Affinity/$app_path"
+    icon_path="$user_home/.local/share/icons/$icon_name"
+    desktop_file="$user_home/.local/share/applications/$desktop_name.desktop"
+
+    cat > "$desktop_file" << EOF
 [Desktop Entry]
 Name=Affinity $app_name
 Comment=$comment
-Icon=/home/$USER/.local/share/icons/$icon_name
-Path=$directory
-Exec=env WINEPREFIX=$directory WINEDEBUG=-all $directory/ElementalWarriorWine/bin/wine "$directory/drive_c/Program Files/Affinity/$app_path"
+Icon=$icon_path
+Path=$wine_prefix
+Exec=env WINEPREFIX=$wine_prefix WINEDEBUG=-all "$wine_bin_path" "$affinity_exe"
 Terminal=false
 NoDisplay=false
 StartupWMClass=$startup_wm
@@ -331,7 +366,11 @@ StartupNotify=true
 EOF
 
     # Make the desktop entry executable
-    chmod +x ~/.local/share/applications/$desktop_name.desktop
+    chmod +x "$desktop_file"
+
+    # Copy desktop entry to desktop
+    cp "$desktop_file" "$user_home/Desktop/$desktop_name.desktop"
+    chmod +x "$user_home/Desktop/$desktop_name.desktop"
 
     # Create MIME type definition
     mkdir -p ~/.local/share/mime/packages
@@ -349,10 +388,6 @@ EOF
     # Update MIME database
     update-mime-database ~/.local/share/mime
 
-    # Copy desktop entry to desktop
-    cp ~/.local/share/applications/$desktop_name.desktop ~/Desktop/$desktop_name.desktop
-    chmod +x ~/Desktop/$desktop_name.desktop
-
     # Update desktop database
     update-desktop-database ~/.local/share/applications
 
@@ -368,6 +403,8 @@ EOF
 update_affinity() {
     local app=$1
     local directory="$HOME/.AffinityLinux"
+    local repo="daegalus/wine-tkg-affinity"
+    local filename="wine-tkg-affinity-fedorabuilt.tar.zst"
 
     echo "Updating $app..."
     
@@ -405,19 +442,54 @@ update_affinity() {
     fi
 
     # Check if Wine binary exists
-    if [ ! -f "$directory/ElementalWarriorWine/bin/wine" ]; then
-        echo "Error: Wine binary not found at $directory/ElementalWarriorWine/bin/wine"
+    if [ ! -f "$directory/wine-tkg-affinity/bin/wine" ]; then
+        echo "Error: Wine binary not found at $directory/wine-tkg-affinity/bin/wine"
         echo "Please make sure the Wine binary was extracted correctly."
         exit 1
     fi
 
-    WINE="$directory/ElementalWarriorWine/bin/wine"
+    # Download and verify new Wine binary
+    echo "Downloading new Wine binary..."
+    release_info=$(curl -s "https://api.github.com/repos/$repo/releases/latest")
+    download_url=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .browser_download_url")
+    [ -z "$download_url" ] && { echo "File not found in the latest release"; exit 1; }
+
+    # Download new Wine binary with progress
+    download_with_progress "$download_url" "$directory/$filename" "Wine binary"
+
+    # Verify download
+    github_size=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .size")
+    local_size=$(wc -c < "$directory/$filename")
+
+    if [ "$github_size" -ne "$local_size" ]; then
+        echo "File sizes do not match: GitHub size: $github_size bytes, Local size: $local_size bytes"
+        echo "Download $filename from $download_url move to $directory and hit any button to continue"
+        read -n 1
+    fi
+
+    # Backup old Wine installation
+    if [ -d "$directory/wine-tkg-affinity" ]; then
+        mv "$directory/wine-tkg-affinity" "$directory/wine-tkg-affinity.bak"
+    fi
+
+    # Extract new Wine binary
+    echo "Extracting new Wine binary..."
+    mkdir -p "$directory/wine-tkg-affinity"
+    tar --use-compress-program=zstd -xf "$directory/$filename" -C "$directory/wine-tkg-affinity"
+    
+    # Clean up
+    rm "$directory/$filename"
+    if [ -d "$directory/wine-tkg-affinity.bak" ]; then
+        rm -rf "$directory/wine-tkg-affinity.bak"
+    fi
+
+    WINE="$directory/wine-tkg-affinity/bin/wine"
 
     # Reinstall winetricks components
     echo "Reinstalling .NET Framework and dependencies..."
     export WINEPREFIX="$directory"
-    export WINE="$directory/ElementalWarriorWine/bin/wine"
-    export WINESERVER="$directory/ElementalWarriorWine/bin/wineserver"
+    export WINE="$directory/wine-tkg-affinity/bin/wine"
+    export WINESERVER="$directory/wine-tkg-affinity/bin/wineserver"
     winetricks --unattended dotnet35
     winetricks --unattended dotnet48
     winetricks --unattended corefonts vcrun2022 allfonts
@@ -515,7 +587,7 @@ uninstall_affinity() {
     echo "Removing desktop entries..."
     rm -f ~/.local/share/applications/$desktop_name.desktop
     rm -f ~/Desktop/$desktop_name.desktop
-    rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
+    rm -f "$HOME/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
 
     # Remove icon
     echo "Removing application icon..."
