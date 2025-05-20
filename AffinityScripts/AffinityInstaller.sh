@@ -235,10 +235,10 @@ install_affinity() {
     export WINEPREFIX="$directory"
     export WINE="$directory/ElementalWarriorWine/bin/wine"
     export WINESERVER="$directory/ElementalWarriorWine/bin/wineserver"
-    winetricks --force --unattended dotnet35
-    winetricks --force --unattended dotnet48
-    winetricks --force --unattended corefonts vcrun2022 allfonts
-    winetricks --force renderer=vulkan
+    winetricks --unattended dotnet35
+    winetricks --unattended dotnet48
+    winetricks --unattended corefonts vcrun2022 allfonts
+    winetricks renderer=vulkan
 
     # Configure .NET Framework
     echo "Configuring .NET Framework..."
@@ -418,10 +418,10 @@ update_affinity() {
     export WINEPREFIX="$directory"
     export WINE="$directory/ElementalWarriorWine/bin/wine"
     export WINESERVER="$directory/ElementalWarriorWine/bin/wineserver"
-    winetricks --force --unattended dotnet35
-    winetricks --force --unattended dotnet48
-    winetricks --force --unattended corefonts vcrun2022 allfonts
-    winetricks --force renderer=vulkan
+    winetricks --unattended dotnet35
+    winetricks --unattended dotnet48
+    winetricks --unattended corefonts vcrun2022 allfonts
+    winetricks renderer=vulkan
 
     # Configure .NET Framework
     echo "Configuring .NET Framework..."
