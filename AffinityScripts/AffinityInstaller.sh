@@ -77,7 +77,7 @@ install_dependencies() {
                     pv
             fi
             ;;
-        "Fedora"|"Nobara"|"Ultramarine")
+        "Fedora"|"Ultramarine")
             if ! command_exists dnf; then
                 echo "Error: dnf not found. Are you sure you're on a Fedora-based distribution?"
                 exit 1
@@ -113,6 +113,22 @@ install_dependencies() {
             
             # Clean up
             rm -rf "$TEMP_RPM_DIR"
+            ;;
+        "Nobara")
+            if ! command_exists dnf; then
+                echo "Error: dnf not found. Are you sure you're on Nobara?"
+                exit 1
+            fi
+            # Nobara already has wine-staging in its repositories
+            sudo dnf install -y \
+                wine-staging \
+                winetricks \
+                wget \
+                curl \
+                p7zip \
+                tar \
+                jq \
+                pv
             ;;
         "PikaOS")
             if ! command_exists apt; then
