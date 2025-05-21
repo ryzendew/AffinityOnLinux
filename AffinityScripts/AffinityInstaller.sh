@@ -5,7 +5,7 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
-# Function to download with progress bar and multi-threading
+# Function to download with progress bar
 download_with_progress() {
     local url=$1
     local output=$2
@@ -16,24 +16,8 @@ download_with_progress() {
     # Create directory if it doesn't exist
     mkdir -p "$(dirname "$output")"
     
-    # Use aria2c for faster downloads with multiple connections
-    aria2c --max-connection-per-server=16 \
-           --min-split-size=1M \
-           --max-concurrent-downloads=16 \
-           --file-allocation=none \
-           --continue=true \
-           --retry-wait=2 \
-           --max-tries=3 \
-           --timeout=30 \
-           --auto-file-renaming=false \
-           --allow-overwrite=true \
-           --summary-interval=1 \
-           --human-readable=true \
-           --show-console-readout=true \
-           --console-log-level=notice \
-           -d "$(dirname "$output")" \
-           -o "$(basename "$output")" \
-           "$url"
+    # Use curl with progress display
+    curl -L -o "$output" --progress-bar "$url"
     
     if [ $? -ne 0 ]; then
         echo "Error: Failed to download $description"
@@ -54,18 +38,14 @@ install_dependencies() {
             fi
             # Arch Linux packages
             sudo pacman -S --needed \
-                wine \
+                wine-staging \
                 winetricks \
                 wget \
                 curl \
                 p7zip \
                 tar \
                 jq \
-                pv \
-                aria2 \
-                wine-mono \
-                wine-gecko \
-                lib32-nvidia-utils
+                pv
             ;;
         "CachyOS")
             if ! command_exists pacman; then
@@ -83,26 +63,18 @@ install_dependencies() {
                     p7zip \
                     tar \
                     jq \
-                    pv \
-                    aria2 \
-                    wine-mono \
-                    wine-gecko \
-                    lib32-nvidia-utils
+                    pv
             else
                 echo "wine-cachyos not found, using regular wine package..."
                 sudo pacman -S --needed \
-                    wine \
+                    wine-staging \
                     winetricks \
                     wget \
                     curl \
                     p7zip \
                     tar \
                     jq \
-                    pv \
-                    aria2 \
-                    wine-mono \
-                    wine-gecko \
-                    lib32-nvidia-utils
+                    pv
             fi
             ;;
         "Fedora"|"Nobara"|"Ultramarine")
@@ -110,19 +82,37 @@ install_dependencies() {
                 echo "Error: dnf not found. Are you sure you're on a Fedora-based distribution?"
                 exit 1
             fi
-            # Fedora packages
+            
+            # Install base dependencies
             sudo dnf install -y \
-                wine \
-                winetricks \
                 wget \
                 curl \
                 p7zip \
                 tar \
                 jq \
-                pv \
-                aria2 \
-                wine-mono \
-                wine-gecko
+                pv
+            
+            # Create temp directory for RPMs
+            TEMP_RPM_DIR=$(mktemp -d)
+            echo "Downloading wine-staging and winetricks from Nobara 42 repository..."
+            
+            # Get architecture
+            ARCH=$(uname -m)
+            FEDORA_VERSION=$(rpm -E %fedora)
+            
+            # Download wine-staging and winetricks RPMs from Nobara repo
+            echo "Downloading wine-staging from Nobara 42 repo..."
+            curl -L -o "$TEMP_RPM_DIR/wine-staging.rpm" --progress-bar "https://download.copr.fedorainfracloud.org/results/gloriouseggroll/nobara-42/fedora-${FEDORA_VERSION}-${ARCH}/wine-staging/wine-staging-10.8-1.fc${FEDORA_VERSION}.${ARCH}.rpm"
+            
+            echo "Downloading winetricks from Nobara 42 repo..."
+            curl -L -o "$TEMP_RPM_DIR/winetricks.rpm" --progress-bar "https://download.copr.fedorainfracloud.org/results/gloriouseggroll/nobara-42/fedora-${FEDORA_VERSION}-noarch/winetricks/winetricks-20250102-2.fc${FEDORA_VERSION}.noarch.rpm"
+            
+            # Install the downloaded RPMs
+            echo "Installing wine-staging and winetricks..."
+            sudo dnf install -y --nogpgcheck "$TEMP_RPM_DIR/wine-staging.rpm" "$TEMP_RPM_DIR/winetricks.rpm"
+            
+            # Clean up
+            rm -rf "$TEMP_RPM_DIR"
             ;;
         "PikaOS")
             if ! command_exists apt; then
@@ -138,10 +128,7 @@ install_dependencies() {
                 p7zip \
                 tar \
                 jq \
-                pv \
-                aria2 \
-                wine-mono \
-                wine-gecko
+                pv
             ;;
         "Ubuntu"|"Linux Mint")
             if ! command_exists apt; then
@@ -165,10 +152,7 @@ install_dependencies() {
                 p7zip \
                 tar \
                 jq \
-                pv \
-                aria2 \
-                wine-mono \
-                wine-gecko
+                pv
             ;;
         *)
             echo "Unsupported distribution: $distro"
