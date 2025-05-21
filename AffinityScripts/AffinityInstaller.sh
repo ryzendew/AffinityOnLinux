@@ -47,7 +47,7 @@ install_dependencies() {
     echo "Installing dependencies for $distro..."
     
     case $distro in
-        "Arch Linux"|"CachyOS"|"EndeavourOS")
+        "Arch Linux"|"EndeavourOS")
             if ! command_exists pacman; then
                 echo "Error: pacman not found. Are you sure you're on an Arch-based distribution?"
                 exit 1
@@ -66,6 +66,44 @@ install_dependencies() {
                 wine-mono \
                 wine-gecko \
                 lib32-nvidia-utils
+            ;;
+        "CachyOS")
+            if ! command_exists pacman; then
+                echo "Error: pacman not found. Are you sure you're on CachyOS?"
+                exit 1
+            fi
+            # Check if wine-cachyos is installed or available in repos
+            if pacman -Qi wine-cachyos &>/dev/null || pacman -Ss wine-cachyos | grep -q "^cachyos/wine-cachyos"; then
+                echo "Found wine-cachyos package for CachyOS, using it instead of regular wine..."
+                sudo pacman -S --needed \
+                    wine-cachyos \
+                    winetricks \
+                    wget \
+                    curl \
+                    p7zip \
+                    tar \
+                    jq \
+                    pv \
+                    aria2 \
+                    wine-mono \
+                    wine-gecko \
+                    lib32-nvidia-utils
+            else
+                echo "wine-cachyos not found, using regular wine package..."
+                sudo pacman -S --needed \
+                    wine \
+                    winetricks \
+                    wget \
+                    curl \
+                    p7zip \
+                    tar \
+                    jq \
+                    pv \
+                    aria2 \
+                    wine-mono \
+                    wine-gecko \
+                    lib32-nvidia-utils
+            fi
             ;;
         "Fedora"|"Nobara"|"Ultramarine")
             if ! command_exists dnf; then
@@ -474,22 +512,115 @@ update_affinity() {
 
     # Extract new Wine binary
     echo "Extracting new Wine binary..."
+    
+    # Create a temporary directory for extraction
+    temp_dir="$directory/temp_extract"
+    mkdir -p "$temp_dir"
+    
+    # Extract the tar.zst file to temp directory
+    if ! tar --use-compress-program=zstd -xf "$directory/$filename" -C "$temp_dir"; then
+        echo "Error: Failed to extract Wine binary"
+        exit 1
+    fi
+    
+    # Check what was extracted
+    echo "Checking extracted content..."
+    find "$temp_dir" -type d | sort
+    
+    # Create wine-tkg-affinity directory
     mkdir -p "$directory/wine-tkg-affinity"
-    tar --use-compress-program=zstd -xf "$directory/$filename" -C "$directory/wine-tkg-affinity"
+    
+    # Find any wine-tkg-affinity-git* directories in the extraction
+    version_dir=$(find "$temp_dir" -maxdepth 2 -type d -name "wine-tkg-affinity-git*" | head -n 1)
+    
+    if [ -n "$version_dir" ]; then
+        echo "Found versioned directory: $version_dir"
+        # Move contents of versioned directory to wine-tkg-affinity
+        cp -r "$version_dir"/* "$directory/wine-tkg-affinity/"
+    else
+        # Move the contents to the correct location
+        if [ -d "$temp_dir/wine-tkg-affinity" ]; then
+            # If the archive contains the wine-tkg-affinity directory
+            cp -r "$temp_dir/wine-tkg-affinity"/* "$directory/wine-tkg-affinity/"
+        else
+            # If the archive contains the contents directly
+            cp -r "$temp_dir"/* "$directory/wine-tkg-affinity/"
+        fi
+    fi
+    
+    # Create bin directory if it doesn't exist
+    if [ ! -d "$directory/wine-tkg-affinity/bin" ] && [ -d "$directory/wine-tkg-affinity/bin64" ]; then
+        echo "Creating bin symlink to bin64..."
+        ln -sf "$directory/wine-tkg-affinity/bin64" "$directory/wine-tkg-affinity/bin"
+    fi
     
     # Clean up
-    rm "$directory/$filename"
+    rm -rf "$temp_dir"
+    rm -f "$directory/$filename"
     if [ -d "$directory/wine-tkg-affinity.bak" ]; then
         rm -rf "$directory/wine-tkg-affinity.bak"
     fi
 
-    WINE="$directory/wine-tkg-affinity/bin/wine"
+    # Find the wine binary
+    echo "Searching for Wine binary..."
+    wine_found=false
+    
+    # Check potential locations
+    for wine_path in "$directory/wine-tkg-affinity/bin/wine64" \
+                     "$directory/wine-tkg-affinity/bin64/wine64" \
+                     "$directory/wine-tkg-affinity/wine64" \
+                     $(find "$directory/wine-tkg-affinity" -name "wine64" -type f -executable | head -n 1); do
+        if [ -f "$wine_path" ]; then
+            WINE="$wine_path"
+            wine_found=true
+            echo "Found Wine binary at: $WINE"
+            
+            # If the wine64 binary is not in the bin directory, create it
+            if [[ "$WINE" != "$directory/wine-tkg-affinity/bin/wine64" ]]; then
+                echo "Ensuring wine64 is in the bin directory..."
+                mkdir -p "$directory/wine-tkg-affinity/bin"
+                # Copy or symlink the wine binary to the bin directory
+                if [ ! -f "$directory/wine-tkg-affinity/bin/wine64" ]; then
+                    cp "$WINE" "$directory/wine-tkg-affinity/bin/"
+                    chmod +x "$directory/wine-tkg-affinity/bin/wine64"
+                    WINE="$directory/wine-tkg-affinity/bin/wine64"
+                fi
+            fi
+            break
+        fi
+    done
+    
+    if [ "$wine_found" != true ]; then
+        echo "Error: Could not find Wine64 binary in the extracted files"
+        echo "Directory contents:"
+        find "$directory/wine-tkg-affinity" -type f -ls
+        exit 1
+    fi
 
-    # Reinstall winetricks components
-    echo "Reinstalling .NET Framework and dependencies..."
+    # Download and extract WinMetadata
+    echo "Downloading Windows metadata..."
+    if ! download_with_progress "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata"; then
+        echo "Warning: Failed to download Windows metadata, continuing without it..."
+    else
+        echo "Extracting Windows metadata..."
+        if [ -f "$directory/Winmetadata.zip" ]; then
+            mkdir -p "$directory/drive_c/windows/system32"
+            if ! 7z x -y "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32"; then
+                echo "Warning: Failed to extract Windows metadata, continuing without it..."
+            fi
+            rm -f "$directory/Winmetadata.zip"
+        fi
+    fi
+
+    # Configure Wine environment
+    echo "Configuring Wine environment..."
+    WINEPREFIX="$directory" "$WINE" winecfg -v win11
+    
+    # Always run winetricks, no matter what
+    echo "Installing .NET Framework and dependencies..."
     export WINEPREFIX="$directory"
-    export WINE="$directory/wine-tkg-affinity/bin/wine"
-    export WINESERVER="$directory/wine-tkg-affinity/bin/wineserver"
+    export WINE="$WINE"
+    export WINESERVER="$(dirname "$WINE")/wineserver"
     winetricks --unattended dotnet35
     winetricks --unattended dotnet48
     winetricks --unattended corefonts vcrun2022 allfonts
