@@ -277,7 +277,6 @@ install_affinity() {
 
     # Configure Wine environment
     echo "Configuring Wine environment..."
-    WINEPREFIX="$directory" "$WINE" winecfg -v win11
     
     # Always run winetricks, no matter what
     echo "Installing .NET Framework and dependencies..."
@@ -429,7 +428,7 @@ EOF
     # Update desktop database
     update-desktop-database ~/.local/share/applications
 
-    # Set Wine configuration
+    # Set Windows 11 configuration at the very end
     WINEPREFIX="$directory" "$WINE" winecfg -v win11
     WINEPREFIX="$directory" "$WINE" reg add "HKEY_CURRENT_USER\Software\Wine\DllOverrides" /v "mscoree" /t REG_SZ /d "native" /f
     WINEPREFIX="$directory" "$WINE" reg add "HKEY_CURRENT_USER\Software\Wine\DllOverrides" /v "mshtml" /t REG_SZ /d "native" /f
@@ -614,7 +613,6 @@ update_affinity() {
 
     # Configure Wine environment
     echo "Configuring Wine environment..."
-    WINEPREFIX="$directory" "$WINE" winecfg -v win11
     
     # Always run winetricks, no matter what
     echo "Installing .NET Framework and dependencies..."
@@ -670,6 +668,9 @@ update_affinity() {
     if [ -f "$directory/affinity_installer.exe" ]; then
         rm "$directory/affinity_installer.exe"
     fi
+
+    # Set Windows 11 configuration at the very end
+    WINEPREFIX="$directory" "$WINE" winecfg -v win11
 
     echo "Update of Affinity $app_name completed!"
 }
