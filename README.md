@@ -10,6 +10,13 @@ A new **all-in-one installer script** is now available!
 **Script:** `AffinityScripts/AffinityInstaller.sh`  
 **Status:** _BETA_ – Please report any issues you encounter.
 
+## Tested and confirmed working Distros
+
+- Arch Linux
+- CachyOs
+- Fedora
+- Nobara
+
 This script allows you to:
 - Install **Affinity Photo**, **Designer**, or **Publisher** on most major Linux distributions (Arch, Fedora, Nobara, Ultramarine, EndeavourOS, CachyOS, PikaOS, Ubuntu, Linux Mint, etc.)
 - Automatically install all required dependencies for your selected distribution
