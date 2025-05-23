@@ -13,7 +13,8 @@ A new **all-in-one installer script** is now available!
 ## Tested and confirmed working Distros
 
 - Arch Linux
-- CachyOs
+- CachyOS
+- EndeavourOS
 - Fedora
 - Nobara
 
