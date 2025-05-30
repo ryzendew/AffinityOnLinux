@@ -23,6 +23,38 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # ==========================================
+# Utility Functions
+# ==========================================
+
+# Function to download files with progress bar
+download_file() {
+    local url=$1
+    local output=$2
+    local description=$3
+    
+    echo -e "${YELLOW}Downloading $description...${NC}"
+    
+    # Try curl first with progress bar
+    if command -v curl &> /dev/null; then
+        curl -# -L "$url" -o "$output"
+        if [ $? -eq 0 ]; then
+            return 0
+        fi
+    fi
+    
+    # Fallback to wget if curl fails or isn't available
+    if command -v wget &> /dev/null; then
+        wget --progress=bar:force:noscroll "$url" -O "$output"
+        if [ $? -eq 0 ]; then
+            return 0
+        fi
+    fi
+    
+    echo -e "${RED}Failed to download $description${NC}"
+    return 1
+}
+
+# ==========================================
 # System Detection and Setup Functions
 # ==========================================
 
@@ -87,6 +119,30 @@ install_dependencies() {
 # Wine Setup Functions
 # ==========================================
 
+# Function to verify Windows version
+verify_windows_version() {
+    local directory="$HOME/.AffinityLinux"
+    local wine_version
+    
+    # Get current Windows version
+    wine_version=$(WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" winecfg -v 2>&1 | grep "Windows version" | awk '{print $3}')
+    
+    if [ "$wine_version" != "win11" ]; then
+        echo -e "${YELLOW}Setting Windows version to 11...${NC}"
+        WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
+        
+        # Verify the change
+        wine_version=$(WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" winecfg -v 2>&1 | grep "Windows version" | awk '{print $3}')
+        if [ "$wine_version" != "win11" ]; then
+            echo -e "${RED}Failed to set Windows version to 11${NC}"
+            return 1
+        fi
+    fi
+    
+    echo -e "${GREEN}Windows version is set to 11${NC}"
+    return 0
+}
+
 # Function to download and setup Wine
 setup_wine() {
     local directory="$HOME/.AffinityLinux"
@@ -100,6 +156,7 @@ setup_wine() {
     mkdir -p "$directory"
     
     # Fetch the latest release information from GitHub
+    echo -e "${YELLOW}Fetching latest Wine release information...${NC}"
     release_info=$(curl -s "https://api.github.com/repos/$repo/releases/latest")
     download_url=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .browser_download_url")
     
@@ -109,41 +166,55 @@ setup_wine() {
     fi
     
     # Download the specific release asset
-    wget -q "$download_url" -O "$directory/$filename"
+    download_file "$download_url" "$directory/$filename" "Wine binaries"
     
     # Verify download
     github_size=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .size")
     local_size=$(wc -c < "$directory/$filename")
     
-    if [ "$github_size" -ne "$local_size" ]; then
-        echo -e "${RED}Download verification failed${NC}"
+    if [ "$github_size" -eq "$local_size" ]; then
+        echo -e "${GREEN}File sizes match: $local_size bytes${NC}"
+    else
+        echo -e "${RED}File sizes do not match: GitHub size: $github_size bytes, Local size: $local_size bytes${NC}"
         echo "Please download $filename from $download_url and place it in $directory"
         read -n 1 -s -r -p "Press any key when ready..."
     fi
     
     # Extract wine binary
+    echo -e "${YELLOW}Extracting Wine binaries...${NC}"
     unzip "$directory/$filename" -d "$directory"
     rm "$directory/$filename"
     
+    # Create icons directory if it doesn't exist
+    mkdir -p "$HOME/.local/share/icons"
+    
     # Download and setup additional files
-    wget -q https://upload.wikimedia.org/wikipedia/commons/f/f5/Affinity_Photo_V2_icon.svg -O "$HOME/.local/share/icons/AffinityPhoto.svg"
-    wget -q https://archive.org/download/win-metadata/WinMetadata.zip -O "$directory/Winmetadata.zip"
+    download_file "https://upload.wikimedia.org/wikipedia/commons/f/f5/Affinity_Photo_V2_icon.svg" "$HOME/.local/share/icons/AffinityPhoto.svg" "Affinity Photo icon"
+    download_file "https://upload.wikimedia.org/wikipedia/commons/8/8a/Affinity_Designer_V2_icon.svg" "$HOME/.local/share/icons/AffinityDesigner.svg" "Affinity Designer icon"
+    download_file "https://upload.wikimedia.org/wikipedia/commons/9/9c/Affinity_Publisher_V2_icon.svg" "$HOME/.local/share/icons/AffinityPublisher.svg" "Affinity Publisher icon"
+    
+    # Download WinMetadata
+    download_file "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata"
     
     # Extract WinMetadata
+    echo -e "${YELLOW}Extracting Windows metadata...${NC}"
     7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32"
     rm "$directory/Winmetadata.zip"
     
     # Setup Wine
+    echo -e "${YELLOW}Setting up Wine environment...${NC}"
     WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts vcrun2022 allfonts
     WINEPREFIX="$directory" winetricks renderer=vulkan
     
-    # Set Windows version to 11
-    WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
+    # Set and verify Windows version to 11
+    verify_windows_version
     
     # Apply dark theme
-    wget -q https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-theme.reg -O "$directory/wine-dark-theme.reg"
+    download_file "https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-theme.reg" "$directory/wine-dark-theme.reg" "dark theme"
     WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/regedit" "$directory/wine-dark-theme.reg"
     rm "$directory/wine-dark-theme.reg"
+    
+    echo -e "${GREEN}Wine setup completed successfully!${NC}"
 }
 
 # ==========================================
@@ -179,7 +250,11 @@ install_affinity() {
     local app_name=$1
     local directory="$HOME/.AffinityLinux"
     
-    echo -e "${YELLOW}Please drag and drop the Affinity $app_name installer (.exe) into this terminal and press Enter:${NC}"
+    # Verify Windows version before installation
+    verify_windows_version
+    
+    echo -e "${YELLOW}Please download the Affinity $app_name .exe from https://store.serif.com/account/licences/${NC}"
+    echo -e "${YELLOW}Once downloaded, drag and drop the installer into this terminal and press Enter:${NC}"
     read installer_path
     
     # Remove quotes if present
@@ -191,13 +266,21 @@ install_affinity() {
     fi
     
     # Copy installer to Affinity directory
+    echo -e "${YELLOW}Copying installer...${NC}"
     cp "$installer_path" "$directory/"
     
     # Run installer
+    echo -e "${YELLOW}Running installer...${NC}"
+    echo -e "${YELLOW}Click No if you get any errors. Press any key to continue.${NC}"
+    read -n 1
+    
     WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory"/*.exe
     
     # Clean up installer
     rm "$directory"/*.exe
+    
+    # Remove Wine's default desktop entry
+    rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
     
     # Create desktop entry
     case $app_name in
@@ -211,6 +294,8 @@ install_affinity() {
             create_desktop_entry "Publisher" "$directory/drive_c/Program Files/Affinity/Publisher 2/Publisher.exe" "$HOME/.local/share/icons/AffinityPublisher.svg"
             ;;
     esac
+    
+    echo -e "${GREEN}Affinity $app_name installation completed!${NC}"
 }
 
 # ==========================================
@@ -223,8 +308,9 @@ show_menu() {
     echo "1. Install Affinity Photo"
     echo "2. Install Affinity Designer"
     echo "3. Install Affinity Publisher"
-    echo "4. Exit"
-    echo -n "Please select an option (1-4): "
+    echo "4. Show Special Thanks"
+    echo "5. Exit"
+    echo -n "Please select an option (1-5): "
 }
 
 # ==========================================
@@ -257,6 +343,9 @@ main() {
                 install_affinity "Publisher"
                 ;;
             4)
+                show_special_thanks
+                ;;
+            5)
                 echo -e "${GREEN}Thank you for using the Affinity Installation Script!${NC}"
                 exit 0
                 ;;
