@@ -245,6 +245,31 @@ create_desktop_entry() {
     cp "$desktop_file" "$HOME/Desktop/Affinity$app_name.desktop"
 }
 
+# Function to normalize and validate file path
+normalize_path() {
+    local path="$1"
+    
+    # Remove quotes and trim whitespace
+    path=$(echo "$path" | tr -d '"' | xargs)
+    
+    # Handle file:// URLs (common when dragging from file managers)
+    if [[ "$path" == file://* ]]; then
+        path=$(echo "$path" | sed 's|^file://||')
+        # URL decode the path
+        path=$(printf '%b' "${path//%/\\x}")
+    fi
+    
+    # Convert to absolute path if relative
+    if [[ ! "$path" = /* ]]; then
+        path="$(pwd)/$path"
+    fi
+    
+    # Normalize path (remove . and .. components)
+    path=$(realpath -q "$path" 2>/dev/null || echo "$path")
+    
+    echo "$path"
+}
+
 # Function to install Affinity app
 install_affinity() {
     local app_name=$1
@@ -257,27 +282,32 @@ install_affinity() {
     echo -e "${YELLOW}Once downloaded, drag and drop the installer into this terminal and press Enter:${NC}"
     read installer_path
     
-    # Remove quotes if present
-    installer_path=$(echo "$installer_path" | tr -d '"')
+    # Normalize the path
+    installer_path=$(normalize_path "$installer_path")
     
-    if [ ! -f "$installer_path" ]; then
-        echo -e "${RED}Invalid file path${NC}"
+    # Check if file exists and is readable
+    if [ ! -f "$installer_path" ] || [ ! -r "$installer_path" ]; then
+        echo -e "${RED}Invalid file path or file is not readable: $installer_path${NC}"
         return 1
     fi
     
+    # Get the filename from the path
+    local filename=$(basename "$installer_path")
+    
     # Copy installer to Affinity directory
     echo -e "${YELLOW}Copying installer...${NC}"
-    cp "$installer_path" "$directory/"
+    cp "$installer_path" "$directory/$filename"
     
     # Run installer
     echo -e "${YELLOW}Running installer...${NC}"
     echo -e "${YELLOW}Click No if you get any errors. Press any key to continue.${NC}"
     read -n 1
     
-    WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory"/*.exe
+    # Run installer with debug messages suppressed
+    WINEPREFIX="$directory" WINEDEBUG=-all "$directory/ElementalWarriorWine/bin/wine" "$directory/$filename"
     
     # Clean up installer
-    rm "$directory"/*.exe
+    rm "$directory/$filename"
     
     # Remove Wine's default desktop entry
     rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
