@@ -26,41 +26,23 @@ echo "All dependencies are installed!"
 sleep 2
 
 directory="$HOME/.AffinityLinux"
-repo="Twig6943/ElementalWarrior-Wine-binaries" #Owner/Repo
-filename="ElementalWarriorWine.zip" #Filename
+wine_url="https://github.com/Twig6943/ElementalWarrior-Wine-binaries/releases/download/1.1.1/ElementalWarriorWine-x86_64.tar.gz"
+filename="ElementalWarriorWine-x86_64.tar.gz"
 
 #Kill wine
 wineserver -k
 # Create install directory
 mkdir -p "$directory"
 
-# Fetch the latest release information from GitHub
-release_info=$(curl -s "https://api.github.com/repos/$repo/releases/latest")
-download_url=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .browser_download_url")
-[ -z "$download_url" ] && { echo "File not found in the latest release"; exit 1; }
-
-# Download the specific release asset
-wget -q "$download_url" -O "$directory/$filename" #Download wine binaries
-
-# Check downloaded filesize matches repo
-github_size=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .size")
-local_size=$(wc -c < "$directory/$filename")
-
-
-if [ "$github_size" -eq "$local_size" ]; then
-    echo "File sizes match: $local_size bytes"
-else
-    echo "File sizes do not match: GitHub size: $github_size bytes, Local size: $local_size bytes"
-    echo "Download $filename from $download_url move to $directory and hit any button to continue"
-    read -n 1
-fi
+# Download the specific Wine version
+wget -q "$wine_url" -O "$directory/$filename"
 
 # Download files
 wget https://upload.wikimedia.org/wikipedia/commons/f/f5/Affinity_Photo_V2_icon.svg -O "/home/$USER/.local/share/icons/AffinityPhoto.svg"
 wget https://archive.org/download/win-metadata/WinMetadata.zip -O "$directory/Winmetadata.zip"
 
 # Extract wine binary
-unzip "$directory/$filename" -d "$directory"
+tar -xzf "$directory/$filename" -C "$directory"
 
 # Erase the ElementalWarriorWine.tar.gz
 rm "$directory/$filename"
