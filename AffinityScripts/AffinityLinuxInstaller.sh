@@ -163,6 +163,25 @@ setup_wine() {
     tar -xzf "$directory/$filename" -C "$directory"
     rm "$directory/$filename"
     
+    # Find the actual Wine directory and create a symlink if needed
+    wine_dir=$(find "$directory" -name "ElementalWarriorWine*" -type d | head -1)
+    if [ -n "$wine_dir" ] && [ "$wine_dir" != "$directory/ElementalWarriorWine" ]; then
+        echo -e "${YELLOW}Creating Wine directory symlink...${NC}"
+        ln -sf "$wine_dir" "$directory/ElementalWarriorWine"
+    fi
+    
+    # Verify Wine binary exists
+    if [ ! -f "$directory/ElementalWarriorWine/bin/wine" ]; then
+        echo -e "${RED}Wine binary not found. Checking directory structure...${NC}"
+        echo "Contents of $directory:"
+        ls -la "$directory"
+        if [ -n "$wine_dir" ]; then
+            echo "Contents of $wine_dir:"
+            ls -la "$wine_dir"
+        fi
+        exit 1
+    fi
+    
     # Create icons directory if it doesn't exist
     mkdir -p "$HOME/.local/share/icons"
     

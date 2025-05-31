@@ -44,12 +44,27 @@ wget https://archive.org/download/win-metadata/WinMetadata.zip -O "$directory/Wi
 # Extract wine binary
 tar -xzf "$directory/$filename" -C "$directory"
 
+# Find the actual Wine directory and create a symlink if needed
+wine_dir=$(find "$directory" -name "ElementalWarriorWine*" -type d | head -1)
+if [ -n "$wine_dir" ] && [ "$wine_dir" != "$directory/ElementalWarriorWine" ]; then
+    echo "Creating Wine directory symlink..."
+    ln -sf "$wine_dir" "$directory/ElementalWarriorWine"
+fi
+
+# Verify Wine binary exists
+if [ ! -f "$directory/ElementalWarriorWine/bin/wine" ]; then
+    echo "Wine binary not found. Checking directory structure..."
+    echo "Contents of $directory:"
+    ls -la "$directory"
+    if [ -n "$wine_dir" ]; then
+        echo "Contents of $wine_dir:"
+        ls -la "$wine_dir"
+    fi
+    exit 1
+fi
+
 # Erase the ElementalWarriorWine.tar.gz
 rm "$directory/$filename"
-
-# WINETRICKS stuff
-WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts vcrun2022 allfonts
-WINEPREFIX="$directory" winetricks renderer=vulkan
 
 # Extract & delete WinMetadata.zip
 7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32"
