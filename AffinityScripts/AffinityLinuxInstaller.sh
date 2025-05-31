@@ -146,8 +146,8 @@ verify_windows_version() {
 # Function to download and setup Wine
 setup_wine() {
     local directory="$HOME/.AffinityLinux"
-    local repo="Twig6943/ElementalWarrior-Wine-binaries"
-    local filename="ElementalWarriorWine.zip"
+    local wine_url="https://github.com/Twig6943/ElementalWarrior-Wine-binaries/releases/download/1.1.1/ElementalWarriorWine-x86_64.tar.gz"
+    local filename="ElementalWarriorWine-x86_64.tar.gz"
     
     # Kill any running wine processes
     wineserver -k
@@ -155,34 +155,12 @@ setup_wine() {
     # Create install directory
     mkdir -p "$directory"
     
-    # Fetch the latest release information from GitHub
-    echo -e "${YELLOW}Fetching latest Wine release information...${NC}"
-    release_info=$(curl -s "https://api.github.com/repos/$repo/releases/latest")
-    download_url=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .browser_download_url")
-    
-    if [ -z "$download_url" ]; then
-        echo -e "${RED}File not found in the latest release${NC}"
-        exit 1
-    fi
-    
-    # Download the specific release asset
-    download_file "$download_url" "$directory/$filename" "Wine binaries"
-    
-    # Verify download
-    github_size=$(echo "$release_info" | jq -r ".assets[] | select(.name == \"$filename\") | .size")
-    local_size=$(wc -c < "$directory/$filename")
-    
-    if [ "$github_size" -eq "$local_size" ]; then
-        echo -e "${GREEN}File sizes match: $local_size bytes${NC}"
-    else
-        echo -e "${RED}File sizes do not match: GitHub size: $github_size bytes, Local size: $local_size bytes${NC}"
-        echo "Please download $filename from $download_url and place it in $directory"
-        read -n 1 -s -r -p "Press any key when ready..."
-    fi
+    # Download the specific Wine version
+    download_file "$wine_url" "$directory/$filename" "Wine binaries"
     
     # Extract wine binary
     echo -e "${YELLOW}Extracting Wine binaries...${NC}"
-    unzip "$directory/$filename" -d "$directory"
+    tar -xzf "$directory/$filename" -C "$directory"
     rm "$directory/$filename"
     
     # Create icons directory if it doesn't exist
