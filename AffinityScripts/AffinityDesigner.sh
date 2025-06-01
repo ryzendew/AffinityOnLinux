@@ -108,6 +108,8 @@ echo "Type=Application" >> ~/.local/share/applications/AffinityDesigner.desktop
 echo "Categories=Graphics;" >> ~/.local/share/applications/AffinityDesigner.desktop
 echo "StartupNotify=true" >> ~/.local/share/applications/AffinityDesigner.desktop
 
+cp ~/.local/share/applications/AffinityDesigner.desktop ~/Desktop/AffinityDesigner.desktop
+
 # Special Thanks section
 echo "******************************"
 echo "    Special Thanks"

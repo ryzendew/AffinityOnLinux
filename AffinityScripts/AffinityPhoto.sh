@@ -109,6 +109,9 @@ echo "Type=Application" >> ~/.local/share/applications/AffinityPhoto.desktop
 echo "Categories=Graphics;" >> ~/.local/share/applications/AffinityPhoto.desktop
 echo "StartupNotify=true" >> ~/.local/share/applications/AffinityPhoto.desktop
 
+cp ~/.local/share/applications/AffinityPhoto.desktop ~/Desktop/AffinityPhoto.desktop
+
+
 # Special Thanks section
 echo "******************************"
 echo "    Special Thanks"
