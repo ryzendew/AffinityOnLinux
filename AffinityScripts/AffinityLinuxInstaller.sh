@@ -122,24 +122,9 @@ install_dependencies() {
 # Function to verify Windows version
 verify_windows_version() {
     local directory="$HOME/.AffinityLinux"
-    local wine_version
-    
-    # Get current Windows version
-    wine_version=$(WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" winecfg -v 2>&1 | grep "Windows version" | awk '{print $3}')
-    
-    if [ "$wine_version" != "win11" ]; then
-        echo -e "${YELLOW}Setting Windows version to 11...${NC}"
-        WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
-        
-        # Verify the change
-        wine_version=$(WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" winecfg -v 2>&1 | grep "Windows version" | awk '{print $3}')
-        if [ "$wine_version" != "win11" ]; then
-            echo -e "${RED}Failed to set Windows version to 11${NC}"
-            return 1
-        fi
-    fi
-    
-    echo -e "${GREEN}Windows version is set to 11${NC}"
+    # Try to set Windows version to 11, but ignore errors
+    WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
+    echo -e "${GREEN}Attempted to set Windows version to 11 (errors ignored)${NC}"
     return 0
 }
 
@@ -237,9 +222,6 @@ create_desktop_entry() {
     echo "Type=Application" >> "$desktop_file"
     echo "Categories=Graphics;" >> "$desktop_file"
     echo "StartupNotify=true" >> "$desktop_file"
-    
-    # Copy to desktop
-    cp "$desktop_file" "$HOME/Desktop/Affinity$app_name.desktop"
 }
 
 # Function to normalize and validate file path

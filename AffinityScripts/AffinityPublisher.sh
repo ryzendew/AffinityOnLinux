@@ -78,7 +78,7 @@ echo "Click No if you get any errors. Press any key to continue."
 read -n 1
 
 #Set windows version to 11
-WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
+WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
 WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory"/*.exe
 rm "$directory"/affinity*.exe
 
@@ -105,9 +105,6 @@ echo "Categories=Graphics;" >> ~/.local/share/applications/AffinityPublisher.des
 echo "StartupNotify=true" >> ~/.local/share/applications/AffinityPublisher.desktop
 
 cp ~/.local/share/applications/AffinityPublisher.desktop ~/Desktop/AffinityPublisher.desktop
-
-# Copy to desktop
-cp "$HOME/.local/share/applications/AffinityPublisher.desktop" "$HOME/Desktop/AffinityPublisher.desktop"
 
 # Special Thanks section
 echo "******************************"

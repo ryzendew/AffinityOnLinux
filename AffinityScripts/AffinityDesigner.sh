@@ -82,7 +82,7 @@ echo "Click No if you get any errors. Press any key to continue."
 read -n 1
 
 #Set windows version to 11
-WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
+WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
 WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory"/*.exe
 rm "$directory"/affinity*.exe
 
@@ -107,11 +107,6 @@ echo "StartupWMClass=designer.exe" >> ~/.local/share/applications/AffinityDesign
 echo "Type=Application" >> ~/.local/share/applications/AffinityDesigner.desktop
 echo "Categories=Graphics;" >> ~/.local/share/applications/AffinityDesigner.desktop
 echo "StartupNotify=true" >> ~/.local/share/applications/AffinityDesigner.desktop
-
-cp ~/.local/share/applications/AffinityDesigner.desktop ~/Desktop/AffinityDesigner.desktop
-
-# Copy to desktop
-cp "$HOME/.local/share/applications/AffinityDesigner.desktop" "$HOME/Desktop/AffinityDesigner.desktop"
 
 # Special Thanks section
 echo "******************************"

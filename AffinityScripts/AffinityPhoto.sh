@@ -83,7 +83,7 @@ echo "Click No if you get any errors. Press any key to continue."
 read -n 1
 
 #Set windows version to 11
-WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11
+WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
 WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory"/*.exe
 rm "$directory"/affinity*.exe
 
@@ -108,11 +108,6 @@ echo "StartupWMClass=photo.exe" >> ~/.local/share/applications/AffinityPhoto.des
 echo "Type=Application" >> ~/.local/share/applications/AffinityPhoto.desktop
 echo "Categories=Graphics;" >> ~/.local/share/applications/AffinityPhoto.desktop
 echo "StartupNotify=true" >> ~/.local/share/applications/AffinityPhoto.desktop
-
-cp ~/.local/share/applications/AffinityPhoto.desktop ~/Desktop/AffinityPhoto.desktop
-
-# Copy to desktop
-cp "$HOME/.local/share/applications/AffinityPhoto.desktop" "$HOME/Desktop/AffinityPhoto.desktop"
 
 # Special Thanks section
 echo "******************************"
