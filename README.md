@@ -25,11 +25,6 @@ Installs any Affinity app with a single command. Features:
 ```bash
 bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.sh)"
 ```
-
-[Written Guide 📕](https://github.com/ryzendew/AffinityOnLinux/blob/patch-1/Guide/Guide.md)
-
-This guide helps you Step by step by hand using Heroic Game launcher or Lutris
-
 # Individual App Installers
 
 [Affinity Photo 🤖](https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityPhoto.sh)
@@ -48,6 +43,20 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 
 ```bash
 bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityPublisher.sh)"
+```
+
+# Affinity Updater 🔄
+
+A lightweight script for updating existing Affinity installations to newer versions. This script:
+- Only updates the application, no additional setup
+- Preserves existing desktop entries and configurations
+- No winetricks or dependency checks
+- Simple drag-and-drop interface
+
+[Affinity Updater 🤖](https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityUpdater.sh)
+
+```bash
+bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityUpdater.sh)"
 ```
 
 # [Other software on GNU/Linux 💻](https://github.com/Twig6943/AffinityOnLinux/blob/main/OtherSoftware-on-Linux.md)
