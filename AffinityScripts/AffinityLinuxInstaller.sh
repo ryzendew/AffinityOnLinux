@@ -185,8 +185,8 @@ setup_wine() {
     
     # Setup Wine
     echo -e "${YELLOW}Setting up Wine environment...${NC}"
-    WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts vcrun2022 allfonts
-    WINEPREFIX="$directory" winetricks renderer=vulkan
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 dotnet48 corefonts vcrun2022 allfonts
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan
     
     # Set and verify Windows version to 11
     verify_windows_version
