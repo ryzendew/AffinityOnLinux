@@ -93,7 +93,7 @@ install_dependencies() {
     echo -e "${YELLOW}Installing dependencies for $DISTRO...${NC}"
     
     case $DISTRO in
-        "ubuntu"|"linuxmint"|"pop")
+        "ubuntu"|"linuxmint"|"pop"|"pikaos")
             sudo apt update
             sudo apt install -y wine winetricks wget curl p7zip-full tar jq
             ;;
