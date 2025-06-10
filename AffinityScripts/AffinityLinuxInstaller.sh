@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Check if script is executable, if not make it executable
-if [ ! -x "$0" ]; then
+if [ ! -x "$(readlink -f "$0")" ]; then
     echo "Making script executable..."
-    chmod +x "$0"
+    chmod +x "$(readlink -f "$0")"
 fi
 
 # Ensure script is being run with bash
