@@ -26,8 +26,8 @@ echo "All dependencies are installed!"
 sleep 2
 
 directory="$HOME/.AffinityLinux"
-wine_url="https://github.com/Twig6943/ElementalWarrior-Wine-binaries/releases/download/1.1.1/ElementalWarriorWine-x86_64.tar.gz"
-filename="ElementalWarriorWine-x86_64.tar.gz"
+wine_url="https://github.com/ryzendew/ElementalWarrior-Wine-binaries/releases/download/Release/ElementalWarriorWine-x86_64.zip"
+filename="ElementalWarriorWine-x86_64.zip"
 
 #Kill wine
 wineserver -k
@@ -42,7 +42,7 @@ wget https://upload.wikimedia.org/wikipedia/commons/3/3c/Affinity_Designer_2-log
 wget https://archive.org/download/win-metadata/WinMetadata.zip -O "$directory/Winmetadata.zip"
 
 # Extract wine binary
-tar -xzf "$directory/$filename" -C "$directory"
+unzip -o "$directory/$filename" -d "$directory"
 
 # Find the actual Wine directory and create a symlink if needed
 wine_dir=$(find "$directory" -name "ElementalWarriorWine*" -type d | head -1)
@@ -63,7 +63,7 @@ if [ ! -f "$directory/ElementalWarriorWine/bin/wine" ]; then
     exit 1
 fi
 
-# Erase the ElementalWarriorWine.tar.gz
+# Erase the ElementalWarriorWine.zip
 rm "$directory/$filename"
 
 # WINETRICKS stuff

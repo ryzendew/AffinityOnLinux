@@ -131,8 +131,8 @@ verify_windows_version() {
 # Function to download and setup Wine
 setup_wine() {
     local directory="$HOME/.AffinityLinux"
-    local wine_url="https://github.com/Twig6943/ElementalWarrior-Wine-binaries/releases/download/1.1.1/ElementalWarriorWine-x86_64.tar.gz"
-    local filename="ElementalWarriorWine-x86_64.tar.gz"
+    local wine_url="https://github.com/ryzendew/ElementalWarrior-Wine-binaries/releases/download/Release/ElementalWarriorWine-x86_64.zip"
+    local filename="ElementalWarriorWine-x86_64.zip"
     
     # Kill any running wine processes
     wineserver -k
@@ -145,7 +145,7 @@ setup_wine() {
     
     # Extract wine binary
     echo -e "${YELLOW}Extracting Wine binaries...${NC}"
-    tar -xzf "$directory/$filename" -C "$directory"
+    unzip -o "$directory/$filename" -d "$directory"
     rm "$directory/$filename"
     
     # Find the actual Wine directory and create a symlink if needed
