@@ -20,7 +20,7 @@ sudo pacman -S lutris
 ## Ubuntu/Debian
 
 ```
-sudo pacman -S lutris
+sudo apt install lutris
 ```
 ## Installing Affinity Linux's Prebuilt Wine
 
