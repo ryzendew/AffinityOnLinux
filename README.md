@@ -12,9 +12,7 @@ A repository that helps users get affinity software working on GNU/Linux 🐧
 
 <img src="https://github.com/user-attachments/assets/c7b70ee5-58e3-46c6-b385-7c3d02749664" alt="Affinity_Photo_V2_icon" width="200"/>
 
-# All-in-One Installer (BETA) 🚀
-
-**Note: This is a beta version. Please report any issues in our [Discord](https://discord.gg/DW2X8MHQuh)**
+# All-in-One Installer 
 
 Installs any Affinity app with a single command. Features:
 - Automatic distribution detection
