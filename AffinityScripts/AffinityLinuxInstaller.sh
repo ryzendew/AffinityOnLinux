@@ -175,6 +175,15 @@ setup_wine() {
     download_file "https://upload.wikimedia.org/wikipedia/commons/8/8a/Affinity_Designer_V2_icon.svg" "$HOME/.local/share/icons/AffinityDesigner.svg" "Affinity Designer icon"
     download_file "https://upload.wikimedia.org/wikipedia/commons/9/9c/Affinity_Publisher_V2_icon.svg" "$HOME/.local/share/icons/AffinityPublisher.svg" "Affinity Publisher icon"
     
+    # Copy Affinity icon from script directory to icons folder
+    script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+    if [ -f "$script_dir/icons/Affinity.png" ]; then
+        cp "$script_dir/icons/Affinity.png" "$HOME/.local/share/icons/Affinity.png"
+        echo -e "${GREEN}Copied Affinity icon to icons folder${NC}"
+    else
+        echo -e "${YELLOW}Warning: Affinity.png not found in $script_dir/icons/${NC}"
+    fi
+    
     # Download WinMetadata
     download_file "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata"
     
@@ -222,6 +231,42 @@ create_desktop_entry() {
     echo "Type=Application" >> "$desktop_file"
     echo "Categories=Graphics;" >> "$desktop_file"
     echo "StartupNotify=true" >> "$desktop_file"
+}
+
+# Function to create Affinity desktop entry
+create_all_in_one_desktop_entry() {
+    local icon_path=$1
+    local desktop_file="$HOME/.local/share/applications/Affinity.desktop"
+    local directory="$HOME/.AffinityLinux"
+    
+    echo "[Desktop Entry]" > "$desktop_file"
+    echo "Name=Affinity" >> "$desktop_file"
+    echo "Comment=Photo, Designer, Publisher and more" >> "$desktop_file"
+    echo "Icon=$icon_path" >> "$desktop_file"
+    echo "Path=$directory" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Photo 2/Photo.exe\"" >> "$desktop_file"
+    echo "Terminal=false" >> "$desktop_file"
+    echo "NoDisplay=false" >> "$desktop_file"
+    echo "Type=Application" >> "$desktop_file"
+    echo "Categories=Graphics;" >> "$desktop_file"
+    echo "StartupNotify=true" >> "$desktop_file"
+    echo "StartupWMClass=affinity.exe" >> "$desktop_file"
+    echo "Actions=Photo;Designer;Publisher;" >> "$desktop_file"
+    echo "" >> "$desktop_file"
+    echo "[Desktop Action Photo]" >> "$desktop_file"
+    echo "Name=Affinity Photo" >> "$desktop_file"
+    echo "Icon=$HOME/.local/share/icons/AffinityPhoto.svg" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Photo 2/Photo.exe\"" >> "$desktop_file"
+    echo "" >> "$desktop_file"
+    echo "[Desktop Action Designer]" >> "$desktop_file"
+    echo "Name=Affinity Designer" >> "$desktop_file"
+    echo "Icon=$HOME/.local/share/icons/AffinityDesigner.svg" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Designer 2/Designer.exe\"" >> "$desktop_file"
+    echo "" >> "$desktop_file"
+    echo "[Desktop Action Publisher]" >> "$desktop_file"
+    echo "Name=Affinity Publisher" >> "$desktop_file"
+    echo "Icon=$HOME/.local/share/icons/AffinityPublisher.svg" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Publisher 2/Publisher.exe\"" >> "$desktop_file"
 }
 
 # Function to normalize and validate file path
@@ -302,6 +347,22 @@ install_affinity() {
         "Publisher")
             create_desktop_entry "Publisher" "$directory/drive_c/Program Files/Affinity/Publisher 2/Publisher.exe" "$HOME/.local/share/icons/AffinityPublisher.svg"
             ;;
+        "Add")
+            # Create Affinity desktop entry
+            icon_path="$HOME/.local/share/icons/Affinity.png"
+            if [ ! -f "$icon_path" ]; then
+                # Fallback: try to copy from script directory if not already copied
+                script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+                if [ -f "$script_dir/icons/Affinity.png" ]; then
+                    cp "$script_dir/icons/Affinity.png" "$icon_path"
+                    echo -e "${GREEN}Copied Affinity icon to icons folder${NC}"
+                else
+                    echo -e "${YELLOW}Warning: Affinity.png not found, using Photo icon as fallback${NC}"
+                    icon_path="$HOME/.local/share/icons/AffinityPhoto.svg"
+                fi
+            fi
+            create_all_in_one_desktop_entry "$icon_path"
+            ;;
     esac
     
     echo -e "${GREEN}Affinity $app_name installation completed!${NC}"
@@ -311,15 +372,29 @@ install_affinity() {
 # User Interface Functions
 # ==========================================
 
+# Function to show special thanks
+show_special_thanks() {
+    echo -e "${GREEN}******************************${NC}"
+    echo -e "${GREEN}    Special Thanks${NC}"
+    echo -e "${GREEN}******************************${NC}"
+    echo "Ardishco (github.com/raidenovich)"
+    echo "Deviaze"
+    echo "Kemal"
+    echo "Jacazimbo <3"
+    echo "Kharoon"
+    echo "Jediclank134"
+}
+
 # Main menu
 show_menu() {
     echo -e "${GREEN}Affinity Installation Script${NC}"
     echo "1. Install Affinity Photo"
     echo "2. Install Affinity Designer"
     echo "3. Install Affinity Publisher"
-    echo "4. Show Special Thanks"
-    echo "5. Exit"
-    echo -n "Please select an option (1-5): "
+    echo "4. Install Affinity"
+    echo "5. Show Special Thanks"
+    echo "6. Exit"
+    echo -n "Please select an option (1-6): "
 }
 
 # ==========================================
@@ -352,9 +427,12 @@ main() {
                 install_affinity "Publisher"
                 ;;
             4)
-                show_special_thanks
+                install_affinity "Add"
                 ;;
             5)
+                show_special_thanks
+                ;;
+            6)
                 echo -e "${GREEN}Thank you for using the Affinity Installation Script!${NC}"
                 exit 0
                 ;;

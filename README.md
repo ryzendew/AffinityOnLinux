@@ -43,6 +43,12 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityPublisher.sh)"
 ```
 
+[Affinity 🤖](https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/Affinity.sh)
+
+```bash
+bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/Affinity.sh)"
+```
+
 # Affinity Updater 🔄
 
 A lightweight script for updating existing Affinity installations to newer versions. This script:
