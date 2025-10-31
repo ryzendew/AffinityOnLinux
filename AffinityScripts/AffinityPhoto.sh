@@ -26,8 +26,8 @@ echo "All dependencies are installed!"
 sleep 2
 
 directory="$HOME/.AffinityLinux"
-wine_url="https://github.com/ryzendew/ElementalWarrior-Wine-binaries/releases/download/Release/ElementalWarriorWine-x86_64.zip"
-filename="ElementalWarriorWine-x86_64.zip"
+wine_url="https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
+filename="ElementalWarriorWine-x86_64.tar.gz"
 
 #Kill wine
 wineserver -k
@@ -42,7 +42,7 @@ wget https://upload.wikimedia.org/wikipedia/commons/f/f5/Affinity_Photo_V2_icon.
 wget https://archive.org/download/win-metadata/WinMetadata.zip -O "$directory/Winmetadata.zip"
 
 # Extract wine binary
-unzip -o "$directory/$filename" -d "$directory"
+tar -xzf "$directory/$filename" -C "$directory"
 
 # Find the actual Wine directory and create a symlink if needed
 wine_dir=$(find "$directory" -name "ElementalWarriorWine*" -type d | head -1)
@@ -63,16 +63,85 @@ if [ ! -f "$directory/ElementalWarriorWine/bin/wine" ]; then
     exit 1
 fi
 
-# Erase the ElementalWarriorWine.zip
+# Erase the ElementalWarriorWine.tar.gz
 rm "$directory/$filename"
 
 # WINETRICKS stuff
-WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts vcrun2022 allfonts
+WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts vcrun2022
 WINEPREFIX="$directory" winetricks renderer=vulkan
 
 # Extract & delete WinMetadata.zip
-7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32"
-rm "$directory/Winmetadata.zip"
+# Ensure the system32 directory exists before extraction
+mkdir -p "$directory/drive_c/windows/system32"
+
+if [ -f "$directory/Winmetadata.zip" ]; then
+    if command -v 7z &> /dev/null; then
+        7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" -y >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "Windows metadata extracted successfully"
+        else
+            echo "Warning: 7z extraction had issues, trying unzip..."
+            unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1 || true
+        fi
+    elif command -v unzip &> /dev/null; then
+        unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "Windows metadata extracted successfully"
+        else
+            echo "Warning: Failed to extract Windows metadata"
+        fi
+    else
+        echo "Error: Neither 7z nor unzip is available to extract Windows metadata"
+    fi
+    rm -f "$directory/Winmetadata.zip"
+else
+    echo "Error: WinMetadata.zip was not downloaded successfully"
+fi
+
+# Download and install vkd3d-proton for OpenCL support
+echo "Installing vkd3d-proton for OpenCL support..."
+wget -q "https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst" -O "$directory/vkd3d-proton-2.14.1.tar.zst"
+
+# Extract vkd3d-proton
+if command -v unzstd &> /dev/null; then
+    unzstd -f "$directory/vkd3d-proton-2.14.1.tar.zst" -o "$directory/vkd3d-proton.tar"
+    tar -xf "$directory/vkd3d-proton.tar" -C "$directory"
+    rm "$directory/vkd3d-proton.tar"
+elif command -v zstd &> /dev/null && tar --help 2>&1 | grep -q "use-compress-program"; then
+    tar --use-compress-program=zstd -xf "$directory/vkd3d-proton-2.14.1.tar.zst" -C "$directory"
+else
+    echo "Warning: Cannot extract .tar.zst file. Please install zstd. Skipping vkd3d-proton installation."
+    rm -f "$directory/vkd3d-proton-2.14.1.tar.zst"
+fi
+rm -f "$directory/vkd3d-proton-2.14.1.tar.zst"
+
+# Find and copy vkd3d-proton DLL files to Wine lib directory
+vkd3d_dir=$(find "$directory" -type d -name "vkd3d-proton-*" | head -1)
+if [ -n "$vkd3d_dir" ]; then
+    wine_lib_dir="$directory/ElementalWarriorWine/lib/wine/vkd3d-proton/x86_64-windows"
+    mkdir -p "$wine_lib_dir"
+    if [ -f "$vkd3d_dir/x64/d3d12.dll" ]; then
+        cp "$vkd3d_dir/x64/d3d12.dll" "$wine_lib_dir/" 2>/dev/null || true
+    fi
+    if [ -f "$vkd3d_dir/x64/dxgi.dll" ]; then
+        cp "$vkd3d_dir/x64/dxgi.dll" "$wine_lib_dir/" 2>/dev/null || true
+    fi
+    if [ -f "$vkd3d_dir/d3d12.dll" ]; then
+        cp "$vkd3d_dir/d3d12.dll" "$wine_lib_dir/" 2>/dev/null || true
+    fi
+    if [ -f "$vkd3d_dir/x64/d3d12core.dll" ]; then
+        cp "$vkd3d_dir/x64/d3d12core.dll" "$wine_lib_dir/" 2>/dev/null || true
+    fi
+    if [ -f "$vkd3d_dir/d3d12core.dll" ]; then
+        cp "$vkd3d_dir/d3d12core.dll" "$wine_lib_dir/" 2>/dev/null || true
+    fi
+    if [ -f "$vkd3d_dir/dxgi.dll" ]; then
+        cp "$vkd3d_dir/dxgi.dll" "$wine_lib_dir/" 2>/dev/null || true
+    fi
+    rm -rf "$vkd3d_dir"
+    echo "vkd3d-proton installed successfully to Wine lib directory!"
+fi
+
 # Start the setup
 echo "Download the Affinity Photo .exe from https://store.serif.com/account/licences/"
 echo "Once downloaded place the .exe in $directory and press any key when ready."

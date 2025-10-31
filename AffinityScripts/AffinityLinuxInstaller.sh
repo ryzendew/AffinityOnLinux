@@ -80,6 +80,11 @@ check_dependencies() {
         fi
     done
     
+    # Check for zstd support (needed for vkd3d-proton)
+    if ! command -v unzstd &> /dev/null && ! command -v zstd &> /dev/null; then
+        missing_deps+="zstd "
+    fi
+    
     if [ -n "$missing_deps" ]; then
         echo -e "${YELLOW}Missing dependencies: $missing_deps${NC}"
         install_dependencies
@@ -95,21 +100,21 @@ install_dependencies() {
     case $DISTRO in
         "ubuntu"|"linuxmint"|"pop"|"pikaos")
             sudo apt update
-            sudo apt install -y wine winetricks wget curl p7zip-full tar jq
+            sudo apt install -y wine winetricks wget curl p7zip-full tar jq zstd
             ;;
         "arch"|"cachyos")
-            sudo pacman -S --needed wine winetricks wget curl p7zip tar jq
+            sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd
             ;;
         "fedora"|"nobara")
-            sudo dnf install -y wine winetricks wget curl p7zip p7zip-plugins tar jq
+            sudo dnf install -y wine winetricks wget curl p7zip p7zip-plugins tar jq zstd
             ;;
         "opensuse-tumbleweed"|"opensuse-leap")
-            sudo zypper install -y wine winetricks wget curl p7zip tar jq
+            sudo zypper install -y wine winetricks wget curl p7zip tar jq zstd
             ;;
         *)
             echo -e "${RED}Unsupported distribution: $DISTRO${NC}"
             echo "Please install the following packages manually:"
-            echo "wine winetricks wget curl p7zip tar jq"
+            echo "wine winetricks wget curl p7zip tar jq zstd"
             exit 1
             ;;
     esac
@@ -131,8 +136,8 @@ verify_windows_version() {
 # Function to download and setup Wine
 setup_wine() {
     local directory="$HOME/.AffinityLinux"
-    local wine_url="https://github.com/ryzendew/ElementalWarrior-Wine-binaries/releases/download/Release/ElementalWarriorWine-x86_64.zip"
-    local filename="ElementalWarriorWine-x86_64.zip"
+    local wine_url="https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
+    local filename="ElementalWarriorWine-x86_64.tar.gz"
     
     # Kill any running wine processes
     wineserver -k
@@ -145,7 +150,7 @@ setup_wine() {
     
     # Extract wine binary
     echo -e "${YELLOW}Extracting Wine binaries...${NC}"
-    unzip -o "$directory/$filename" -d "$directory"
+    tar -xzf "$directory/$filename" -C "$directory"
     rm "$directory/$filename"
     
     # Find the actual Wine directory and create a symlink if needed
@@ -187,14 +192,87 @@ setup_wine() {
     # Download WinMetadata
     download_file "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata"
     
+    # Ensure the system32 directory exists before extraction
+    mkdir -p "$directory/drive_c/windows/system32"
+    
     # Extract WinMetadata
     echo -e "${YELLOW}Extracting Windows metadata...${NC}"
-    7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32"
-    rm "$directory/Winmetadata.zip"
+    if [ -f "$directory/Winmetadata.zip" ]; then
+        if command -v 7z &> /dev/null; then
+            7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" -y >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}Windows metadata extracted successfully${NC}"
+            else
+                echo -e "${YELLOW}Warning: 7z extraction had issues, trying unzip...${NC}"
+                unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1 || true
+            fi
+        elif command -v unzip &> /dev/null; then
+            unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}Windows metadata extracted successfully${NC}"
+            else
+                echo -e "${RED}Warning: Failed to extract Windows metadata${NC}"
+            fi
+        else
+            echo -e "${RED}Error: Neither 7z nor unzip is available to extract Windows metadata${NC}"
+        fi
+        rm -f "$directory/Winmetadata.zip"
+    else
+        echo -e "${RED}Error: WinMetadata.zip was not downloaded successfully${NC}"
+    fi
+    
+    # Download and install vkd3d-proton for OpenCL support
+    echo -e "${YELLOW}Installing vkd3d-proton for OpenCL support...${NC}"
+    local vkd3d_url="https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
+    local vkd3d_filename="vkd3d-proton-2.14.1.tar.zst"
+    
+    download_file "$vkd3d_url" "$directory/$vkd3d_filename" "vkd3d-proton"
+    
+    # Extract vkd3d-proton
+    echo -e "${YELLOW}Extracting vkd3d-proton...${NC}"
+    if command -v unzstd &> /dev/null; then
+        unzstd -f "$directory/$vkd3d_filename" -o "$directory/vkd3d-proton.tar"
+        tar -xf "$directory/vkd3d-proton.tar" -C "$directory"
+        rm "$directory/vkd3d-proton.tar"
+    elif command -v zstd &> /dev/null && tar --help 2>&1 | grep -q "use-compress-program"; then
+        tar --use-compress-program=zstd -xf "$directory/$vkd3d_filename" -C "$directory"
+    else
+        echo -e "${RED}Error: Cannot extract .tar.zst file. Please install zstd or unzstd.${NC}"
+        rm "$directory/$vkd3d_filename"
+        return 1
+    fi
+    rm "$directory/$vkd3d_filename"
+    
+    # Extract vkd3d-proton DLLs for later use (will be copied to Affinity directory after installation)
+    local vkd3d_dir=$(find "$directory" -type d -name "vkd3d-proton-*" | head -1)
+    if [ -n "$vkd3d_dir" ]; then
+        # Store DLLs in a temporary location for later copying
+        local vkd3d_temp="$directory/vkd3d_dlls"
+        mkdir -p "$vkd3d_temp"
+        
+        # Copy DLL files to temp location (typical locations: x64/ or root)
+        if [ -f "$vkd3d_dir/x64/d3d12.dll" ]; then
+            cp "$vkd3d_dir/x64/d3d12.dll" "$vkd3d_temp/" 2>/dev/null || true
+        elif [ -f "$vkd3d_dir/d3d12.dll" ]; then
+            cp "$vkd3d_dir/d3d12.dll" "$vkd3d_temp/" 2>/dev/null || true
+        fi
+        
+        if [ -f "$vkd3d_dir/x64/d3d12core.dll" ]; then
+            cp "$vkd3d_dir/x64/d3d12core.dll" "$vkd3d_temp/" 2>/dev/null || true
+        elif [ -f "$vkd3d_dir/d3d12core.dll" ]; then
+            cp "$vkd3d_dir/d3d12core.dll" "$vkd3d_temp/" 2>/dev/null || true
+        fi
+        
+        # Remove extracted vkd3d-proton directory
+        rm -rf "$vkd3d_dir"
+        echo -e "${GREEN}vkd3d-proton DLLs extracted and ready!${NC}"
+    else
+        echo -e "${YELLOW}Warning: Could not find vkd3d-proton directory after extraction${NC}"
+    fi
     
     # Setup Wine
     echo -e "${YELLOW}Setting up Wine environment...${NC}"
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 dotnet48 corefonts vcrun2022 allfonts
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 dotnet48 corefonts vcrun2022
     WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan
     
     # Set and verify Windows version to 11
@@ -240,11 +318,11 @@ create_all_in_one_desktop_entry() {
     local directory="$HOME/.AffinityLinux"
     
     echo "[Desktop Entry]" > "$desktop_file"
-    echo "Name=Affinity" >> "$desktop_file"
+    echo "Name=Affinity Suite" >> "$desktop_file"
     echo "Comment=Photo, Designer, Publisher and more" >> "$desktop_file"
     echo "Icon=$icon_path" >> "$desktop_file"
     echo "Path=$directory" >> "$desktop_file"
-    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Photo 2/Photo.exe\"" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Affinity/Affinity.exe\"" >> "$desktop_file"
     echo "Terminal=false" >> "$desktop_file"
     echo "NoDisplay=false" >> "$desktop_file"
     echo "Type=Application" >> "$desktop_file"
@@ -332,6 +410,37 @@ install_affinity() {
     
     # Clean up installer
     rm "$directory/$filename"
+    
+    # If installing Affinity (unified app), copy vkd3d-proton DLLs and add to Wine libraries
+    if [ "$app_name" = "Add" ]; then
+        local affinity_dir="$directory/drive_c/Program Files/Affinity/Affinity"
+        if [ -d "$affinity_dir" ]; then
+            echo -e "${YELLOW}Installing vkd3d-proton DLLs for OpenCL support...${NC}"
+            local vkd3d_temp="$directory/vkd3d_dlls"
+            
+            # Copy DLLs to Affinity directory
+            if [ -f "$vkd3d_temp/d3d12.dll" ]; then
+                cp "$vkd3d_temp/d3d12.dll" "$affinity_dir/" 2>/dev/null || true
+                echo -e "${GREEN}Copied d3d12.dll to Affinity directory${NC}"
+            fi
+            if [ -f "$vkd3d_temp/d3d12core.dll" ]; then
+                cp "$vkd3d_temp/d3d12core.dll" "$affinity_dir/" 2>/dev/null || true
+                echo -e "${GREEN}Copied d3d12core.dll to Affinity directory${NC}"
+            fi
+            
+            # Add DLLs to Wine's library overrides using regedit
+            echo -e "${YELLOW}Adding DLLs to Wine's library overrides...${NC}"
+            # Create a temporary registry file for DLL overrides
+            local reg_file="$directory/dll_overrides.reg"
+            echo "REGEDIT4" > "$reg_file"
+            echo "[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]" >> "$reg_file"
+            echo "\"d3d12\"=\"native\"" >> "$reg_file"
+            echo "\"d3d12core\"=\"native\"" >> "$reg_file"
+            WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/regedit" "$reg_file" >/dev/null 2>&1 || true
+            rm -f "$reg_file"
+            echo -e "${GREEN}vkd3d-proton DLLs installed and configured!${NC}"
+        fi
+    fi
     
     # Remove Wine's default desktop entry
     rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
