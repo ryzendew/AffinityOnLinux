@@ -102,6 +102,9 @@ rm "$directory/$filename"
 WINEPREFIX="$directory" winetricks --unattended dotnet35 dotnet48 corefonts vcrun2022
 WINEPREFIX="$directory" winetricks renderer=vulkan
 
+#Set windows version to 11
+WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
+
 # Extract & delete WinMetadata.zip
 # Ensure the system32 directory exists before extraction
 mkdir -p "$directory/drive_c/windows/system32"
@@ -182,9 +185,6 @@ wget https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-t
 WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/regedit" "$directory/wine-dark-theme.reg"
 rm "$directory/wine-dark-theme.reg"
 
-#Set windows version to 11
-WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
-
 # Start the setup
 echo "Download the Affinity .exe installers from https://store.serif.com/account/licences/"
 echo ""
@@ -232,6 +232,11 @@ done
 
 echo ""
 echo "All installations completed!"
+
+# Ensure Windows 11 and Vulkan renderer are set (second attempt, after installations)
+echo "Ensuring Windows 11 and Vulkan renderer are properly configured..."
+WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
+WINEPREFIX="$directory" winetricks renderer=vulkan >/dev/null 2>&1 || true
 
 # Remove any existing desktop entries created by wine
 rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity Photo 2.desktop"
