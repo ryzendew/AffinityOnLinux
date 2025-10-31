@@ -676,7 +676,10 @@ EOF
 normalize_path() {
     local path="$1"
     path=$(echo "$path" | tr -d '"' | xargs)
-    [[ "$path" == file://* ]] && path=$(echo "$path" | sed 's|^file://||' | printf '%b' "$(sed 's|%|\\x|g')")
+    if [[ "$path" == file://* ]]; then
+        path=$(echo "$path" | sed 's|^file://||')
+        path=$(printf '%b' "${path//%/\\x}")
+    fi
     [[ ! "$path" = /* ]] && path="$(pwd)/$path"
     path=$(realpath -q "$path" 2>/dev/null || echo "$path")
     echo "$path"
