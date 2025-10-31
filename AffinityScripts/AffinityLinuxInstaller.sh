@@ -322,9 +322,9 @@ setup_wine() {
             print_info "Please install either 7z or unzip and rerun the script"
         fi
         
-        print_step "Cleaning up metadata archive..."
-        rm -f "$directory/Winmetadata.zip"
-        print_success "Archive removed"
+        print_step "Keeping metadata archive for future restoration..."
+        print_info "WinMetadata.zip will be kept to restore after Affinity installations"
+        print_success "Archive preserved for restoration"
     else
         print_warning "WinMetadata.zip was not downloaded successfully or is corrupted"
         print_info "Installation will continue, but some Windows metadata features may not work"
@@ -602,6 +602,99 @@ normalize_path() {
     echo "$path"
 }
 
+# Function to restore WinMetadata after Affinity installation
+restore_winmetadata() {
+    local directory="$HOME/.AffinityLinux"
+    
+    print_step "Restoring Windows metadata files..."
+    
+    # Kill any running Wine processes to prevent file locks
+    print_progress "Stopping Wine processes to prevent file locks..."
+    wineserver -k 2>/dev/null || true
+    # Wait a moment for processes to fully terminate
+    sleep 2
+    
+    # Ensure system32 directory exists
+    mkdir -p "$directory/drive_c/windows/system32"
+    
+    # Check if we have a cached WinMetadata.zip
+    if [ -f "$directory/Winmetadata.zip" ] && [ -s "$directory/Winmetadata.zip" ]; then
+        print_progress "Found cached WinMetadata.zip, re-extracting..."
+        
+        # Try extraction with 7z first (more reliable)
+        if command -v 7z &> /dev/null; then
+            if 7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" -y >/dev/null 2>&1; then
+                print_success "Windows metadata restored successfully using 7z"
+                return 0
+            else
+                print_warning "7z extraction had issues, trying unzip..."
+                # unzip -o means overwrite without prompting, -q means quiet mode
+                if unzip -o -q "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" 2>/dev/null; then
+                    print_success "Windows metadata restored using unzip"
+                    return 0
+                else
+                    print_warning "Both 7z and unzip extraction failed for cached file"
+                fi
+            fi
+        elif command -v unzip &> /dev/null; then
+            if unzip -o -q "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" 2>/dev/null; then
+                print_success "Windows metadata restored successfully using unzip"
+                return 0
+            else
+                print_warning "unzip extraction failed for cached file"
+            fi
+        else
+            print_warning "No extraction tools available for cached file"
+        fi
+        
+        print_warning "Failed to extract cached WinMetadata.zip, attempting to re-download..."
+    fi
+    
+    # If no cache or extraction failed, try to re-download
+    print_progress "Downloading Windows metadata from archive.org..."
+    if wget -q --show-progress "https://archive.org/download/win-metadata/WinMetadata.zip" -O "$directory/Winmetadata.zip"; then
+        if [ -s "$directory/Winmetadata.zip" ]; then
+            print_success "Windows metadata downloaded successfully"
+            
+            # Now extract it
+            if command -v 7z &> /dev/null; then
+                if 7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" -y >/dev/null 2>&1; then
+                    print_success "Windows metadata extracted successfully using 7z"
+                    return 0
+                else
+                    print_warning "7z extraction had issues, trying unzip..."
+                    if unzip -o -q "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" 2>/dev/null; then
+                        print_success "Windows metadata extracted using unzip"
+                        return 0
+                    else
+                        print_error "Both 7z and unzip extraction failed"
+                    fi
+                fi
+            elif command -v unzip &> /dev/null; then
+                if unzip -o -q "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" 2>/dev/null; then
+                    print_success "Windows metadata extracted successfully using unzip"
+                    return 0
+                else
+                    print_error "unzip extraction failed"
+                fi
+            else
+                print_error "Neither 7z nor unzip is available to extract Windows metadata"
+            fi
+        else
+            print_error "Downloaded file is empty or corrupted"
+            rm -f "$directory/Winmetadata.zip"
+            return 1
+        fi
+    else
+        print_warning "Failed to download Windows metadata (this may cause minor issues)"
+        rm -f "$directory/Winmetadata.zip"
+        return 1
+    fi
+    
+    print_warning "Could not restore Windows metadata"
+    return 1
+}
+
 # Function to install Affinity app
 install_affinity() {
     local app_name=$1
@@ -648,10 +741,17 @@ install_affinity() {
     # Run installer with debug messages suppressed
     WINEPREFIX="$directory" WINEDEBUG=-all "$directory/ElementalWarriorWine/bin/wine" "$directory/$filename"
     
+    # Wait for installer to fully complete and any Wine processes to finish
+    print_step "Waiting for installer processes to complete..."
+    sleep 3
+    
     # Clean up installer
     print_step "Cleaning up installer file..."
     rm -f "$directory/$filename"
     print_success "Installer file removed"
+    
+    # Restore WinMetadata (may have been corrupted by installer)
+    restore_winmetadata
     
     # Configure OpenCL support based on which app was installed
     print_header "Post-Installation Configuration"
