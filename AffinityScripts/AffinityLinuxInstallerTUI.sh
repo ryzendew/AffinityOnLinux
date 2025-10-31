@@ -148,6 +148,65 @@ draw_progress() {
     printf "${WINDOW_BG}${WINDOW_FG} %3d%%${RESET}" $percent
 }
 
+# Wrap text to fit within a width
+wrap_text() {
+    local text="$1"
+    local width=$2
+    local result=""
+    
+    # Handle empty input
+    [ -z "$text" ] && echo "" && return 0
+    
+    # Process each line (handles \n)
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines
+        [ -z "$line" ] && {
+            [ -n "$result" ] && result+="\n"
+            result+=""
+            continue
+        }
+        
+        # Check if line needs wrapping
+        while [ ${#line} -gt $width ]; do
+            # Try to find last space before width for word boundary
+            local pos=$width
+            local found_space=false
+            
+            # Look for space character from right to left (at least 2/3 of width)
+            for ((i=$width-1; i>=$((width*2/3)); i--)); do
+                local char="${line:$i:1}"
+                if [ "$char" = " " ] || [ "$char" = $'\t' ]; then
+                    pos=$i
+                    found_space=true
+                    break
+                fi
+            done
+            
+            # Extract chunk
+            local wrapped_chunk="${line:0:$pos}"
+            wrapped_chunk=$(echo "$wrapped_chunk" | sed 's/[[:space:]]*$//') # Trim trailing spaces
+            line="${line:$pos}"
+            line=$(echo "$line" | sed 's/^[[:space:]]*//') # Trim leading spaces
+            
+            # Add chunk to result
+            if [ -n "$result" ]; then
+                result+="\n"
+            fi
+            result+="$wrapped_chunk"
+        done
+        
+        # Add remaining line (or entire line if it fits)
+        if [ -n "$line" ]; then
+            if [ -n "$result" ]; then
+                result+="\n"
+            fi
+            result+="$line"
+        fi
+    done <<< "$text"
+    
+    echo -e "$result"
+}
+
 # Clear window content area
 clear_window_content() {
     local x=$1
@@ -166,25 +225,32 @@ show_message() {
     local title="$1"
     local message="$2"
     local msg_width=60
-    local msg_height=8
     local msg_x=$(( (TERM_WIDTH - msg_width) / 2 ))
-    local msg_y=$(( (TERM_HEIGHT - msg_height) / 2 ))
+    local msg_y=$(( (TERM_HEIGHT - 8) / 2 ))
     
-    # Count lines in message
-    local lines=$(echo "$message" | wc -l)
-    msg_height=$((lines + 5))
+    # Wrap text to fit in window (account for 2 char padding on each side)
+    local wrap_width=$((msg_width - 4))
+    local wrapped_message=$(wrap_text "$message" $wrap_width)
+    
+    # Count lines in wrapped message
+    local lines=$(echo "$wrapped_message" | wc -l)
+    local msg_height=$((lines + 5))
+    
+    # Adjust vertical position if needed
+    msg_y=$(( (TERM_HEIGHT - msg_height) / 2 ))
+    [ $msg_y -lt 2 ] && msg_y=2
     
     # Clear screen and draw
     printf "${CLEAR_SCREEN}${CURSOR_HOME}"
     
     draw_window "$title" $msg_x $msg_y $msg_width $msg_height
     
-    # Draw message
+    # Draw wrapped message
     local y_offset=$((msg_y + 2))
     while IFS= read -r line; do
-        draw_text $((msg_x + 2)) $y_offset "$line"
+        [ $y_offset -lt $((msg_y + msg_height - 2)) ] && draw_text $((msg_x + 2)) $y_offset "$line"
         ((y_offset++))
-    done <<< "$message"
+    done <<< "$wrapped_message"
     
     # Draw OK button
     draw_button $((msg_x + msg_width/2 - 7)) $((msg_y + msg_height - 2)) "  OK  " true
@@ -198,12 +264,20 @@ show_question() {
     local title="$1"
     local message="$2"
     local msg_width=60
-    local msg_height=10
     local msg_x=$(( (TERM_WIDTH - msg_width) / 2 ))
-    local msg_y=$(( (TERM_HEIGHT - msg_height) / 2 ))
+    local msg_y=$(( (TERM_HEIGHT - 10) / 2 ))
     
-    local lines=$(echo "$message" | wc -l)
-    msg_height=$((lines + 7))
+    # Wrap text to fit in window
+    local wrap_width=$((msg_width - 4))
+    local wrapped_message=$(wrap_text "$message" $wrap_width)
+    
+    # Count lines in wrapped message
+    local lines=$(echo "$wrapped_message" | wc -l)
+    local msg_height=$((lines + 7))
+    
+    # Adjust vertical position if needed
+    msg_y=$(( (TERM_HEIGHT - msg_height) / 2 ))
+    [ $msg_y -lt 2 ] && msg_y=2
     
     local choice="yes"
     
@@ -212,12 +286,12 @@ show_question() {
         
         draw_window "$title" $msg_x $msg_y $msg_width $msg_height
         
-        # Draw message
+        # Draw wrapped message
         local y_offset=$((msg_y + 2))
         while IFS= read -r line; do
-            draw_text $((msg_x + 2)) $y_offset "$line"
+            [ $y_offset -lt $((msg_y + msg_height - 2)) ] && draw_text $((msg_x + 2)) $y_offset "$line"
             ((y_offset++))
-        done <<< "$message"
+        done <<< "$wrapped_message"
         
         # Draw buttons
         draw_button $((msg_x + msg_width/2 - 18)) $((msg_y + msg_height - 2)) "  Yes  " $([ "$choice" = "yes" ] && echo "true" || echo "false")
@@ -252,22 +326,38 @@ show_input() {
     local prompt="$2"
     local default="${3:-}"
     local input_width=60
-    local input_height=8
     local input_x=$(( (TERM_WIDTH - input_width) / 2 ))
-    local input_y=$(( (TERM_HEIGHT - input_height) / 2 ))
+    local input_y=$(( (TERM_HEIGHT - 8) / 2 ))
+    
+    # Wrap prompt text
+    local wrap_width=$((input_width - 4))
+    local wrapped_prompt=$(wrap_text "$prompt" $wrap_width)
+    
+    # Count lines in wrapped prompt
+    local lines=$(echo "$wrapped_prompt" | wc -l)
+    local input_height=$((lines + 6))
+    
+    # Adjust vertical position
+    input_y=$(( (TERM_HEIGHT - input_height) / 2 ))
+    [ $input_y -lt 2 ] && input_y=2
     
     printf "${CLEAR_SCREEN}${CURSOR_HOME}"
     
     draw_window "$title" $input_x $input_y $input_width $input_height
     
-    draw_text $((input_x + 2)) $((input_y + 2)) "$prompt"
+    # Draw wrapped prompt
+    local y_offset=$((input_y + 2))
+    while IFS= read -r line; do
+        draw_text $((input_x + 2)) $y_offset "$line"
+        ((y_offset++))
+    done <<< "$wrapped_prompt"
     
     # Draw input field
-    printf "\033[%d;%dH" $((input_y + 4)) $((input_x + 2))
+    printf "\033[%d;%dH" $((input_y + lines + 3)) $((input_x + 2))
     printf "${WINDOW_BG}${BUTTON_INACTIVE}%*s${RESET}" $((input_width - 4)) ""
     
     # Get input
-    printf "\033[%d;%dH" $((input_y + 4)) $((input_x + 3))
+    printf "\033[%d;%dH" $((input_y + lines + 3)) $((input_x + 3))
     printf "${WINDOW_BG}${WINDOW_FG}"
     read -r result
     printf "${RESET}"
