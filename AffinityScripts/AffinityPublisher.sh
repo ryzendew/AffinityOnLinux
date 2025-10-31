@@ -211,6 +211,14 @@ print_step "Installing Visual C++ Redistributables 2022..."
 WINEPREFIX="$directory" winetricks --unattended vcrun2022 >/dev/null 2>&1 || true
 print_progress "VC++ 2022 installation attempted"
 
+print_step "Installing MSXML 3.0..."
+WINEPREFIX="$directory" winetricks --unattended msxml3 >/dev/null 2>&1 || true
+print_progress "MSXML 3.0 installation attempted"
+
+print_step "Installing MSXML 6.0..."
+WINEPREFIX="$directory" winetricks --unattended msxml6 >/dev/null 2>&1 || true
+print_progress "MSXML 6.0 installation attempted"
+
 print_step "Configuring Wine to use Vulkan renderer..."
 WINEPREFIX="$directory" winetricks renderer=vulkan >/dev/null 2>&1 || true
 print_success "Wine configured with Vulkan renderer"
