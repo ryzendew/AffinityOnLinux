@@ -1,5 +1,30 @@
 #!/bin/bash
 
+# Function to normalize and validate file path
+normalize_path() {
+    local path="$1"
+    
+    # Remove quotes and trim whitespace
+    path=$(echo "$path" | tr -d '"' | xargs)
+    
+    # Handle file:// URLs (common when dragging from file managers)
+    if [[ "$path" == file://* ]]; then
+        path=$(echo "$path" | sed 's|^file://||')
+        # URL decode the path
+        path=$(printf '%b' "${path//%/\\x}")
+    fi
+    
+    # Convert to absolute path if relative
+    if [[ ! "$path" = /* ]]; then
+        path="$(pwd)/$path"
+    fi
+    
+    # Normalize path (remove . and .. components)
+    path=$(realpath -q "$path" 2>/dev/null || echo "$path")
+    
+    echo "$path"
+}
+
 # Check for required dependencies
 missing_deps=""
 
@@ -159,6 +184,54 @@ rm "$directory/wine-dark-theme.reg"
 
 #Set windows version to 11
 WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
+
+# Start the setup
+echo "Download the Affinity .exe installers from https://store.serif.com/account/licences/"
+echo ""
+echo "For each Affinity application (Photo, Designer, Publisher):"
+echo "Drag and drop the .exe installer into this terminal and press Enter"
+echo "Type 'done' when you've installed all applications"
+
+while true; do
+    echo ""
+    echo "Drag and drop an Affinity .exe installer (or type 'done' to finish):"
+    read installer_path
+    
+    if [ "$installer_path" = "done" ]; then
+        break
+    fi
+    
+    # Normalize the path
+    installer_path=$(normalize_path "$installer_path")
+    
+    # Check if file exists and is readable
+    if [ ! -f "$installer_path" ] || [ ! -r "$installer_path" ]; then
+        echo "Invalid file path or file is not readable: $installer_path"
+        continue
+    fi
+    
+    # Get the filename from the path
+    filename=$(basename "$installer_path")
+    
+    # Copy installer to Affinity directory
+    echo "Copying installer..."
+    cp "$installer_path" "$directory/$filename"
+    
+    echo "Click No if you get any errors. Press any key to continue."
+    read -n 1
+    
+    # Run installer
+    WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/wine" "$directory/$filename"
+    
+    # Clean up installer
+    rm -f "$directory/$filename"
+    rm -f "$directory"/affinity*.exe
+    
+    echo "Installation completed for $filename"
+done
+
+echo ""
+echo "All installations completed!"
 
 # Remove any existing desktop entries created by wine
 rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity Photo 2.desktop"
