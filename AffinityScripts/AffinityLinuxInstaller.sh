@@ -123,6 +123,31 @@ detect_distro() {
 # Function to check dependencies
 check_dependencies() {
     print_header "Dependency Verification"
+    
+    # Check if this is an unsupported distribution
+    case $DISTRO in
+        "ubuntu"|"linuxmint"|"pop"|"zorin")
+            print_header ""
+            echo ""
+            echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${RED}${BOLD}                    ⚠️   WARNING: UNSUPPORTED DISTRIBUTION   ⚠️${NC}"
+            echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo -e "${RED}${BOLD}YOU ARE ON YOUR OWN!${NC}"
+            echo ""
+            echo -e "${YELLOW}${BOLD}The distribution you are using ($DISTRO) is OUT OF DATE and the script${NC}"
+            echo -e "${YELLOW}${BOLD}will NOT be built around it.${NC}"
+            echo ""
+            echo -e "${CYAN}${BOLD}For a modern, stable Linux experience with proper support, please consider${NC}"
+            echo -e "${CYAN}${BOLD}switching to one of these recommended distributions:${NC}"
+            echo ""
+            echo -e "${GREEN}  • PikaOS 4${NC}"
+            echo -e "${GREEN}  • CachyOS${NC}"
+            echo -e "${GREEN}  • Nobara${NC}"
+            echo ""
+            ;;
+    esac
+    
     print_info "Checking for required system dependencies..."
     
     local missing_deps=""
@@ -145,12 +170,42 @@ check_dependencies() {
         print_success "zstd support is available"
     fi
     
-    if [ -n "$missing_deps" ]; then
-        print_warning "Missing dependencies: $missing_deps"
-        install_dependencies
-    else
-        print_success "All required dependencies are installed!"
-    fi
+    # For unsupported distributions, check if we can continue
+    case $DISTRO in
+        "ubuntu"|"linuxmint"|"pop"|"zorin")
+            if [ -n "$missing_deps" ]; then
+                echo ""
+                echo -e "${RED}${BOLD}Missing dependencies detected: $missing_deps${NC}"
+                echo ""
+                echo -e "${RED}${BOLD}This script will NOT automatically install dependencies for unsupported distributions.${NC}"
+                echo -e "${YELLOW}Please install the required dependencies manually:${NC}"
+                echo -e "${CYAN}  wine winetricks wget curl p7zip-full tar jq zstd${NC}"
+                echo ""
+                echo -e "${RED}${BOLD}This script will now exit.${NC}"
+                echo ""
+                echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+                exit 1
+            else
+                echo ""
+                echo -e "${YELLOW}${BOLD}All required dependencies are installed.${NC}"
+                echo -e "${YELLOW}${BOLD}The script will continue, but you are still on an unsupported distribution.${NC}"
+                echo -e "${YELLOW}${BOLD}No support will be provided if issues arise.${NC}"
+                echo ""
+                echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+                print_success "Continuing with installation..."
+            fi
+            ;;
+        *)
+            if [ -n "$missing_deps" ]; then
+                print_warning "Missing dependencies: $missing_deps"
+                install_dependencies
+            else
+                print_success "All required dependencies are installed!"
+            fi
+            ;;
+    esac
     echo ""
 }
 
@@ -159,9 +214,68 @@ install_dependencies() {
     print_step "Installing dependencies for $DISTRO..."
     
     case $DISTRO in
-        "ubuntu"|"linuxmint"|"pop"|"pikaos")
-            sudo apt update
-            sudo apt install -y wine winetricks wget curl p7zip-full tar jq zstd
+        "pikaos")
+            # PikaOS has a special case: its built-in Wine causes issues with Affinity
+            # We need to replace it with WineHQ staging from Debian for proper compatibility
+            print_header "PikaOS Special Configuration"
+            print_info "PikaOS's built-in Wine has compatibility issues with Affinity applications."
+            print_info "Replacing with WineHQ staging from Debian for better compatibility..."
+            echo ""
+            
+            print_step "Setting up WineHQ repository..."
+            print_progress "Creating APT keyrings directory..."
+            sudo mkdir -pm755 /etc/apt/keyrings
+            
+            print_progress "Adding WineHQ GPG key..."
+            if wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key - 2>/dev/null; then
+                print_success "WineHQ GPG key added"
+            else
+                print_error "Failed to add WineHQ GPG key"
+                exit 1
+            fi
+            
+            print_progress "Adding i386 architecture support..."
+            if sudo dpkg --add-architecture i386; then
+                print_success "i386 architecture added"
+            else
+                print_error "Failed to add i386 architecture"
+                exit 1
+            fi
+            
+            print_progress "Adding WineHQ repository..."
+            if sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/debian/dists/forky/winehq-forky.sources 2>/dev/null; then
+                print_success "WineHQ repository added"
+            else
+                print_error "Failed to add WineHQ repository"
+                exit 1
+            fi
+            
+            print_progress "Updating package lists..."
+            if sudo apt update; then
+                print_success "Package lists updated"
+            else
+                print_error "Failed to update package lists"
+                exit 1
+            fi
+            
+            print_step "Installing WineHQ staging (replaces built-in Wine)..."
+            if sudo apt install --install-recommends -y winehq-staging; then
+                print_success "WineHQ staging installed"
+            else
+                print_error "Failed to install WineHQ staging"
+                exit 1
+            fi
+            
+            print_step "Installing remaining dependencies..."
+            sudo apt install -y winetricks wget curl p7zip-full tar jq zstd
+            print_success "All dependencies installed for PikaOS"
+            ;;
+        "ubuntu"|"linuxmint"|"pop"|"zorin")
+            # This should never be reached if check_dependencies works correctly,
+            # but if it is, we'll show the warning and exit
+            print_error "Unsupported distribution detected in install_dependencies()"
+            print_error "This function should not be called for unsupported distributions"
+            exit 1
             ;;
         "arch"|"cachyos")
             sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd
@@ -265,12 +379,8 @@ setup_wine() {
     download_file "https://upload.wikimedia.org/wikipedia/commons/3/3c/Affinity_Designer_2-logo.svg" "$HOME/.local/share/icons/AffinityDesigner.svg" "Affinity Designer icon" || true
     download_file "https://upload.wikimedia.org/wikipedia/commons/9/9c/Affinity_Publisher_V2_icon.svg" "$HOME/.local/share/icons/AffinityPublisher.svg" "Affinity Publisher icon" || true
     
-    # Copy Affinity icon from script directory to icons folder
-    script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-    if [ -f "$script_dir/icons/Affinity.png" ]; then
-        cp "$script_dir/icons/Affinity.png" "$HOME/.local/share/icons/Affinity.png" 2>/dev/null && \
-        print_success "Copied Affinity icon to icons folder"
-    fi
+    # Download official Affinity V3 icon
+    download_file "https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-V3.svg" "$HOME/.local/share/icons/Affinity.svg" "Affinity V3 icon" || true
     
     # Download WinMetadata
     print_header "Windows Metadata Installation"
@@ -708,7 +818,7 @@ install_affinity() {
     
     echo ""
     print_step "Please download the Affinity $app_name installer (.exe) from:"
-    echo -e "  ${CYAN}https://store.serif.com/account/licences/${NC}"
+    echo -e "  ${CYAN}https://www.affinity.studio/account/licenses/${NC}"
     echo ""
     print_step "Once downloaded, drag and drop the installer into this terminal and press Enter:"
     read installer_path
@@ -775,6 +885,10 @@ install_affinity() {
     # Remove Wine's default desktop entry
     print_step "Removing default Wine desktop entry..."
     rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
+    # Also remove Affinity.desktop for the unified Affinity app
+    if [ "$app_name" = "Add" ]; then
+        rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity.desktop"
+    fi
     print_success "Default entry removed"
     
     # Create desktop entry
@@ -790,16 +904,15 @@ install_affinity() {
             create_desktop_entry "Publisher" "$directory/drive_c/Program Files/Affinity/Publisher 2/Publisher.exe" "$HOME/.local/share/icons/AffinityPublisher.svg"
             ;;
         "Add")
-            # Create Affinity desktop entry
-            icon_path="$HOME/.local/share/icons/Affinity.png"
+            # Create Affinity desktop entry using official V3 icon
+            icon_path="$HOME/.local/share/icons/Affinity.svg"
             if [ ! -f "$icon_path" ]; then
-                # Fallback: try to copy from script directory if not already copied
-                script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-                if [ -f "$script_dir/icons/Affinity.png" ]; then
-                    cp "$script_dir/icons/Affinity.png" "$icon_path"
-                    print_success "Copied Affinity icon to icons folder"
+                # Download the official icon if it wasn't already downloaded
+                print_progress "Downloading official Affinity V3 icon..."
+                if download_file "https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-V3.svg" "$icon_path" "Affinity V3 icon"; then
+                    print_success "Official Affinity V3 icon downloaded"
                 else
-                    print_warning "Affinity.png not found, using Photo icon as fallback"
+                    print_warning "Failed to download official icon, using Photo icon as fallback"
                     icon_path="$HOME/.local/share/icons/AffinityPhoto.svg"
                 fi
             fi

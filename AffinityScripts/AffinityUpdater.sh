@@ -4,7 +4,78 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
+
+################################################################################
+# Distribution Detection
+################################################################################
+
+# Function to detect Linux distribution
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        DISTRO=$ID
+        VERSION=$VERSION_ID
+    else
+        echo -e "${RED}Error: Could not detect Linux distribution${NC}"
+        exit 1
+    fi
+}
+
+# Detect distribution
+detect_distro
+
+################################################################################
+# Distribution Warnings
+################################################################################
+
+# Check for unsupported distributions
+case $DISTRO in
+    "ubuntu"|"linuxmint"|"pop"|"zorin")
+        echo ""
+        echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${RED}${BOLD}                    ⚠️   WARNING: UNSUPPORTED DISTRIBUTION   ⚠️${NC}"
+        echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${RED}${BOLD}YOU ARE ON YOUR OWN!${NC}"
+        echo ""
+        echo -e "${YELLOW}${BOLD}The distribution you are using ($DISTRO) is OUT OF DATE and the script${NC}"
+        echo -e "${YELLOW}${BOLD}will NOT be built around it.${NC}"
+        echo ""
+        echo -e "${CYAN}${BOLD}For a modern, stable Linux experience with proper support, please consider${NC}"
+        echo -e "${CYAN}${BOLD}switching to one of these recommended distributions:${NC}"
+        echo ""
+        echo -e "${GREEN}  • PikaOS 4${NC}"
+        echo -e "${GREEN}  • CachyOS${NC}"
+        echo -e "${GREEN}  • Nobara${NC}"
+        echo ""
+        echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${YELLOW}Continuing anyway (no support will be provided)...${NC}"
+        echo ""
+        sleep 2
+        ;;
+    "pikaos")
+        echo ""
+        echo -e "${YELLOW}${BOLD}⚠️  PikaOS Special Notice${NC}"
+        echo ""
+        echo -e "${CYAN}PikaOS's built-in Wine has compatibility issues with Affinity applications.${NC}"
+        echo -e "${CYAN}If you haven't already, please replace it with WineHQ staging from Debian.${NC}"
+        echo ""
+        echo -e "${BOLD}If needed, run these commands to set up WineHQ staging:${NC}"
+        echo ""
+        echo -e "${GREEN}sudo mkdir -pm755 /etc/apt/keyrings${NC}"
+        echo -e "${GREEN}wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key -${NC}"
+        echo -e "${GREEN}sudo dpkg --add-architecture i386${NC}"
+        echo -e "${GREEN}sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/debian/dists/forky/winehq-forky.sources${NC}"
+        echo -e "${GREEN}sudo apt update${NC}"
+        echo -e "${GREEN}sudo apt install --install-recommends winehq-staging${NC}"
+        echo ""
+        sleep 2
+        ;;
+esac
 
 # Function to normalize and validate file path
 normalize_path() {

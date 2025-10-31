@@ -59,6 +59,82 @@ print_progress() {
 }
 
 ################################################################################
+# Distribution Detection
+################################################################################
+
+# Function to detect Linux distribution
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        DISTRO=$ID
+        VERSION=$VERSION_ID
+    else
+        print_error "Could not detect Linux distribution"
+        exit 1
+    fi
+}
+
+# Detect distribution
+detect_distro
+
+################################################################################
+# Distribution Warnings
+################################################################################
+
+# Check for unsupported distributions
+case $DISTRO in
+    "ubuntu"|"linuxmint"|"pop"|"zorin")
+        print_header ""
+        echo ""
+        echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${RED}${BOLD}                    ⚠️   WARNING: UNSUPPORTED DISTRIBUTION   ⚠️${NC}"
+        echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${RED}${BOLD}YOU ARE ON YOUR OWN!${NC}"
+        echo ""
+        echo -e "${YELLOW}${BOLD}The distribution you are using ($DISTRO) is OUT OF DATE and the script${NC}"
+        echo -e "${YELLOW}${BOLD}will NOT be built around it.${NC}"
+        echo ""
+        echo -e "${CYAN}${BOLD}For a modern, stable Linux experience with proper support, please consider${NC}"
+        echo -e "${CYAN}${BOLD}switching to one of these recommended distributions:${NC}"
+        echo ""
+        echo -e "${GREEN}  • PikaOS 4${NC}"
+        echo -e "${GREEN}  • CachyOS${NC}"
+        echo -e "${GREEN}  • Nobara${NC}"
+        echo ""
+        echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        ;;
+    "pikaos")
+        print_header "PikaOS Special Notice"
+        echo ""
+        echo -e "${YELLOW}${BOLD}⚠️  IMPORTANT: PikaOS Wine Configuration Required${NC}"
+        echo ""
+        echo -e "${CYAN}PikaOS's built-in Wine has compatibility issues with Affinity applications.${NC}"
+        echo -e "${CYAN}You must replace it with WineHQ staging from Debian before continuing.${NC}"
+        echo ""
+        echo -e "${BOLD}Please run these commands manually to set up WineHQ staging:${NC}"
+        echo ""
+        echo -e "${GREEN}sudo mkdir -pm755 /etc/apt/keyrings${NC}"
+        echo ""
+        echo -e "${GREEN}wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key -${NC}"
+        echo ""
+        echo -e "${GREEN}sudo dpkg --add-architecture i386${NC}"
+        echo ""
+        echo -e "${GREEN}sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/debian/dists/forky/winehq-forky.sources${NC}"
+        echo ""
+        echo -e "${GREEN}sudo apt update${NC}"
+        echo ""
+        echo -e "${GREEN}sudo apt install --install-recommends winehq-staging${NC}"
+        echo ""
+        echo -e "${YELLOW}Press any key to continue after completing the WineHQ staging installation...${NC}"
+        read -n 1 -s
+        echo ""
+        echo ""
+        ;;
+esac
+
+################################################################################
 # SECTION 1: Dependency Verification
 ################################################################################
 
@@ -89,12 +165,29 @@ check_dependency "tar"
 if [ -n "$missing_deps" ]; then
     print_error "Missing required dependencies: ${missing_deps}"
     echo ""
-    print_info "Please install the missing dependencies and rerun this script."
-    print_info "Example for Arch-based systems: sudo pacman -S wine winetricks wget curl p7zip tar"
+    case $DISTRO in
+        "ubuntu"|"linuxmint"|"pop"|"zorin")
+            echo -e "${RED}${BOLD}This script will NOT automatically install dependencies for unsupported distributions.${NC}"
+            echo -e "${YELLOW}Please install the required dependencies manually:${NC}"
+            echo -e "${CYAN}  wine winetricks wget curl p7zip-full tar${NC}"
+            echo ""
+            echo -e "${RED}${BOLD}This script will now exit.${NC}"
+            ;;
+        *)
+            print_info "Please install the missing dependencies and rerun this script."
+            print_info "Example for Arch-based systems: sudo pacman -S wine winetricks wget curl p7zip tar"
+            ;;
+    esac
     exit 1
 fi
 
 print_success "All required dependencies are installed!"
+case $DISTRO in
+    "ubuntu"|"linuxmint"|"pop"|"zorin")
+        echo ""
+        echo -e "${YELLOW}${BOLD}Continuing despite unsupported distribution. No support will be provided if issues arise.${NC}"
+        ;;
+esac
 echo ""
 sleep 1
 
