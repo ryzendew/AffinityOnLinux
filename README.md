@@ -29,24 +29,6 @@ Installs any Affinity app with a single command. Features:
 bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.sh)"
 ```
 
-# Guided TUI Installer 🎯 WIP
-
-A user-friendly Text User Interface (TUI) installer with guided setup. Features:
-- **Dialog-based interface** - Clean menus and progress bars
-- **Step-by-step guidance** - Welcome screens and helpful instructions
-- **Visual progress indicators** - See downloads and installations progress
-- **Enhanced error handling** - Better validation and recovery options
-- **Confirmation dialogs** - Review before proceeding with installations
-- **Automatic dependency checks** - Ensures all required tools are available
-
-Perfect for users who prefer a more guided installation experience!
-
-```bash
-bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstallerTUI.sh)"
-```
-
-> **Note:** The TUI installer requires the `dialog` package, which will be installed automatically if missing.
-
 # Individual App Installers
 
 [Affinity Photo 🤖](https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityPhoto.sh)
