@@ -276,13 +276,26 @@ setup_wine() {
     print_header "Windows Metadata Installation"
     print_info "Fetching Windows metadata files..."
     
-    download_file "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata" || print_warning "Failed to download Windows metadata"
+    print_step "Downloading Windows metadata from archive.org..."
+    # Use the same reliable method as individual scripts (wget with -q --show-progress)
+    if wget -q --show-progress "https://archive.org/download/win-metadata/WinMetadata.zip" -O "$directory/Winmetadata.zip"; then
+        # Verify the file was downloaded and has content (not zero bytes)
+        if [ -s "$directory/Winmetadata.zip" ]; then
+            print_success "Windows metadata downloaded successfully"
+        else
+            print_error "Downloaded file is empty or corrupted"
+            rm -f "$directory/Winmetadata.zip"
+        fi
+    else
+        print_warning "Failed to download Windows metadata (this may cause minor issues)"
+        rm -f "$directory/Winmetadata.zip"
+    fi
     
     # Ensure the system32 directory exists before extraction
     mkdir -p "$directory/drive_c/windows/system32"
     
     # Extract WinMetadata
-    if [ -f "$directory/Winmetadata.zip" ]; then
+    if [ -f "$directory/Winmetadata.zip" ] && [ -s "$directory/Winmetadata.zip" ]; then
         print_step "Extracting Windows metadata archive..."
         if command -v 7z &> /dev/null; then
             if 7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" -y >/dev/null 2>&1; then
@@ -290,18 +303,31 @@ setup_wine() {
             else
                 print_warning "7z extraction had issues, trying unzip..."
                 unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1 || true
-                print_success "Windows metadata extracted using unzip"
+                if [ $? -eq 0 ]; then
+                    print_success "Windows metadata extracted using unzip"
+                else
+                    print_error "Extraction failed with both 7z and unzip. File may be corrupted."
+                    print_info "You may need to manually download WinMetadata.zip and extract it"
+                fi
             fi
         elif command -v unzip &> /dev/null; then
             if unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1; then
                 print_success "Windows metadata extracted successfully using unzip"
             else
                 print_error "Failed to extract Windows metadata"
+                print_info "The downloaded file may be corrupted. Please check your internet connection and try again."
             fi
         else
             print_error "Neither 7z nor unzip is available to extract Windows metadata"
+            print_info "Please install either 7z or unzip and rerun the script"
         fi
+        
+        print_step "Cleaning up metadata archive..."
         rm -f "$directory/Winmetadata.zip"
+        print_success "Archive removed"
+    else
+        print_warning "WinMetadata.zip was not downloaded successfully or is corrupted"
+        print_info "Installation will continue, but some Windows metadata features may not work"
     fi
     
     # Download and install vkd3d-proton for OpenCL support
