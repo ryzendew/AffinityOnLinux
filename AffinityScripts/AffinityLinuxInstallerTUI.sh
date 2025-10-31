@@ -12,155 +12,291 @@ if [ -z "$BASH_VERSION" ]; then
 fi
 
 # ==========================================
-# Constants and Configuration
+# Modern TUI Constants and Configuration
 # ==========================================
 
-# Colors for output (used when dialog is not available)
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Modern color palette
+RESET='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
+ITALIC='\033[3m'
+UNDERLINE='\033[4m'
 
-# Dialog settings
-DIALOG_HEIGHT=20
-DIALOG_WIDTH=70
-DIALOG_MENU_HEIGHT=10
+# Primary colors (modern, vibrant)
+BLUE='\033[38;5;39m'
+CYAN='\033[38;5;51m'
+GREEN='\033[38;5;46m'
+YELLOW='\033[38;5;226m'
+ORANGE='\033[38;5;208m'
+RED='\033[38;5;196m'
+MAGENTA='\033[38;5;201m'
+PURPLE='\033[38;5;129m'
+
+# Background colors
+BG_DARK='\033[48;5;236m'
+BG_LIGHT='\033[48;5;252m'
+
+# Terminal size
+TERM_WIDTH=$(tput cols 2>/dev/null || echo 80)
+TERM_HEIGHT=$(tput lines 2>/dev/null || echo 24)
+
+# Cursor control
+CURSOR_SAVE='\033[s'
+CURSOR_RESTORE='\033[u'
+CURSOR_HIDE='\033[?25l'
+CURSOR_SHOW='\033[?25h'
+CLEAR_LINE='\033[2K'
+CLEAR_TO_END='\033[0J'
 
 # ==========================================
-# TUI Utility Functions
+# Modern TUI Utility Functions
 # ==========================================
 
-# Function to check if dialog is available
-check_dialog() {
-    if ! command -v dialog &> /dev/null; then
-        return 1
-    fi
-    return 0
+# Clear screen and set up
+init_screen() {
+    clear
+    stty -echo 2>/dev/null
+    printf "$CURSOR_HIDE"
 }
 
-# Function to show message (with dialog if available)
-show_msg() {
+# Restore screen
+restore_screen() {
+    printf "$CURSOR_SHOW"
+    stty echo 2>/dev/null
+    clear
+}
+
+# Print with modern styling
+print_header() {
+    local text="$1"
+    local color="${2:-$CYAN}"
+    printf "${BOLD}${color}╔════════════════════════════════════════════════════════════════╗${RESET}\n"
+    printf "${BOLD}${color}║${RESET} %-62s ${BOLD}${color}║${RESET}\n" "$text"
+    printf "${BOLD}${color}╚════════════════════════════════════════════════════════════════╝${RESET}\n"
+}
+
+print_box() {
     local title="$1"
-    local message="$2"
+    local content="$2"
+    local color="${3:-$CYAN}"
     
-    if check_dialog; then
-        dialog --title "$title" --msgbox "$message" $DIALOG_HEIGHT $DIALOG_WIDTH 2>&1 >/dev/tty
-    else
-        echo -e "${GREEN}$title${NC}"
-        echo "$message"
-        echo ""
-        read -n 1 -s -r -p "Press any key to continue..."
-    fi
+    printf "${BOLD}${color}╭─${RESET} ${BOLD}$title${RESET} ${BOLD}${color}─${RESET}"
+    local line_len=${#title}
+    local remaining=$((66 - line_len))
+    printf "${BOLD}${color}%*s${RESET}\n" $remaining "" | tr ' ' '─'
+    
+    while IFS= read -r line; do
+        printf "${color}│${RESET} %-64s ${color}│${RESET}\n" "$line"
+    done <<< "$content"
+    
+    printf "${BOLD}${color}╰${RESET}%*s${BOLD}${color}╯${RESET}\n" 66 "" | tr ' ' '─'
 }
 
-# Function to show info box
-show_info() {
-    local title="$1"
-    local message="$2"
-    
-    if check_dialog; then
-        dialog --title "$title" --infobox "$message" 8 $DIALOG_WIDTH 2>&1 >/dev/tty
-        sleep 2
-    else
-        echo -e "${YELLOW}$title: $message${NC}"
-    fi
+print_success() {
+    printf "${GREEN}✓${RESET} %s\n" "$1"
 }
 
-# Function to show yes/no dialog
-show_yesno() {
-    local title="$1"
-    local message="$2"
-    
-    if check_dialog; then
-        dialog --title "$title" --yesno "$message" $DIALOG_HEIGHT $DIALOG_WIDTH 2>&1 >/dev/tty
-        return $?
-    else
-        echo -e "${YELLOW}$title${NC}"
-        echo "$message"
-        read -p "Continue? (y/n): " answer
-        if [[ "$answer" =~ ^[Yy]$ ]]; then
-            return 0
-        else
-            return 1
-        fi
-    fi
+print_error() {
+    printf "${RED}✗${RESET} %s\n" "$1"
 }
 
-# Function to show progress gauge (for file operations)
+print_info() {
+    printf "${CYAN}ℹ${RESET} %s\n" "$1"
+}
+
+print_warning() {
+    printf "${YELLOW}⚠${RESET} %s\n" "$1"
+}
+
+print_step() {
+    local step="$1"
+    local total="$2"
+    local message="$3"
+    printf "${BOLD}${BLUE}[$step/$total]${RESET} ${message}\n"
+}
+
+# Modern progress bar
 show_progress() {
-    local percent="$1"
-    local status="$2"
+    local current=$1
+    local total=$2
+    local label="$3"
+    local width=50
     
-    if check_dialog; then
-        echo "$percent" | dialog --title "Progress" --gauge "$status" 8 $DIALOG_WIDTH 0 2>&1 >/dev/tty
-    else
-        echo -e "${YELLOW}[$percent%] $status${NC}"
-    fi
+    local percent=$((current * 100 / total))
+    local filled=$((current * width / total))
+    local empty=$((width - filled))
+    
+    # Build progress bar
+    local bar=""
+    for ((i=0; i<filled; i++)); do
+        bar+="█"
+    done
+    for ((i=0; i<empty; i++)); do
+        bar+="░"
+    done
+    
+    printf "\r${CYAN}${label}${RESET} ${BLUE}[${GREEN}${bar}${BLUE}]${RESET} ${BOLD}${percent}%%${RESET}"
 }
 
-# Function to get file path using dialog
-get_file_path() {
-    local title="$1"
+# Show animated spinner
+show_spinner() {
+    local pid=$1
     local message="$2"
-    local default_path="$3"
+    local spin='⣷⣯⣟⡿⢿⣻⣽⣾'
+    local i=0
     
-    if check_dialog; then
-        local path=$(dialog --title "$title" \
-            --inputbox "$message" $DIALOG_HEIGHT $DIALOG_WIDTH "$default_path" \
-            2>&1 >/dev/tty)
-        echo "$path"
-    else
-        echo -e "${YELLOW}$title${NC}"
-        echo "$message"
-        read -p "File path: " path
-        echo "$path"
-    fi
+    printf "${CYAN}${message}${RESET} "
+    while kill -0 $pid 2>/dev/null; do
+        i=$(((i + 1) % 8))
+        printf "\b${spin:$i:1}"
+        sleep 0.1
+    done
+    printf "\b${GREEN}✓${RESET}\n"
+}
+
+# Modern menu selector
+show_menu() {
+    local title="$1"
+    shift
+    local options=("$@")
+    local selected=0
+    
+    while true; do
+        clear
+        print_header "$title"
+        echo ""
+        
+        for i in "${!options[@]}"; do
+            if [ $i -eq $selected ]; then
+                printf "${BOLD}${BG_LIGHT}${BLUE} ▶ ${options[i]}${RESET}\n"
+            else
+                printf "   ${options[i]}\n"
+            fi
+        done
+        
+        echo ""
+        printf "${DIM}Use ↑↓ arrows to navigate, Enter to select, Q to quit${RESET}\n"
+        
+        # Read single character
+        read -rsn1 key
+        case "$key" in
+            $'\033') # Escape sequence
+                read -rsn2 key
+                case "$key" in
+                    '[A') # Up arrow
+                        selected=$((selected - 1))
+                        [ $selected -lt 0 ] && selected=$((${#options[@]} - 1))
+                        ;;
+                    '[B') # Down arrow
+                        selected=$((selected + 1))
+                        [ $selected -ge ${#options[@]} ] && selected=0
+                        ;;
+                esac
+                ;;
+            '') # Enter
+                echo "${options[selected]}"
+                return 0
+                ;;
+            'q'|'Q')
+                echo "Exit"
+                return 0
+                ;;
+        esac
+    done
+}
+
+# Modern yes/no prompt
+show_confirm() {
+    local question="$1"
+    local default="${2:-y}"
+    
+    while true; do
+        printf "${BOLD}${YELLOW}?${RESET} ${question} ${DIM}[y/N]:${RESET} "
+        read -r answer
+        
+        [ -z "$answer" ] && answer="$default"
+        
+        case "$answer" in
+            [Yy]*)
+                return 0
+                ;;
+            [Nn]*)
+                return 1
+                ;;
+            *)
+                printf "${RED}Please answer yes (y) or no (n)${RESET}\n"
+                ;;
+        esac
+    done
+}
+
+# Modern input prompt
+show_input() {
+    local prompt="$1"
+    local default="${2:-}"
+    local result
+    
+    printf "${BOLD}${CYAN}→${RESET} ${prompt}"
+    [ -n "$default" ] && printf " ${DIM}[$default]:${RESET} " || printf ": "
+    read -r result
+    
+    [ -z "$result" ] && result="$default"
+    echo "$result"
+}
+
+# Show status message
+show_status() {
+    local status="$1"
+    local message="$2"
+    
+    case "$status" in
+        "success")
+            printf "${GREEN}✓${RESET} ${message}\n"
+            ;;
+        "error")
+            printf "${RED}✗${RESET} ${message}\n"
+            ;;
+        "info")
+            printf "${CYAN}ℹ${RESET} ${message}\n"
+            ;;
+        "warning")
+            printf "${YELLOW}⚠${RESET} ${message}\n"
+            ;;
+        "progress")
+            printf "${BLUE}⟳${RESET} ${message}\n"
+            ;;
+    esac
 }
 
 # ==========================================
 # Utility Functions
 # ==========================================
 
-# Function to download files with progress bar
+# Function to download files with progress
 download_file() {
     local url=$1
     local output=$2
     local description=$3
     
-    show_info "Downloading" "$description..."
+    show_status "progress" "Downloading $description..."
     
-    # Try curl first with progress bar
+    # Try curl first
     if command -v curl &> /dev/null; then
-        if check_dialog; then
-            # Use dialog gauge for curl
-            curl -L --progress-bar "$url" -o "$output" 2>&1 | \
-                stdbuf -oL -eL tr '\r' '\n' | \
-                stdbuf -oL -eL sed -u 's/^ *\([0-9]*\).*\([0-9]*\).*\([0-9]*%\).*/\1\n#Downloading: \2KB (\3)/' | \
-                dialog --title "Download Progress" --gauge "$description" 8 $DIALOG_WIDTH 0 2>&1 >/dev/tty || \
-                curl -# -L "$url" -o "$output"
-        else
-            curl -# -L "$url" -o "$output"
-        fi
-        if [ $? -eq 0 ]; then
+        if curl -# -L "$url" -o "$output" 2>&1; then
+            show_status "success" "Downloaded $description"
             return 0
         fi
     fi
     
-    # Fallback to wget if curl fails or isn't available
+    # Fallback to wget
     if command -v wget &> /dev/null; then
-        if check_dialog; then
-            wget --progress=bar:force "$url" -O "$output" 2>&1 | \
-                dialog --title "Download Progress" --gauge "$description" 8 $DIALOG_WIDTH 0 2>&1 >/dev/tty || \
-                wget --progress=bar:force:noscroll "$url" -O "$output"
-        else
-            wget --progress=bar:force:noscroll "$url" -O "$output"
-        fi
-        if [ $? -eq 0 ]; then
+        if wget --progress=bar:force:noscroll "$url" -O "$output" 2>&1; then
+            show_status "success" "Downloaded $description"
             return 0
         fi
     fi
     
-    show_msg "Error" "Failed to download $description"
+    show_status "error" "Failed to download $description"
     return 1
 }
 
@@ -175,72 +311,68 @@ detect_distro() {
         DISTRO=$ID
         VERSION=$VERSION_ID
     else
-        show_msg "Error" "Could not detect Linux distribution"
+        show_status "error" "Could not detect Linux distribution"
         exit 1
     fi
 }
 
 # Function to check dependencies
 check_dependencies() {
-    local missing_deps=""
+    local missing_deps=()
     
     for dep in wine winetricks wget curl 7z tar jq; do
         if ! command -v "$dep" &> /dev/null; then
-            missing_deps+="$dep "
+            missing_deps+=("$dep")
         fi
     done
     
-    # Check for zstd support (needed for vkd3d-proton)
+    # Check for zstd support
     if ! command -v unzstd &> /dev/null && ! command -v zstd &> /dev/null; then
-        missing_deps+="zstd "
+        missing_deps+=("zstd")
     fi
     
-    # Check for dialog
-    if ! command -v dialog &> /dev/null; then
-        missing_deps+="dialog "
-    fi
-    
-    if [ -n "$missing_deps" ]; then
-        show_info "Missing Dependencies" "Missing: $missing_deps"
-        if show_yesno "Install Dependencies" "Some dependencies are missing. Would you like to install them now?\n\nMissing: $missing_deps"; then
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        local deps_list=$(IFS=', '; echo "${missing_deps[*]}")
+        print_box "Missing Dependencies" "The following packages are required:\n\n${deps_list}\n\nThey will be installed automatically." "$ORANGE"
+        
+        if show_confirm "Install missing dependencies?" "y"; then
             install_dependencies
         else
-            show_msg "Error" "Cannot continue without required dependencies."
+            show_status "error" "Cannot continue without required dependencies"
             exit 1
         fi
     else
-        show_info "Dependencies" "All dependencies are installed!"
+        show_status "success" "All dependencies are installed"
     fi
 }
 
 # Function to install dependencies based on distribution
 install_dependencies() {
-    show_info "Installing Dependencies" "Installing dependencies for $DISTRO..."
+    show_status "progress" "Installing dependencies for $DISTRO..."
     
     case $DISTRO in
         "ubuntu"|"linuxmint"|"pop"|"pikaos")
-            sudo apt update
-            sudo apt install -y wine winetricks wget curl p7zip-full tar jq zstd dialog
+            sudo apt update && sudo apt install -y wine winetricks wget curl p7zip-full tar jq zstd
             ;;
         "arch"|"cachyos")
-            sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd dialog
+            sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd
             ;;
         "fedora"|"nobara")
-            sudo dnf install -y wine winetricks wget curl p7zip p7zip-plugins tar jq zstd dialog
+            sudo dnf install -y wine winetricks wget curl p7zip p7zip-plugins tar jq zstd
             ;;
         "opensuse-tumbleweed"|"opensuse-leap")
-            sudo zypper install -y wine winetricks wget curl p7zip tar jq zstd dialog
+            sudo zypper install -y wine winetricks wget curl p7zip tar jq zstd
             ;;
         *)
-            show_msg "Error" "Unsupported distribution: $DISTRO\n\nPlease install the following packages manually:\nwine winetricks wget curl p7zip tar jq zstd dialog"
+            print_box "Unsupported Distribution" "Your distribution ($DISTRO) is not directly supported.\n\nPlease install these packages manually:\nwine winetricks wget curl p7zip tar jq zstd" "$RED"
             exit 1
             ;;
     esac
     
     if [ $? -eq 0 ]; then
-        show_msg "Success" "Dependencies installed successfully!"
+        show_status "success" "Dependencies installed successfully"
     else
-        show_msg "Error" "Failed to install dependencies. Please install them manually."
+        show_status "error" "Failed to install dependencies"
         exit 1
     fi
 }
@@ -252,7 +384,6 @@ install_dependencies() {
 # Function to verify Windows version
 verify_windows_version() {
     local directory="$HOME/.AffinityLinux"
-    # Try to set Windows version to 11, but ignore errors
     WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/winecfg" -v win11 >/dev/null 2>&1 || true
     return 0
 }
@@ -265,95 +396,84 @@ setup_wine() {
     
     # Check if Wine is already set up
     if [ -d "$directory/ElementalWarriorWine" ] && [ -f "$directory/ElementalWarriorWine/bin/wine" ]; then
-        if show_yesno "Wine Already Installed" "Wine appears to be already set up.\n\nDo you want to reinstall it?"; then
-            show_info "Cleaning Up" "Removing existing Wine installation..."
-            wineserver -k 2>/dev/null || true
-            rm -rf "$directory"
-        else
-            show_info "Skipping" "Using existing Wine installation."
+        print_box "Wine Already Installed" "Wine appears to be already set up.\n\nDo you want to reinstall it?" "$YELLOW"
+        if ! show_confirm "Reinstall Wine?" "n"; then
+            show_status "info" "Using existing Wine installation"
             return 0
         fi
+        show_status "progress" "Removing existing Wine installation..."
+        wineserver -k 2>/dev/null || true
+        rm -rf "$directory"
     fi
     
-    # Kill any running wine processes
     wineserver -k 2>/dev/null || true
-    
-    # Create install directory
     mkdir -p "$directory"
     
-    show_info "Downloading Wine" "Downloading ElementalWarriorWine..."
-    # Download the specific Wine version
+    # Download Wine
+    print_step 1 7 "Downloading Wine binaries"
     if ! download_file "$wine_url" "$directory/$filename" "Wine binaries"; then
-        show_msg "Error" "Failed to download Wine binaries"
+        show_status "error" "Failed to download Wine binaries"
         return 1
     fi
     
-    # Extract wine binary
-    show_info "Extracting" "Extracting Wine binaries..."
-    tar -xzf "$directory/$filename" -C "$directory"
+    # Extract Wine
+    print_step 2 7 "Extracting Wine binaries"
+    show_status "progress" "Extracting..."
+    tar -xzf "$directory/$filename" -C "$directory" 2>/dev/null
     rm "$directory/$filename"
     
-    # Find the actual Wine directory and create a symlink if needed
+    # Find and link Wine directory
     wine_dir=$(find "$directory" -name "ElementalWarriorWine*" -type d | head -1)
     if [ -n "$wine_dir" ] && [ "$wine_dir" != "$directory/ElementalWarriorWine" ]; then
-        show_info "Linking" "Creating Wine directory symlink..."
         ln -sf "$wine_dir" "$directory/ElementalWarriorWine"
     fi
     
-    # Verify Wine binary exists
     if [ ! -f "$directory/ElementalWarriorWine/bin/wine" ]; then
-        show_msg "Error" "Wine binary not found after extraction.\n\nDirectory: $directory"
+        show_status "error" "Wine binary not found after extraction"
         exit 1
     fi
     
-    # Create icons directory if it doesn't exist
+    # Setup icons
+    print_step 3 7 "Downloading application icons"
     mkdir -p "$HOME/.local/share/icons"
-    
-    # Download and setup additional files
-    show_info "Downloading Icons" "Downloading application icons..."
     download_file "https://upload.wikimedia.org/wikipedia/commons/f/f5/Affinity_Photo_V2_icon.svg" "$HOME/.local/share/icons/AffinityPhoto.svg" "Affinity Photo icon" || true
     download_file "https://upload.wikimedia.org/wikipedia/commons/8/8a/Affinity_Designer_V2_icon.svg" "$HOME/.local/share/icons/AffinityDesigner.svg" "Affinity Designer icon" || true
     download_file "https://upload.wikimedia.org/wikipedia/commons/9/9c/Affinity_Publisher_V2_icon.svg" "$HOME/.local/share/icons/AffinityPublisher.svg" "Affinity Publisher icon" || true
     
-    # Copy Affinity icon from script directory to icons folder
     script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
     if [ -f "$script_dir/icons/Affinity.png" ]; then
         cp "$script_dir/icons/Affinity.png" "$HOME/.local/share/icons/Affinity.png"
     fi
     
     # Download WinMetadata
-    show_info "Downloading" "Downloading Windows metadata..."
+    print_step 4 7 "Downloading Windows metadata"
     download_file "https://archive.org/download/win-metadata/WinMetadata.zip" "$directory/Winmetadata.zip" "Windows metadata" || true
     
-    # Ensure the system32 directory exists before extraction
     mkdir -p "$directory/drive_c/windows/system32"
     
-    # Extract WinMetadata
-    show_info "Extracting" "Extracting Windows metadata..."
     if [ -f "$directory/Winmetadata.zip" ]; then
+        show_status "progress" "Extracting Windows metadata..."
         if command -v 7z &> /dev/null; then
-            7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" -y >/dev/null 2>&1
-            if [ $? -ne 0 ]; then
+            7z x "$directory/Winmetadata.zip" -o"$directory/drive_c/windows/system32" -y >/dev/null 2>&1 || {
                 if command -v unzip &> /dev/null; then
                     unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1 || true
                 fi
-            fi
+            }
         elif command -v unzip &> /dev/null; then
             unzip -o "$directory/Winmetadata.zip" -d "$directory/drive_c/windows/system32" >/dev/null 2>&1
         fi
         rm -f "$directory/Winmetadata.zip"
     fi
     
-    # Download and install vkd3d-proton for OpenCL support
-    show_info "Downloading" "Downloading vkd3d-proton for OpenCL support..."
+    # Download vkd3d-proton
+    print_step 5 7 "Downloading vkd3d-proton for OpenCL support"
     local vkd3d_url="https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
     local vkd3d_filename="vkd3d-proton-2.14.1.tar.zst"
     
     if ! download_file "$vkd3d_url" "$directory/$vkd3d_filename" "vkd3d-proton"; then
-        show_msg "Warning" "Failed to download vkd3d-proton. OpenCL support may not work properly."
+        show_status "warning" "Failed to download vkd3d-proton. OpenCL support may not work properly."
     else
-        # Extract vkd3d-proton
-        show_info "Extracting" "Extracting vkd3d-proton..."
+        show_status "progress" "Extracting vkd3d-proton..."
         if command -v unzstd &> /dev/null; then
             unzstd -f "$directory/$vkd3d_filename" -o "$directory/vkd3d-proton.tar"
             tar -xf "$directory/vkd3d-proton.tar" -C "$directory"
@@ -361,19 +481,17 @@ setup_wine() {
         elif command -v zstd &> /dev/null && tar --help 2>&1 | grep -q "use-compress-program"; then
             tar --use-compress-program=zstd -xf "$directory/$vkd3d_filename" -C "$directory"
         else
-            show_msg "Error" "Cannot extract .tar.zst file. Please install zstd or unzstd."
+            show_status "error" "Cannot extract .tar.zst file. Please install zstd or unzstd."
             rm "$directory/$vkd3d_filename"
             return 1
         fi
         rm "$directory/$vkd3d_filename"
         
-        # Extract vkd3d-proton DLLs for later use
         local vkd3d_dir=$(find "$directory" -type d -name "vkd3d-proton-*" | head -1)
         if [ -n "$vkd3d_dir" ]; then
             local vkd3d_temp="$directory/vkd3d_dlls"
             mkdir -p "$vkd3d_temp"
             
-            # Copy DLL files to temp location
             if [ -f "$vkd3d_dir/x64/d3d12.dll" ]; then
                 cp "$vkd3d_dir/x64/d3d12.dll" "$vkd3d_temp/" 2>/dev/null || true
             elif [ -f "$vkd3d_dir/d3d12.dll" ]; then
@@ -386,35 +504,29 @@ setup_wine() {
                 cp "$vkd3d_dir/d3d12core.dll" "$vkd3d_temp/" 2>/dev/null || true
             fi
             
-            # Remove extracted vkd3d-proton directory
             rm -rf "$vkd3d_dir"
         fi
     fi
     
-    # Setup Wine
-    show_info "Configuring Wine" "Setting up Wine environment with required components..."
-    if check_dialog; then
-        WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 dotnet48 corefonts vcrun2022 2>&1 | \
-            dialog --title "Wine Configuration" --progressbox "Installing .NET frameworks and fonts..." $DIALOG_HEIGHT $DIALOG_WIDTH 2>&1 >/dev/tty
-        WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan 2>&1 | \
-            dialog --title "Wine Configuration" --progressbox "Setting Vulkan renderer..." $DIALOG_HEIGHT $DIALOG_WIDTH 2>&1 >/dev/tty
-    else
-        WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 dotnet48 corefonts vcrun2022
-        WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan
-    fi
+    # Setup Wine environment
+    print_step 6 7 "Configuring Wine environment"
+    show_status "progress" "Installing .NET frameworks and fonts..."
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 dotnet48 corefonts vcrun2022 >/dev/null 2>&1
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan >/dev/null 2>&1
     
-    # Set and verify Windows version to 11
     verify_windows_version
     
     # Apply dark theme
-    show_info "Applying Theme" "Applying dark theme..."
+    print_step 7 7 "Applying dark theme"
     download_file "https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-theme.reg" "$directory/wine-dark-theme.reg" "dark theme" || true
     if [ -f "$directory/wine-dark-theme.reg" ]; then
         WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/regedit" "$directory/wine-dark-theme.reg" >/dev/null 2>&1
         rm "$directory/wine-dark-theme.reg"
     fi
     
-    show_msg "Success" "Wine setup completed successfully!"
+    echo ""
+    show_status "success" "Wine setup completed successfully!"
+    sleep 1
 }
 
 # ==========================================
@@ -482,22 +594,17 @@ create_all_in_one_desktop_entry() {
 normalize_path() {
     local path="$1"
     
-    # Remove quotes and trim whitespace
     path=$(echo "$path" | tr -d '"' | xargs)
     
-    # Handle file:// URLs (common when dragging from file managers)
     if [[ "$path" == file://* ]]; then
         path=$(echo "$path" | sed 's|^file://||')
-        # URL decode the path
         path=$(printf '%b' "${path//%/\\x}")
     fi
     
-    # Convert to absolute path if relative
     if [[ ! "$path" = /* ]]; then
         path="$(pwd)/$path"
     fi
     
-    # Normalize path (remove . and .. components)
     path=$(realpath -q "$path" 2>/dev/null || echo "$path")
     
     echo "$path"
@@ -508,7 +615,6 @@ install_affinity() {
     local app_name=$1
     local directory="$HOME/.AffinityLinux"
     
-    # Get friendly name
     local friendly_name=""
     case $app_name in
         "Photo") friendly_name="Affinity Photo" ;;
@@ -517,54 +623,60 @@ install_affinity() {
         "Add") friendly_name="Affinity Suite (v2)" ;;
     esac
     
-    # Show welcome message
-    local welcome_msg="Welcome to the $friendly_name installer!\n\n"
-    welcome_msg+="Before we begin:\n\n"
-    welcome_msg+="1. Make sure you have downloaded the installer .exe file\n"
-    welcome_msg+="2. You can download it from:\n"
-    welcome_msg+="   https://store.serif.com/account/licences/\n\n"
-    welcome_msg+="3. If you haven't downloaded it yet, you can cancel and\n"
-    welcome_msg+="   return to the main menu.\n\n"
+    clear
+    print_header "Install $friendly_name"
+    echo ""
+    
+    local welcome_msg="Before we begin:\n\n"
+    welcome_msg+="  1. Download the installer .exe file from:\n"
+    welcome_msg+="     ${BOLD}https://store.serif.com/account/licences/${RESET}\n\n"
+    welcome_msg+="  2. If you haven't downloaded it yet, you can cancel\n"
+    welcome_msg+="     and return to the main menu.\n\n"
     welcome_msg+="Ready to proceed?"
     
-    if ! show_yesno "Install $friendly_name" "$welcome_msg"; then
+    print_box "Welcome" "$welcome_msg" "$CYAN"
+    echo ""
+    
+    if ! show_confirm "Proceed with installation?" "y"; then
         return 0
     fi
     
-    # Verify Windows version before installation
     verify_windows_version
     
     # Get installer path
     local installer_path=""
     while true; do
-        installer_path=$(get_file_path "Select Installer" \
-            "Please enter the full path to the $friendly_name installer .exe file:\n\nYou can drag and drop the file into this terminal.\n\n(Leave empty to cancel)" \
-            "")
+        clear
+        print_header "Install $friendly_name"
+        echo ""
+        print_box "Select Installer" "Enter the full path to the installer .exe file\n\nYou can drag and drop the file into this terminal" "$BLUE"
+        echo ""
+        
+        installer_path=$(show_input "Installer path")
         
         if [ -z "$installer_path" ]; then
-            show_info "Cancelled" "Installation cancelled by user."
+            show_status "info" "Installation cancelled"
             return 0
         fi
         
-        # Normalize the path
         installer_path=$(normalize_path "$installer_path")
         
-        # Check if file exists and is readable
         if [ ! -f "$installer_path" ]; then
-            if ! show_yesno "File Not Found" "The file does not exist:\n\n$installer_path\n\nWould you like to try again?"; then
+            print_box "File Not Found" "The file does not exist:\n\n$installer_path" "$RED"
+            if ! show_confirm "Try again?" "y"; then
                 return 0
             fi
             continue
         fi
         
         if [ ! -r "$installer_path" ]; then
-            show_msg "Error" "The file is not readable:\n\n$installer_path\n\nPlease check file permissions."
-            return 1
+            show_status "error" "The file is not readable: $installer_path"
+            sleep 2
+            continue
         fi
         
-        # Check if it looks like an exe file
         if [[ ! "$installer_path" =~ \.(exe|EXE)$ ]]; then
-            if ! show_yesno "Warning" "The file doesn't appear to be a .exe file:\n\n$installer_path\n\nContinue anyway?"; then
+            if ! show_confirm "The file doesn't appear to be a .exe file. Continue anyway?" "n"; then
                 continue
             fi
         fi
@@ -572,54 +684,56 @@ install_affinity() {
         break
     done
     
-    # Get the filename from the path
     local filename=$(basename "$installer_path")
     
-    # Confirm installation
-    local confirm_msg="Ready to install $friendly_name\n\n"
-    confirm_msg+="Installer: $filename\n"
-    confirm_msg+="Path: $installer_path\n\n"
-    confirm_msg+="During installation:\n"
-    confirm_msg+="- Click 'No' if you see any error dialogs\n"
-    confirm_msg+="- Follow the installer prompts normally\n\n"
-    confirm_msg+="Proceed with installation?"
+    clear
+    print_header "Install $friendly_name"
+    echo ""
     
-    if ! show_yesno "Confirm Installation" "$confirm_msg"; then
+    local confirm_msg="Ready to install:\n\n"
+    confirm_msg+="  ${BOLD}Installer:${RESET} $filename\n"
+    confirm_msg+="  ${BOLD}Path:${RESET} $installer_path\n\n"
+    confirm_msg+="During installation:\n"
+    confirm_msg+="  • Click 'No' if you see any error dialogs\n"
+    confirm_msg+="  • Follow the installer prompts normally"
+    
+    print_box "Confirm Installation" "$confirm_msg" "$GREEN"
+    echo ""
+    
+    if ! show_confirm "Proceed with installation?" "y"; then
         return 0
     fi
     
-    # Copy installer to Affinity directory
-    show_info "Preparing" "Copying installer..."
+    show_status "progress" "Copying installer..."
     cp "$installer_path" "$directory/$filename"
     
-    # Run installer
-    show_info "Installing" "Launching $friendly_name installer...\n\nPlease follow the installer prompts.\nClick 'No' on any error dialogs."
+    clear
+    print_header "Install $friendly_name"
+    echo ""
+    print_box "Installing" "Launching $friendly_name installer...\n\nPlease follow the installer prompts.\nClick 'No' on any error dialogs." "$CYAN"
+    echo ""
     
-    # Temporarily disable dialog to show installer window properly
     WINEPREFIX="$directory" WINEDEBUG=-all "$directory/ElementalWarriorWine/bin/wine" "$directory/$filename"
     local install_status=$?
     
-    # Clean up installer
     rm -f "$directory/$filename"
     
-    # Check installation status
     if [ $install_status -ne 0 ]; then
-        if show_yesno "Installation Issue" "The installer may have encountered an issue.\n\nDid the installation complete successfully?"; then
-            show_info "Continuing" "Proceeding with post-installation setup..."
+        if show_confirm "Did the installation complete successfully?" "y"; then
+            show_status "info" "Proceeding with post-installation setup..."
         else
-            show_msg "Error" "Installation cancelled. Please try again."
+            show_status "error" "Installation cancelled"
             return 1
         fi
     fi
     
-    # If installing Affinity (unified app), copy vkd3d-proton DLLs and add to Wine libraries
+    # If installing Affinity (unified app), copy vkd3d-proton DLLs
     if [ "$app_name" = "Add" ]; then
         local affinity_dir="$directory/drive_c/Program Files/Affinity/Affinity"
         if [ -d "$affinity_dir" ]; then
-            show_info "Configuring" "Installing vkd3d-proton DLLs for OpenCL support..."
+            show_status "progress" "Installing vkd3d-proton DLLs for OpenCL support..."
             local vkd3d_temp="$directory/vkd3d_dlls"
             
-            # Copy DLLs to Affinity directory
             if [ -f "$vkd3d_temp/d3d12.dll" ]; then
                 cp "$vkd3d_temp/d3d12.dll" "$affinity_dir/" 2>/dev/null || true
             fi
@@ -627,7 +741,6 @@ install_affinity() {
                 cp "$vkd3d_temp/d3d12core.dll" "$affinity_dir/" 2>/dev/null || true
             fi
             
-            # Add DLLs to Wine's library overrides using regedit
             local reg_file="$directory/dll_overrides.reg"
             echo "REGEDIT4" > "$reg_file"
             echo "[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]" >> "$reg_file"
@@ -638,10 +751,8 @@ install_affinity() {
         fi
     fi
     
-    # Remove Wine's default desktop entry
     rm -f "/home/$USER/.local/share/applications/wine/Programs/Affinity $app_name 2.desktop"
     
-    # Create desktop entry
     case $app_name in
         "Photo")
             create_desktop_entry "Photo" "$directory/drive_c/Program Files/Affinity/Photo 2/Photo.exe" "$HOME/.local/share/icons/AffinityPhoto.svg"
@@ -653,7 +764,6 @@ install_affinity() {
             create_desktop_entry "Publisher" "$directory/drive_c/Program Files/Affinity/Publisher 2/Publisher.exe" "$HOME/.local/share/icons/AffinityPublisher.svg"
             ;;
         "Add")
-            # Create Affinity desktop entry
             icon_path="$HOME/.local/share/icons/Affinity.png"
             if [ ! -f "$icon_path" ]; then
                 script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
@@ -667,7 +777,12 @@ install_affinity() {
             ;;
     esac
     
-    show_msg "Success" "$friendly_name has been installed successfully!\n\nYou can now launch it from your applications menu."
+    clear
+    print_header "Installation Complete"
+    echo ""
+    print_box "Success" "$friendly_name has been installed successfully!\n\nYou can now launch it from your applications menu." "$GREEN"
+    echo ""
+    show_confirm "Press Enter to continue" >/dev/null
 }
 
 # ==========================================
@@ -676,44 +791,22 @@ install_affinity() {
 
 # Function to show special thanks
 show_special_thanks() {
-    local thanks="Special Thanks to:\n\n"
-    thanks+="• Ardishco (github.com/raidenovich)\n"
-    thanks+="• Deviaze\n"
-    thanks+="• Kemal\n"
-    thanks+="• Jacazimbo <3\n"
-    thanks+="• Kharoon\n"
-    thanks+="• Jediclank134\n\n"
+    clear
+    print_header "Special Thanks"
+    echo ""
+    
+    local thanks="Contributors:\n\n"
+    thanks+="  • Ardishco (github.com/raidenovich)\n"
+    thanks+="  • Deviaze\n"
+    thanks+="  • Kemal\n"
+    thanks+="  • Jacazimbo <3\n"
+    thanks+="  • Kharoon\n"
+    thanks+="  • Jediclank134\n\n"
     thanks+="Thank you for your contributions!"
     
-    show_msg "Special Thanks" "$thanks"
-}
-
-# Function to show main menu using dialog
-show_menu() {
-    if check_dialog; then
-        dialog --title "Affinity Installation Script" \
-            --menu "Welcome to the Affinity Installation Script!\n\nSelect an option:" \
-            $DIALOG_HEIGHT $DIALOG_WIDTH $DIALOG_MENU_HEIGHT \
-            "1" "Install Affinity Photo" \
-            "2" "Install Affinity Designer" \
-            "3" "Install Affinity Publisher" \
-            "4" "Install Affinity Suite (v2)" \
-            "5" "Show Special Thanks" \
-            "6" "Exit" \
-            2>&1 >/dev/tty
-    else
-        # Fallback menu
-        echo -e "${GREEN}Affinity Installation Script${NC}"
-        echo "1. Install Affinity Photo"
-        echo "2. Install Affinity Designer"
-        echo "3. Install Affinity Publisher"
-        echo "4. Install Affinity Suite (v2)"
-        echo "5. Show Special Thanks"
-        echo "6. Exit"
-        echo -n "Please select an option (1-6): "
-        read choice
-        echo "$choice"
-    fi
+    print_box "Acknowledgments" "$thanks" "$PURPLE"
+    echo ""
+    show_confirm "Press Enter to continue" >/dev/null
 }
 
 # ==========================================
@@ -721,33 +814,51 @@ show_menu() {
 # ==========================================
 
 main() {
-    # Check terminal size
-    if check_dialog; then
-        # Ensure terminal is large enough
-        local rows=$(tput lines)
-        local cols=$(tput cols)
-        if [ $rows -lt 20 ] || [ $cols -lt 70 ]; then
-            show_msg "Warning" "Your terminal window is too small.\n\nPlease resize to at least 70x20 characters for the best experience."
-        fi
+    # Trap to restore screen on exit
+    trap 'restore_screen; exit' INT TERM EXIT
+    
+    init_screen
+    
+    # Welcome screen
+    clear
+    print_header "Affinity Installation Script"
+    echo ""
+    
+    detect_distro
+    
+    local welcome_msg="Welcome to the Affinity Installation Script!\n\n"
+    welcome_msg+="This script will guide you through installing\n"
+    welcome_msg+="Affinity applications on Linux using Wine.\n\n"
+    welcome_msg+="${BOLD}Detected System:${RESET}\n"
+    welcome_msg+="  Distribution: ${CYAN}$DISTRO $VERSION${RESET}"
+    
+    print_box "Welcome" "$welcome_msg" "$CYAN"
+    echo ""
+    
+    if ! show_confirm "Continue with system checks?" "y"; then
+        restore_screen
+        exit 0
     fi
     
-    # Show welcome message
-    local welcome="Welcome to the Affinity Installation Script!\n\n"
-    welcome+="This script will guide you through installing\n"
-    welcome+="Affinity applications on Linux using Wine.\n\n"
-    welcome+="Detected System:\n"
-    detect_distro
-    welcome+="Distribution: $DISTRO $VERSION\n\n"
-    welcome+="Press OK to continue with system checks..."
-    
-    show_msg "Welcome" "$welcome"
-    
-    # Check and install dependencies
     check_dependencies
     
-    # Setup Wine (only once, unless user wants to reinstall)
-    if ! show_yesno "Wine Setup" "Wine needs to be set up before installing Affinity applications.\n\nThis includes:\n• Downloading Wine binaries\n• Installing required components\n• Configuring the environment\n\nThis may take several minutes. Proceed?"; then
-        show_msg "Cancelled" "Setup cancelled. Wine must be configured before installing applications."
+    clear
+    print_header "Wine Setup"
+    echo ""
+    
+    local wine_info="Wine needs to be set up before installing Affinity applications.\n\n"
+    wine_info+="This includes:\n"
+    wine_info+="  • Downloading Wine binaries\n"
+    wine_info+="  • Installing required components\n"
+    wine_info+="  • Configuring the environment\n\n"
+    wine_info+="This may take several minutes."
+    
+    print_box "Wine Configuration" "$wine_info" "$YELLOW"
+    echo ""
+    
+    if ! show_confirm "Proceed with Wine setup?" "y"; then
+        show_status "error" "Wine must be configured before installing applications"
+        restore_screen
         exit 0
     fi
     
@@ -755,38 +866,47 @@ main() {
     
     # Main menu loop
     while true; do
-        choice=$(show_menu)
+        clear
+        print_header "Main Menu"
+        echo ""
         
-        case $choice in
-            1)
+        local choice=$(show_menu "Select an Application to Install" \
+            "Install Affinity Photo" \
+            "Install Affinity Designer" \
+            "Install Affinity Publisher" \
+            "Install Affinity Suite (v2)" \
+            "Show Special Thanks" \
+            "Exit")
+        
+        case "$choice" in
+            "Install Affinity Photo")
                 install_affinity "Photo"
                 ;;
-            2)
+            "Install Affinity Designer")
                 install_affinity "Designer"
                 ;;
-            3)
+            "Install Affinity Publisher")
                 install_affinity "Publisher"
                 ;;
-            4)
+            "Install Affinity Suite (v2)")
                 install_affinity "Add"
                 ;;
-            5)
+            "Show Special Thanks")
                 show_special_thanks
                 ;;
-            6|"")
-                if check_dialog; then
-                    if show_yesno "Exit" "Are you sure you want to exit?"; then
-                        show_msg "Thank You" "Thank you for using the Affinity Installation Script!"
-                        clear
-                        exit 0
-                    fi
-                else
-                    echo -e "${GREEN}Thank you for using the Affinity Installation Script!${NC}"
+            "Exit"|"")
+                if show_confirm "Are you sure you want to exit?" "n"; then
+                    restore_screen
+                    print_header "Thank You"
+                    echo ""
+                    show_status "success" "Thank you for using the Affinity Installation Script!"
+                    sleep 1
                     exit 0
                 fi
                 ;;
             *)
-                show_msg "Error" "Invalid option. Please try again."
+                show_status "warning" "Invalid option"
+                sleep 1
                 ;;
         esac
     done
@@ -794,4 +914,3 @@ main() {
 
 # Run main function
 main
-
