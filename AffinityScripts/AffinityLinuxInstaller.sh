@@ -556,8 +556,8 @@ create_all_in_one_desktop_entry() {
     local directory="$HOME/.AffinityLinux"
     
     echo "[Desktop Entry]" > "$desktop_file"
-    echo "Name=Affinity Suite" >> "$desktop_file"
-    echo "Comment=Photo, Designer, Publisher and more" >> "$desktop_file"
+    echo "Name=Affinity" >> "$desktop_file"
+    echo "Comment=The unified Affinity application for photo editing, design, and publishing" >> "$desktop_file"
     echo "Icon=$icon_path" >> "$desktop_file"
     echo "Path=$directory" >> "$desktop_file"
     echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Affinity/Affinity.exe\"" >> "$desktop_file"
@@ -567,22 +567,6 @@ create_all_in_one_desktop_entry() {
     echo "Categories=Graphics;" >> "$desktop_file"
     echo "StartupNotify=true" >> "$desktop_file"
     echo "StartupWMClass=affinity.exe" >> "$desktop_file"
-    echo "Actions=Photo;Designer;Publisher;" >> "$desktop_file"
-    echo "" >> "$desktop_file"
-    echo "[Desktop Action Photo]" >> "$desktop_file"
-    echo "Name=Affinity Photo" >> "$desktop_file"
-    echo "Icon=$HOME/.local/share/icons/AffinityPhoto.svg" >> "$desktop_file"
-    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Photo 2/Photo.exe\"" >> "$desktop_file"
-    echo "" >> "$desktop_file"
-    echo "[Desktop Action Designer]" >> "$desktop_file"
-    echo "Name=Affinity Designer" >> "$desktop_file"
-    echo "Icon=$HOME/.local/share/icons/AffinityDesigner.svg" >> "$desktop_file"
-    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Designer 2/Designer.exe\"" >> "$desktop_file"
-    echo "" >> "$desktop_file"
-    echo "[Desktop Action Publisher]" >> "$desktop_file"
-    echo "Name=Affinity Publisher" >> "$desktop_file"
-    echo "Icon=$HOME/.local/share/icons/AffinityPublisher.svg" >> "$desktop_file"
-    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Publisher 2/Publisher.exe\"" >> "$desktop_file"
 }
 
 # Function to normalize and validate file path
