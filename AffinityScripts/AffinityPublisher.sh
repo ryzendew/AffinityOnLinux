@@ -340,12 +340,8 @@ fi
 ################################################################################
 
 print_header "Affinity Publisher Installation"
-print_info "You will now install Affinity Publisher using its Windows installer"
+print_info "You will now install Affinity Publisher using its Windows installer You Already Downloaded Before!"
 
-echo ""
-print_step "Please download the Affinity Publisher installer (.exe) from:"
-echo -e "  ${CYAN}https://store.serif.com/account/licences/${NC}"
-echo ""
 print_step "Once downloaded, place the .exe file in:"
 echo -e "  ${CYAN}$directory${NC}"
 echo ""

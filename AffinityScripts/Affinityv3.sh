@@ -345,7 +345,7 @@ print_info "You will now install the Affinity application using its Windows inst
 
 echo ""
 print_step "Please download the Affinity installer (.exe) from:"
-echo -e "  ${CYAN}https://store.serif.com/account/licences/${NC}"
+echo -e "  ${CYAN}https://www.affinity.studio/get-affinity${NC}"
 echo ""
 print_step "Once downloaded, place the .exe file in:"
 echo -e "  ${CYAN}$directory${NC}"
