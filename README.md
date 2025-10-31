@@ -2,6 +2,11 @@
 
 A repository that helps users get affinity software working on GNU/Linux 🐧
 
+# Opencl is Working \
+
+<img width="2559" height="1441" alt="image" src="https://github.com/user-attachments/assets/b5350cbf-09a3-4ba2-9e98-aec86a73986b" />
+
+
 [Discord](https://discord.gg/DW2X8MHQuh)
 
 # [Affinity Apps 📢](https://affinity.serif.com)
