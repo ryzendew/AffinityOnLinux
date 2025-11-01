@@ -821,30 +821,94 @@ install_affinity() {
     verify_windows_version
     
     echo ""
-    print_step "Please download the Affinity $app_name installer (.exe) from:"
-    echo -e "  ${CYAN}https://www.affinity.studio/account/licenses/${NC}"
+    print_step "How would you like to proceed?"
     echo ""
-    print_step "Once downloaded, drag and drop the installer into this terminal and press Enter:"
-    read installer_path
+    echo -e "  ${GREEN}1.${NC} Provide my own Affinity installer file"
+    echo -e "  ${GREEN}2.${NC} Have the script download the installer for me"
+    echo ""
+    echo -n -e "${BOLD}Please select an option (1 or 2): ${NC}"
+    read -r installer_choice
     
-    # Normalize the path
-    installer_path=$(normalize_path "$installer_path")
+    local installer_path=""
+    local filename=""
     
-    # Check if file exists and is readable
-    if [ ! -f "$installer_path" ] || [ ! -r "$installer_path" ]; then
-        print_error "Invalid file path or file is not readable: $installer_path"
-        return 1
-    fi
-    
-    # Get the filename from the path and sanitize it (replace spaces)
-    local filename=$(basename "$installer_path")
-    # Replace spaces with dashes to avoid issues
-    filename=$(echo "$filename" | tr ' ' '-')
-    
-    # Copy installer to Affinity directory
-    print_step "Copying installer to installation directory..."
-    cp "$installer_path" "$directory/$filename"
-    print_success "Installer copied"
+    case $installer_choice in
+        1)
+            # User provides their own installer
+            echo ""
+            print_step "Please download the Affinity $app_name installer (.exe) from:"
+            echo -e "  ${CYAN}https://www.affinity.studio/account/licenses/${NC}"
+            echo ""
+            print_step "Once downloaded, drag and drop the installer into this terminal and press Enter:"
+            read installer_path
+            
+            # Normalize the path
+            installer_path=$(normalize_path "$installer_path")
+            
+            # Check if file exists and is readable
+            if [ ! -f "$installer_path" ] || [ ! -r "$installer_path" ]; then
+                print_error "Invalid file path or file is not readable: $installer_path"
+                return 1
+            fi
+            
+            # Get the filename from the path and sanitize it (replace spaces)
+            filename=$(basename "$installer_path")
+            # Replace spaces with dashes to avoid issues
+            filename=$(echo "$filename" | tr ' ' '-')
+            
+            # Copy installer to Affinity directory
+            print_step "Copying installer to installation directory..."
+            cp "$installer_path" "$directory/$filename"
+            print_success "Installer copied"
+            ;;
+        2)
+            # Script downloads the installer
+            echo ""
+            print_step "Downloading Affinity $app_name installer..."
+            
+            # Determine download URL based on app name
+            local download_url=""
+            case $app_name in
+                "Add")
+                    download_url="https://downloads.affinity.studio/Affinity%20x64.exe"
+                    filename="Affinity-x64.exe"
+                    ;;
+                "Photo")
+                    download_url="https://downloads.affinity.studio/Affinity%20Photo%20x64.exe"
+                    filename="Affinity-Photo-x64.exe"
+                    ;;
+                "Designer")
+                    download_url="https://downloads.affinity.studio/Affinity%20Designer%20x64.exe"
+                    filename="Affinity-Designer-x64.exe"
+                    ;;
+                "Publisher")
+                    download_url="https://downloads.affinity.studio/Affinity%20Publisher%20x64.exe"
+                    filename="Affinity-Publisher-x64.exe"
+                    ;;
+                *)
+                    print_error "Unknown application: $app_name"
+                    print_info "Please use option 1 to provide your own installer"
+                    return 1
+                    ;;
+            esac
+            
+            installer_path="$directory/$filename"
+            
+            # Download the installer
+            if download_file "$download_url" "$installer_path" "Affinity $app_name installer"; then
+                print_success "Installer downloaded successfully"
+            else
+                print_error "Failed to download installer"
+                print_info "You can try option 1 to provide your own installer, or download manually from:"
+                echo -e "  ${CYAN}https://www.affinity.studio/account/licenses/${NC}"
+                return 1
+            fi
+            ;;
+        *)
+            print_error "Invalid option. Please select 1 or 2."
+            return 1
+            ;;
+    esac
     
     # Run installer
     print_step "Launching Affinity $app_name installer..."
@@ -990,22 +1054,147 @@ show_menu() {
 }
 
 # ==========================================
+# Detection Functions
+# ==========================================
+
+# Function to quickly check if all dependencies are installed (without installing)
+check_dependencies_quick() {
+    local missing_deps=""
+    
+    for dep in wine winetricks wget curl 7z tar jq; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing_deps+="$dep "
+        fi
+    done
+    
+    # Check for zstd support
+    if ! command -v unzstd &> /dev/null && ! command -v zstd &> /dev/null; then
+        missing_deps+="zstd "
+    fi
+    
+    if [ -n "$missing_deps" ]; then
+        return 1  # Dependencies missing
+    else
+        return 0  # All dependencies present
+    fi
+}
+
+# Function to check if Wine is set up
+check_wine_setup() {
+    local directory="$HOME/.AffinityLinux"
+    
+    if [ -f "$directory/ElementalWarriorWine/bin/wine" ]; then
+        return 0  # Wine is set up
+    else
+        return 1  # Wine is not set up
+    fi
+}
+
+# Function to detect installed Affinity products
+detect_installed_affinity() {
+    local directory="$HOME/.AffinityLinux"
+    local installed_products=()
+    
+    # Check for unified Affinity (V3)
+    if [ -f "$directory/drive_c/Program Files/Affinity/Affinity/Affinity.exe" ]; then
+        installed_products+=("Affinity")
+    fi
+    
+    # Check for Affinity Photo
+    if [ -f "$directory/drive_c/Program Files/Affinity/Photo 2/Photo.exe" ]; then
+        installed_products+=("Photo")
+    fi
+    
+    # Check for Affinity Designer
+    if [ -f "$directory/drive_c/Program Files/Affinity/Designer 2/Designer.exe" ]; then
+        installed_products+=("Designer")
+    fi
+    
+    # Check for Affinity Publisher
+    if [ -f "$directory/drive_c/Program Files/Affinity/Publisher 2/Publisher.exe" ]; then
+        installed_products+=("Publisher")
+    fi
+    
+    # Output installed products as a space-separated string
+    echo "${installed_products[@]}"
+}
+
+# Function to show detected installations
+show_installed_affinity() {
+    local installed=$(detect_installed_affinity)
+    
+    if [ -n "$installed" ]; then
+        print_info "Detected installed Affinity products:"
+        for product in $installed; do
+            case $product in
+                "Affinity")
+                    print_progress "  ✓ Affinity (Unified Application)"
+                    ;;
+                "Photo")
+                    print_progress "  ✓ Affinity Photo"
+                    ;;
+                "Designer")
+                    print_progress "  ✓ Affinity Designer"
+                    ;;
+                "Publisher")
+                    print_progress "  ✓ Affinity Publisher"
+                    ;;
+            esac
+        done
+        echo ""
+    fi
+}
+
+# ==========================================
 # Main Script
 # ==========================================
 
 main() {
-    print_header "Affinity Linux Installer - Initialization"
+    local directory="$HOME/.AffinityLinux"
     
     # Detect distribution
     detect_distro
-    print_info "Detected distribution: $DISTRO $VERSION"
-    echo ""
     
-    # Check and install dependencies
-    check_dependencies
-    
-    # Setup Wine (only once)
-    setup_wine
+    # Quick check: Are dependencies and Wine already set up?
+    if check_dependencies_quick && check_wine_setup; then
+        # Everything is ready, skip setup and show menu directly
+        local installed=$(detect_installed_affinity)
+        
+        print_header "Affinity Linux Installer"
+        print_info "Detected distribution: $DISTRO $VERSION"
+        echo ""
+        
+        if [ -n "$installed" ]; then
+            print_success "System is ready! All dependencies and Wine are installed."
+            echo ""
+            show_installed_affinity
+            print_info "Ready to install additional Affinity products or manage existing installations."
+            echo ""
+            read -n 1 -s -r -p "Press any key to continue to the menu..."
+            echo ""
+        else
+            print_success "System is ready! All dependencies and Wine are installed."
+            echo ""
+            print_info "Ready to install Affinity products."
+            echo ""
+            read -n 1 -s -r -p "Press any key to continue to the menu..."
+            echo ""
+        fi
+    else
+        # Need to set things up
+        print_header "Affinity Linux Installer - Initialization"
+        print_info "Detected distribution: $DISTRO $VERSION"
+        echo ""
+        
+        # Check and install dependencies
+        check_dependencies
+        
+        # Setup Wine (only once)
+        setup_wine
+        
+        # Show what's already installed
+        show_installed_affinity
+    fi
     
     while true; do
         show_menu

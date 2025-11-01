@@ -687,6 +687,7 @@ class AffinityInstallerGUI(QMainWindow):
             "Troubleshooting",
             [
                 ("Open Wine Configuration", self.open_winecfg),
+                ("Open Winetricks", self.open_winetricks),
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer),
                 ("Fix Settings", self.install_affinity_settings),
             ]
@@ -2516,6 +2517,49 @@ class AffinityInstallerGUI(QMainWindow):
         ).start()
         
         self.log("✓ Wine Configuration opened", "success")
+    
+    def open_winetricks(self):
+        """Open Winetricks GUI using custom Wine"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Opening Winetricks", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+        
+        if not wine_cfg.exists():
+            self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
+            self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
+            return
+        
+        # Check if winetricks is available
+        winetricks_path = shutil.which("winetricks")
+        if not winetricks_path:
+            self.log("Winetricks is not installed. Please install it using your package manager.", "error")
+            self.show_message(
+                "Winetricks Not Found",
+                "Winetricks is not installed. Please install it using:\n\n"
+                "Arch/CachyOS/EndeavourOS/XeroLinux: sudo pacman -S winetricks\n"
+                "Fedora/Nobara: sudo dnf install winetricks\n"
+                "Debian/Ubuntu/Mint/Pop/Zorin/PikaOS: sudo apt install winetricks\n"
+                "openSUSE: sudo zypper install winetricks",
+                "error"
+            )
+            return
+        
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        
+        self.log(f"Opening winetricks using: {winetricks_path}", "info")
+        self.log("The Winetricks GUI should open now.", "info")
+        
+        # Run winetricks in background (non-blocking)
+        # Winetricks will open its GUI when run without arguments
+        threading.Thread(
+            target=lambda: self.run_command([winetricks_path], check=False, capture=False, env=env),
+            daemon=True
+        ).start()
+        
+        self.log("✓ Winetricks opened", "success")
     
     def set_windows11_renderer(self):
         """Set Windows 11 and configure renderer (OpenGL or Vulkan)"""
