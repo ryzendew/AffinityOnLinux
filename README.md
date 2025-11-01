@@ -77,6 +77,8 @@ python AffinityScripts/AffinityLinuxInstaller.py
 3. Once Wine is set up, use **"Update Affinity Applications"** to install or update Affinity apps
 4. Use **"Troubleshooting"** tools to configure Wine settings and renderers
 
+**📖 Need Help?** Check out the [GUI Installer Guide](Guide/GUI-Installer-Guide.md) for detailed step-by-step instructions, button explanations, and troubleshooting tips.
+
 **Zoom Controls:**
 - **Zoom In**: Click the **🔍➕** button or press `Ctrl++` / `Ctrl+=`
 - **Zoom Out**: Click the **🔍➖** button or press `Ctrl+-` / `Ctrl+Minus`
@@ -192,6 +194,7 @@ PikaOS users must replace the built-in Wine with WineHQ staging before installat
 
 ## Additional Resources
 
+- **[GUI Installer Guide](Guide/GUI-Installer-Guide.md)** - Complete guide for using the Python GUI installer with step-by-step instructions, button explanations, workflows, and troubleshooting
 - [Other Software on GNU/Linux](https://github.com/Twig6943/AffinityOnLinux/blob/main/OtherSoftware-on-Linux.md) - Additional software compatibility information
 - [Known Issues](https://github.com/Twig6943/AffinityOnLinux/blob/main/Known-issues.md) - Troubleshooting guide for common problems
 - [OpenCL Guide](https://github.com/Twig6943/AffinityOnLinux/blob/main/OpenCL-Guide.md) - Detailed OpenCL configuration information
