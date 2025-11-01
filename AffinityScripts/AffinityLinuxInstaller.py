@@ -78,7 +78,7 @@ try:
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
         QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-        QButtonGroup, QRadioButton
+        QButtonGroup, QRadioButton, QInputDialog
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
     from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -92,7 +92,7 @@ except ImportError:
                 QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                 QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
                 QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-                QButtonGroup, QRadioButton
+                QButtonGroup, QRadioButton, QInputDialog
             )
             from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
             from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -657,6 +657,7 @@ class AffinityInstallerGUI(QMainWindow):
                 ("Install System Dependencies", self.install_system_dependencies),
                 ("Install Winetricks Dependencies", self.install_winetricks_dependencies),
                 ("Reinstall WinMetadata", self.reinstall_winmetadata),
+                ("Download Affinity Installer", self.download_affinity_installer),
                 ("Install from File Manager", self.install_from_file),
             ]
         )
@@ -1003,6 +1004,110 @@ class AffinityInstallerGUI(QMainWindow):
                 if checked_id >= 0 and checked_id in radio_buttons:
                     app_code = radio_buttons[checked_id]
                     self.install_application(app_code)
+    
+    def install_application(self, app_code):
+        """Install an Affinity application - asks user if they want to download or provide their own exe"""
+        app_names = {
+            "Add": "Affinity (Unified)",
+            "Photo": "Affinity Photo",
+            "Designer": "Affinity Designer",
+            "Publisher": "Affinity Publisher"
+        }
+        display_name = app_names.get(app_code, "Affinity")
+        
+        # Check if Wine is set up
+        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        if not wine.exists():
+            self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
+            self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
+            return
+        
+        # Ask user if they want to download or provide their own exe
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Install {display_name}")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        label = QLabel(f"How would you like to get the {display_name} installer?")
+        layout.addWidget(label)
+        
+        button_group = QButtonGroup()
+        download_radio = QRadioButton("Download from Affinity Studio (automatic)")
+        download_radio.setChecked(True)
+        custom_radio = QRadioButton("Provide my own installer file (.exe)")
+        
+        button_group.addButton(download_radio, 0)
+        button_group.addButton(custom_radio, 1)
+        
+        layout.addWidget(download_radio)
+        layout.addWidget(custom_radio)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            checked_id = button_group.checkedId()
+            installer_path = None
+            
+            if checked_id == 0:  # Download
+                # Download the installer
+                self.log(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log(f"Downloading {display_name} Installer", "info")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                
+                download_url = "https://downloads.affinity.studio/Affinity%20x64.exe"
+                download_dir = Path.home() / ".cache" / "affinity-installer"
+                download_dir.mkdir(parents=True, exist_ok=True)
+                installer_path = download_dir / "Affinity x64.exe"
+                
+                self.log(f"Downloading from: {download_url}", "info")
+                if self.download_file(download_url, str(installer_path), f"{display_name} installer"):
+                    self.log(f"Download completed: {installer_path}", "success")
+                else:
+                    self.log("Download failed. Please try providing your own installer file.", "error")
+                    self.show_message("Download Failed", 
+                                     "Failed to download the installer.\n\n"
+                                     "You can download it manually from:\n"
+                                     "https://downloads.affinity.studio/Affinity%20x64.exe\n\n"
+                                     "Then use 'Provide my own installer file' option.",
+                                     "error")
+                    return
+                    
+            else:  # Provide own file
+                # Open file dialog to select .exe
+                self.log(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log(f"Custom Installer for {display_name}", "info")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                self.log("Please select the installer .exe file...", "info")
+                
+                installer_path, _ = QFileDialog.getOpenFileName(
+                    self,
+                    f"Select {display_name} Installer",
+                    "",
+                    "Executable files (*.exe);;All files (*.*)"
+                )
+                
+                if not installer_path:
+                    self.log("Installation cancelled.", "warning")
+                    return
+                # QFileDialog returns a string, but we'll normalize it
+                installer_path = Path(installer_path)
+            
+            # Verify file exists and convert to string for run_installation
+            installer_path_str = str(installer_path)
+            if not Path(installer_path_str).exists():
+                self.log(f"Installer file not found: {installer_path_str}", "error")
+                return
+            
+            # Start installation in background thread
+            threading.Thread(
+                target=self.run_installation,
+                args=(app_code, installer_path_str),
+                daemon=True
+            ).start()
     
     def check_dependencies(self):
         """Check and install dependencies"""
@@ -1870,7 +1975,7 @@ class AffinityInstallerGUI(QMainWindow):
             return
         
         # Ask for application name
-        app_name, ok = QMessageBox.getText(
+        app_name, ok = QInputDialog.getText(
             self,
             "Application Name",
             "Enter the name for this application:\n(e.g., 'MyApp', 'CustomSoftware')"
@@ -1952,7 +2057,7 @@ class AffinityInstallerGUI(QMainWindow):
             return
         
         # Ask for executable path
-        exe_path, ok = QMessageBox.getText(
+        exe_path, ok = QInputDialog.getText(
             self,
             "Executable Path",
             f"Enter the full path to the {app_name} executable:\n\n"
@@ -1964,7 +2069,7 @@ class AffinityInstallerGUI(QMainWindow):
             return
         
         # Ask for icon path (optional)
-        icon_path, ok = QMessageBox.getText(
+        icon_path, ok = QInputDialog.getText(
             self,
             "Icon Path (Optional)",
             "Enter the path to an icon file (optional):\n\n"
@@ -2471,6 +2576,58 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  Error: {stderr[:200] if stderr else 'Unknown error'}", "error")
         
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
+    
+    def download_affinity_installer(self):
+        """Download the Affinity installer by itself"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Download Affinity Installer", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Ask user where to save the file
+        downloads_dir = Path.home() / "Downloads"
+        default_path = downloads_dir / "Affinity x64.exe"
+        
+        # Suggest Downloads folder by default, but let user choose
+        suggested_path = str(default_path)
+        
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Affinity Installer",
+            suggested_path,
+            "Executable files (*.exe);;All files (*.*)"
+        )
+        
+        if not save_path:
+            self.log("Download cancelled.", "warning")
+            return
+        
+        save_path_obj = Path(save_path)
+        
+        # Download the installer
+        download_url = "https://downloads.affinity.studio/Affinity%20x64.exe"
+        
+        self.log(f"Downloading from: {download_url}", "info")
+        self.log(f"Saving to: {save_path_obj}", "info")
+        
+        if self.download_file(download_url, str(save_path_obj), "Affinity installer"):
+            self.log(f"\n✓ Download completed successfully!", "success")
+            self.log(f"Installer saved to: {save_path_obj}", "success")
+            self.show_message(
+                "Download Complete",
+                f"Affinity installer has been downloaded successfully!\n\n"
+                f"Saved to:\n{save_path_obj}\n\n"
+                f"You can now use this installer with 'Install from File Manager' or during installation.",
+                "info"
+            )
+        else:
+            self.log("Download failed.", "error")
+            self.show_message(
+                "Download Failed",
+                f"Failed to download the Affinity installer.\n\n"
+                f"You can try downloading manually from:\n"
+                f"https://downloads.affinity.studio/Affinity%20x64.exe",
+                "error"
+            )
     
     def show_thanks(self):
         """Show special thanks window"""
