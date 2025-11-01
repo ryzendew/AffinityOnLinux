@@ -89,7 +89,7 @@ sudo zypper install python3-qt6
 sudo apt install python3-pyqt6
 ```
 
-**Note:** The GUI installer will attempt to automatically install PyQt6 via pip if it's not found. For other distributions, please install the appropriate `python3-pyqt6` or `python3-qt6` package using your distribution's package manager.
+**Note:** PyQt6 is required to run the GUI installer. The installer will attempt to automatically install PyQt6 via pip if it's not found, but if automatic installation fails, you must install it manually using your distribution's package manager (see above) or via pip: `pip install --user PyQt6`
 
 ### Individual Application Installers
 
