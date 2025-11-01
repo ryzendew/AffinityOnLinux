@@ -1775,6 +1775,49 @@ class AffinityInstallerGUI(QMainWindow):
                 installer_file.unlink()
                 self.log("Installer file removed", "success")
             
+            # Remove Wine desktop entries created by the installer
+            desktop_dir = Path.home() / ".local" / "share" / "applications"
+            wine_desktop_dir = desktop_dir / "wine" / "Programs"
+            
+            # Ensure display_name is a string
+            if not isinstance(display_name, str):
+                display_name = str(display_name) if display_name is not None else ""
+            
+            # Map display names to possible Wine desktop entry names
+            wine_entry_names = []
+            if display_name and ("Unified" in display_name or display_name == "Affinity (Unified)"):
+                wine_entry_names = ["Affinity.desktop"]
+            elif display_name and "Photo" in display_name:
+                wine_entry_names = ["Affinity Photo 2.desktop", "Affinity Photo.desktop"]
+            elif display_name and "Designer" in display_name:
+                wine_entry_names = ["Affinity Designer 2.desktop", "Affinity Designer.desktop"]
+            elif display_name and "Publisher" in display_name:
+                wine_entry_names = ["Affinity Publisher 2.desktop", "Affinity Publisher.desktop"]
+            
+            removed_count = 0
+            for entry_name in wine_entry_names:
+                wine_entry = wine_desktop_dir / entry_name
+                if wine_entry.exists():
+                    try:
+                        wine_entry.unlink()
+                        removed_count += 1
+                        self.log(f"Removed Wine desktop entry: {entry_name}", "info")
+                    except Exception as e:
+                        self.log(f"Could not remove {entry_name}: {e}", "error")
+            
+            # Also check for generic Affinity.desktop if not already checked
+            if display_name and "Unified" not in display_name:
+                generic_entry = wine_desktop_dir / "Affinity.desktop"
+                if generic_entry.exists():
+                    try:
+                        generic_entry.unlink()
+                        self.log("Removed Wine desktop entry: Affinity.desktop", "info")
+                    except Exception as e:
+                        self.log(f"Could not remove Affinity.desktop: {e}", "error")
+            
+            if removed_count > 0:
+                self.log(f"Cleaned up {removed_count} Wine desktop entr{'y' if removed_count == 1 else 'ies'}", "success")
+            
             self.log(f"\n✓ {display_name} update completed!", "success")
             self.log("The application has been updated. Use your existing desktop entry to launch it.", "info")
             
