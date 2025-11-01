@@ -174,8 +174,8 @@ if [ -n "$missing_deps" ]; then
             echo -e "${RED}${BOLD}This script will now exit.${NC}"
             ;;
         *)
-            print_info "Please install the missing dependencies and rerun this script."
-            print_info "Example for Arch-based systems: sudo pacman -S wine winetricks wget curl p7zip tar"
+    print_info "Please install the missing dependencies and rerun this script."
+    print_info "Example for Arch-based systems: sudo pacman -S wine winetricks wget curl p7zip tar"
             ;;
     esac
     exit 1

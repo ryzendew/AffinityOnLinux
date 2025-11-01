@@ -198,12 +198,12 @@ check_dependencies() {
             fi
             ;;
         *)
-            if [ -n "$missing_deps" ]; then
-                print_warning "Missing dependencies: $missing_deps"
-                install_dependencies
-            else
-                print_success "All required dependencies are installed!"
-            fi
+    if [ -n "$missing_deps" ]; then
+        print_warning "Missing dependencies: $missing_deps"
+        install_dependencies
+    else
+        print_success "All required dependencies are installed!"
+    fi
             ;;
     esac
     echo ""
@@ -277,7 +277,7 @@ install_dependencies() {
             print_error "This function should not be called for unsupported distributions"
             exit 1
             ;;
-        "arch"|"cachyos")
+        "arch"|"cachyos"|"endeavouros")
             sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd
             ;;
         "fedora"|"nobara")

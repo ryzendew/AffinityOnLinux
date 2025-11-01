@@ -45,7 +45,7 @@ def install_package(package_name, import_name=None):
         # Try with --break-system-packages for PEP 668 systems
         distro = detect_distro_for_install()
         pip_flags = ["--user"]
-        if distro in ["arch", "cachyos", "manjaro"]:
+        if distro in ["arch", "cachyos", "manjaro", "endeavouros"]:
             pip_flags.append("--break-system-packages")
         # Add quiet only if we're not showing output
         if not sys.stdout.isatty():
@@ -112,7 +112,7 @@ if not PYQT6_AVAILABLE:
     print("Using pip:")
     print("  pip install --user PyQt6")
     print("\nOr using your distribution's package manager:")
-    print("  Arch/CachyOS: sudo pacman -S python-pyqt6")
+    print("  Arch/CachyOS/EndeavourOS: sudo pacman -S python-pyqt6")
     print("  Fedora/Nobara: sudo dnf install python3-pyqt6")
     print("  Debian/Ubuntu/Mint/Pop/Zorin/PikaOS: sudo apt install python3-pyqt6")
     print("  openSUSE: sudo zypper install python3-qt6")
@@ -683,6 +683,7 @@ class AffinityInstallerGUI(QMainWindow):
             [
                 ("Open Wine Configuration", self.open_winecfg),
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer),
+                ("Fix Settings", self.install_affinity_settings),
             ]
         )
         container_layout.addWidget(troubleshoot_group)
@@ -940,7 +941,12 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress(0.40)
         self.setup_wine()
         
-        # Complete! (setup_wine already calls configure_wine which installs winetricks deps)
+        # Step 4: Install Affinity v3 settings to enable settings saving
+        self.update_progress(0.90)
+        self.log("Installing Affinity v3 settings files...", "info")
+        self._install_affinity_settings_thread()
+        
+        # Complete!
         self.update_progress(1.0)
         self.log("\n✓ Full setup completed!", "success")
         self.log("You can now install Affinity applications using the buttons above.", "info")
@@ -1066,6 +1072,7 @@ class AffinityInstallerGUI(QMainWindow):
         commands = {
             "arch": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
             "cachyos": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
+            "endeavouros": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
             "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
             "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
             "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
@@ -1546,6 +1553,291 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("\n✓ Winetricks dependencies installation completed!", "success")
     
+    def install_affinity_settings(self):
+        """Install Affinity v3 (Unified) settings files to enable settings saving"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Fix Settings (Affinity v3 only)", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        self.log("Note: This fix applies only to Affinity v3 (Unified).", "info")
+        
+        # Check if Wine is set up
+        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        if not wine_binary.exists():
+            self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
+            QMessageBox.warning(
+                self,
+                "Wine Not Ready",
+                "Wine setup must complete before installing Affinity v3 settings.\n"
+                "Please setup Wine environment first."
+            )
+            return
+        
+        threading.Thread(target=self._install_affinity_settings_thread, daemon=True).start()
+    
+    def _install_affinity_settings_thread(self):
+        """Install Affinity v3 (Unified) settings in background thread - downloads repo and copies Settings"""
+        # Determine Windows username
+        # Wine typically uses "Public" as the default username, but check for existing users
+        users_dir = Path(self.directory) / "drive_c" / "users"
+        username = "Public"  # Default Wine username
+        
+        # Check if users directory exists and has other users
+        if users_dir.exists():
+            # Look for existing user directories (excluding Public, Default, etc.)
+            existing_users = [d.name for d in users_dir.iterdir() if d.is_dir() and d.name not in ["Public", "Default", "All Users", "Default User"]]
+            if existing_users:
+                # Use the first existing user, or fall back to Public
+                username = existing_users[0]
+                self.log(f"Using existing Windows user: {username}", "info")
+            else:
+                self.log(f"Using default Windows user: {username}", "info")
+        else:
+            self.log(f"Creating users directory structure for: {username}", "info")
+            users_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create temp directory for cloning/downloading
+        temp_dir = Path(self.directory) / ".temp_settings"
+        if temp_dir.exists():
+            self.log("Cleaning up existing temp directory...", "info")
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                self.log(f"Warning: Could not remove existing temp dir: {e}", "warning")
+        temp_dir.mkdir(exist_ok=True)
+        
+        # Download the repository as a zip file
+        self.log("Downloading Settings from GitHub repository...", "info")
+        repo_zip = temp_dir / "AffinityOnLinux.zip"
+        repo_url = "https://github.com/seapear/AffinityOnLinux/archive/refs/heads/main.zip"
+        
+        if not self.download_file(repo_url, str(repo_zip), "Settings repository"):
+            self.log("Failed to download Settings repository", "error")
+            self.log(f"  URL: {repo_url}", "error")
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+            return
+        
+        # Verify the zip file was downloaded
+        if not repo_zip.exists() or repo_zip.stat().st_size == 0:
+            self.log("Downloaded zip file is missing or empty", "error")
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+            return
+        
+        self.log(f"Downloaded zip file size: {repo_zip.stat().st_size / 1024 / 1024:.2f} MB", "info")
+        
+        # Extract the zip file
+        self.log("Extracting Settings repository...", "info")
+        try:
+            if self.check_command("7z"):
+                success, stdout, stderr = self.run_command([
+                    "7z", "x", str(repo_zip), f"-o{temp_dir}", "-y"
+                ])
+                if not success:
+                    self.log(f"7z extraction failed: {stderr}", "error")
+                    raise Exception("7z extraction failed")
+                self.log("Extraction completed with 7z", "success")
+            elif self.check_command("unzip"):
+                with zipfile.ZipFile(repo_zip, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+                self.log("Extraction completed with unzip", "success")
+            else:
+                self.log("Neither 7z nor unzip available for extraction", "error")
+                self.log("Please install 7z or unzip to extract the repository", "error")
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+                return
+            
+            # Find the extracted directory (usually AffinityOnLinux-main)
+            extracted_dirs = list(temp_dir.glob("AffinityOnLinux-*"))
+            self.log(f"Found {len(extracted_dirs)} extracted director{'y' if len(extracted_dirs) == 1 else 'ies'}", "info")
+            
+            extracted_dir = extracted_dirs[0] if extracted_dirs else None
+            if not extracted_dir:
+                self.log("Could not find extracted repository directory", "error")
+                self.log(f"Contents of temp_dir: {[d.name for d in temp_dir.iterdir()]}", "error")
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+                return
+            
+            self.log(f"Using extracted directory: {extracted_dir.name}", "info")
+            
+            # Check if Auxiliary directory exists
+            auxiliary_dir = extracted_dir / "Auxiliary"
+            if not auxiliary_dir.exists():
+                self.log("Auxiliary directory not found in repository", "error")
+                self.log(f"Contents of extracted directory: {[d.name for d in extracted_dir.iterdir()]}", "error")
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+                return
+            
+            settings_dir = auxiliary_dir / "Settings"
+            if not settings_dir.exists():
+                self.log("Settings directory not found in Auxiliary", "error")
+                self.log(f"Contents of Auxiliary: {[d.name for d in auxiliary_dir.iterdir()]}", "error")
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+                return
+            
+            # List what's in the Settings directory
+            settings_contents = [d.name for d in settings_dir.iterdir() if d.is_dir()]
+            self.log(f"Found Settings folders: {settings_contents}", "info")
+            
+            # Source Settings directory path - For Affinity v3 (Unified), use 3.0
+            # $APP would be "Affinity" and version is 3.0
+            # So the source should be: Auxiliary/Settings/Affinity/3.0/Settings
+            settings_source_dirs = [
+                settings_dir / "Affinity" / "3.0" / "Settings",  # Affinity v3 uses 3.0
+                settings_dir / "Affinity" / "Settings",
+                settings_dir / "Unified" / "3.0" / "Settings",
+                settings_dir / "Unified" / "Settings",
+            ]
+            
+            settings_source = None
+            for source_dir in settings_source_dirs:
+                if source_dir.exists():
+                    files = list(source_dir.iterdir())
+                    if files:
+                        settings_source = source_dir
+                        self.log(f"Found settings at: {source_dir.relative_to(extracted_dir)}", "success")
+                        self.log(f"  Contains {len(files)} file(s)/folder(s)", "info")
+                        break
+            
+            if not settings_source:
+                self.log("Settings directory not found in repository", "error")
+                self.log("Tried paths:", "error")
+                for path in settings_source_dirs:
+                    self.log(f"  - {path.relative_to(extracted_dir)}: {'exists' if path.exists() else 'not found'}", "error")
+                
+                # List what's actually in Settings/Affinity if it exists
+                affinity_settings = settings_dir / "Affinity"
+                if affinity_settings.exists():
+                    self.log(f"Contents of Settings/Affinity: {[d.name for d in affinity_settings.iterdir()]}", "info")
+                
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+                return
+            
+            # Target directory in Wine prefix
+            # Based on Settings.md: mv $APP/3.0/Settings drive_c/users/$USERNAME/AppData/Roaming/Affinity/
+            # For Affinity v3, this means: Affinity/3.0/Settings -> AppData/Roaming/Affinity/Affinity/3.0/Settings
+            affinity_appdata = users_dir / username / "AppData" / "Roaming" / "Affinity"
+            
+            # Check what version folder Affinity v3 actually uses by looking at existing structure
+            affinity_dir = affinity_appdata / "Affinity"
+            version_folder = None
+            if affinity_dir.exists():
+                existing_versions = [d.name for d in affinity_dir.iterdir() if d.is_dir()]
+                if existing_versions:
+                    # Prefer 3.0 for Affinity v3
+                    if "3.0" in existing_versions:
+                        version_folder = "3.0"
+                    elif "2.0" in existing_versions:
+                        version_folder = "2.0"
+                    else:
+                        # Use the first one found (sorted)
+                        version_folder = sorted(existing_versions)[0]
+                    self.log(f"Found existing Affinity version folder: {version_folder}", "info")
+            
+            # If no existing version folder, use 3.0 for Affinity v3
+            if not version_folder:
+                # Try to detect from source path
+                source_parts = settings_source.parts
+                if "3.0" in source_parts:
+                    version_folder = "3.0"
+                elif "2.0" in source_parts:
+                    version_folder = "2.0"
+                else:
+                    version_folder = "3.0"  # Default to 3.0 for Affinity v3
+                self.log(f"Using version folder: {version_folder} (Affinity v3 uses 3.0)", "info")
+            
+            # Target path: AppData/Roaming/Affinity/Affinity/3.0/Settings (for v3)
+            target_dir = affinity_appdata / "Affinity" / version_folder / "Settings"
+            
+            # Remove existing settings if they exist (to force fresh copy)
+            if target_dir.exists():
+                self.log(f"Removing existing settings from: {target_dir}", "info")
+                try:
+                    shutil.rmtree(target_dir)
+                    self.log("Old settings removed", "success")
+                except Exception as e:
+                    self.log(f"Warning: Could not fully remove old settings: {e}", "warning")
+            
+            # Copy settings from source to target
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            self.log(f"Copying settings from repository to Wine prefix...", "info")
+            self.log(f"  From: {settings_source}", "info")
+            self.log(f"  To: {target_dir}", "info")
+            
+            # Copy with metadata preservation
+            shutil.copytree(settings_source, target_dir, dirs_exist_ok=True)
+            self.log(f"Settings copied successfully to: {target_dir}", "success")
+            
+            # Verify the copy
+            copied_files = list(target_dir.rglob("*"))
+            source_files = list(settings_source.rglob("*"))
+            self.log(f"Copied {len(copied_files)} file(s)/folder(s) (source had {len(source_files)})", "success")
+            
+            # List some of the copied files for verification
+            xml_files = list(target_dir.rglob("*.xml"))
+            if xml_files:
+                self.log(f"Found {len(xml_files)} XML file(s) in settings", "info")
+                for xml_file in xml_files[:5]:  # Show first 5
+                    self.log(f"  - {xml_file.relative_to(target_dir)}", "info")
+            
+            # Set permissions (make sure files are readable)
+            try:
+                import os
+                for root, dirs, files in os.walk(target_dir):
+                    for d in dirs:
+                        os.chmod(os.path.join(root, d), 0o755)
+                    for f in files:
+                        os.chmod(os.path.join(root, f), 0o644)
+                self.log("File permissions set correctly", "success")
+            except Exception as e:
+                self.log(f"Note: Could not set permissions: {e}", "warning")
+            
+            # Clean up temp files
+            try:
+                shutil.rmtree(temp_dir)
+                self.log("Temp files cleaned up", "info")
+            except Exception as e:
+                self.log(f"Note: Could not clean up temp files: {e}", "warning")
+            
+            self.log("\n✓ Affinity v3 settings installation completed!", "success")
+            self.log("Settings files have been installed for Affinity v3 (Unified).", "info")
+            self.log(f"Settings location: {target_dir}", "info")
+            self.log("", "info")
+            self.log("Note: If settings still don't save:", "info")
+            self.log("  1. Try launching Affinity v3 once to ensure it creates its directory structure", "info")
+            self.log("  2. Check that the Settings folder exists at the path shown above", "info")
+            self.log("  3. Verify file permissions allow read/write access", "info")
+            
+        except Exception as e:
+            import traceback
+            self.log(f"Error installing settings: {e}", "error")
+            self.log(f"Traceback: {traceback.format_exc()}", "error")
+            # Clean up on error
+            try:
+                shutil.rmtree(temp_dir)
+                repo_zip.unlink(missing_ok=True)
+            except:
+                pass
+    
     def install_from_file(self):
         """Install from file manager - custom .exe file"""
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -1818,16 +2110,64 @@ class AffinityInstallerGUI(QMainWindow):
             if removed_count > 0:
                 self.log(f"Cleaned up {removed_count} Wine desktop entr{'y' if removed_count == 1 else 'ies'}", "success")
             
+            # Reinstall WinMetadata to avoid corruption
+            self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            self.log("Reinstalling WinMetadata to prevent corruption...", "info")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            
+            # Kill Wine processes before removing WinMetadata
+            self.log("Stopping Wine processes...", "info")
+            self.run_command(["wineserver", "-k"], check=False)
+            time.sleep(2)
+            
+            system32_dir = Path(self.directory) / "drive_c" / "windows" / "system32"
+            winmetadata_dir = system32_dir / "WinMetadata"
+            
+            # Remove existing WinMetadata folder
+            if winmetadata_dir.exists():
+                self.log("Removing existing WinMetadata folder...", "info")
+                try:
+                    shutil.rmtree(winmetadata_dir)
+                    self.log("Old WinMetadata folder removed", "success")
+                except Exception as e:
+                    self.log(f"Warning: Could not fully remove old folder: {e}", "warning")
+            
+            # Also remove the zip file to force re-download
+            winmetadata_zip = Path(self.directory) / "Winmetadata.zip"
+            if winmetadata_zip.exists():
+                self.log("Removing cached WinMetadata.zip to force fresh download...", "info")
+                try:
+                    winmetadata_zip.unlink()
+                    self.log("Cached zip file removed", "success")
+                except Exception as e:
+                    self.log(f"Warning: Could not remove cached zip: {e}", "warning")
+            
+            # Reinstall WinMetadata
+            self.log("Installing fresh WinMetadata...", "info")
+            self.setup_winmetadata()
+            
+            # For Affinity v3 (Unified), reinstall settings files after update
+            if display_name and ("Unified" in display_name or display_name == "Affinity (Unified)"):
+                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log("Reinstalling Affinity v3 settings files...", "info")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                self._install_affinity_settings_thread()
+            
             self.log(f"\n✓ {display_name} update completed!", "success")
             self.log("The application has been updated. Use your existing desktop entry to launch it.", "info")
             
             # Refresh installation status to update button states
             QTimer.singleShot(100, self.check_installation_status)
             
+            message_text = f"{display_name} has been successfully updated!\n\n"
+            message_text += "WinMetadata has been reinstalled to prevent corruption.\n"
+            if display_name and ("Unified" in display_name or display_name == "Affinity (Unified)"):
+                message_text += "Affinity v3 settings have been reinstalled.\n"
+            message_text += "Use your existing desktop entry to launch the application."
+            
             self.show_message(
                 "Update Complete",
-                f"{display_name} has been successfully updated!\n\n"
-                "Use your existing desktop entry to launch the application.",
+                message_text,
                 "info"
             )
         except Exception as e:
