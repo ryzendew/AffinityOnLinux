@@ -819,13 +819,13 @@ install_affinity() {
     
     # Verify Windows version before installation
     verify_windows_version
-    
+
+    # Downloads the Affinity x64 Windows binary
     echo ""
-    print_step "Please download the Affinity $app_name installer (.exe) from:"
-    echo -e "  ${CYAN}https://www.affinity.studio/account/licenses/${NC}"
-    echo ""
-    print_step "Once downloaded, drag and drop the installer into this terminal and press Enter:"
-    read installer_path
+    print_step "Downloading Affinity $app_name binary"
+    rm -f affinity64.exe
+    wget https://downloads.affinity.studio/Affinity%20x64.exe -o affinity64.exe
+    installer_path=$PWD/affinity64.exe
     
     # Normalize the path
     installer_path=$(normalize_path "$installer_path")
