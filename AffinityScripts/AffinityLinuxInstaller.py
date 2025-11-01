@@ -1997,15 +1997,27 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Installation cancelled.", "warning")
             return
         
-        # Ask for application name
-        app_name, ok = QInputDialog.getText(
-            self,
-            "Application Name",
-            "Enter the name for this application:\n(e.g., 'MyApp', 'CustomSoftware')"
-        )
+        # Detect app name from filename - check multiple patterns
+        filename_lower = Path(installer_path).name.lower()
+        filename_no_spaces = filename_lower.replace(" ", "").replace("-", "").replace("_", "")
+        app_name = None
         
-        if not ok or not app_name:
-            app_name = "CustomApp"
+        # Check various patterns that might be in Affinity installer filenames
+        if "photo" in filename_lower or "photo" in filename_no_spaces:
+            app_name = "Photo"
+            self.log(f"Detected: Affinity Photo (from filename: {Path(installer_path).name})", "info")
+        elif "designer" in filename_lower or "designer" in filename_no_spaces:
+            app_name = "Designer"
+            self.log(f"Detected: Affinity Designer (from filename: {Path(installer_path).name})", "info")
+        elif "publisher" in filename_lower or "publisher" in filename_no_spaces:
+            app_name = "Publisher"
+            self.log(f"Detected: Affinity Publisher (from filename: {Path(installer_path).name})", "info")
+        else:
+            self.log(f"Could not detect Affinity app from filename: {Path(installer_path).name}", "warning")
+            self.log("Desktop entry will not be created automatically for non-Affinity apps.", "info")
+        
+        if app_name:
+            self.log(f"Will automatically create desktop entry for {app_name}", "info")
         
         # Start installation
         threading.Thread(
@@ -2019,8 +2031,10 @@ class AffinityInstallerGUI(QMainWindow):
         try:
             self.log(f"Selected installer: {installer_path}", "success")
             
-            # Copy installer
-            installer_file = Path(self.directory) / Path(installer_path).name
+            # Copy installer with sanitized filename (remove spaces)
+            original_filename = Path(installer_path).name
+            sanitized_filename = self.sanitize_filename(original_filename)
+            installer_file = Path(self.directory) / sanitized_filename
             shutil.copy2(installer_path, installer_file)
             self.log("Installer copied to Wine prefix", "success")
             
@@ -2050,18 +2064,64 @@ class AffinityInstallerGUI(QMainWindow):
             # Restore WinMetadata
             self.restore_winmetadata()
             
-            # Ask if user wants to create desktop entry (this needs to be called from main thread)
-            # Use QTimer to ensure it runs on main thread
-            QTimer.singleShot(0, lambda path=installer_path, name=app_name: self.create_custom_desktop_entry(path, name))
-            
-            self.log(f"\n✓ {app_name} installation completed!", "success")
-            
-            self.show_message(
-                "Installation Complete",
-                f"{app_name} has been successfully installed using the custom Wine!\n\n"
-                "You can launch it from your application menu if a desktop entry was created.",
-                "info"
-            )
+            # If it's an Affinity app, automatically create desktop entry and configure OpenCL
+            if app_name in ["Photo", "Designer", "Publisher"]:
+                self.log(f"Detected Affinity app: {app_name}, configuring...", "info")
+                
+                # Wait a bit more to ensure installation is fully complete
+                time.sleep(2)
+                
+                # Configure OpenCL for Affinity apps
+                self.configure_opencl(app_name)
+                
+                # Verify app path exists before creating desktop entry
+                app_names = {
+                    "Photo": ("Photo", "Photo.exe", "Photo 2"),
+                    "Designer": ("Designer", "Designer.exe", "Designer 2"),
+                    "Publisher": ("Publisher", "Publisher.exe", "Publisher 2")
+                }
+                name, exe, dir_name = app_names.get(app_name, ("", "", ""))
+                app_path = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / dir_name / exe
+                
+                if app_path.exists():
+                    self.log(f"Found application at: {app_path}", "success")
+                    # Automatically create desktop entry
+                    # Call directly - create_desktop_entry uses signals so it's thread-safe
+                    try:
+                        self.create_desktop_entry(app_name)
+                        self.log("Desktop entry created successfully", "success")
+                    except Exception as e:
+                        self.log(f"Error creating desktop entry: {e}", "error")
+                else:
+                    self.log(f"Warning: Application not found at expected path: {app_path}", "warning")
+                    self.log("Desktop entry will not be created automatically.", "warning")
+                
+                display_name = {
+                    "Photo": "Affinity Photo",
+                    "Designer": "Affinity Designer",
+                    "Publisher": "Affinity Publisher"
+                }.get(app_name, app_name)
+                
+                self.log(f"\n✓ {display_name} installation completed!", "success")
+                self.log("You can now launch it from your application menu.", "info")
+                
+                self.show_message(
+                    "Installation Complete",
+                    f"{display_name} has been successfully installed!\n\n"
+                    "You can launch it from your application menu.",
+                    "info"
+                )
+            else:
+                # For non-Affinity apps, just complete without desktop entry
+                display_name = app_name if app_name else "Application"
+                self.log(f"\n✓ {display_name} installation completed!", "success")
+                
+                self.show_message(
+                    "Installation Complete",
+                    f"{display_name} has been successfully installed!\n\n"
+                    "You may need to create a desktop entry manually if needed.",
+                    "info"
+                )
         except Exception as e:
             self.log(f"Installation error: {e}", "error")
             self.show_message("Installation Error", f"An error occurred:\n{e}", "error")
