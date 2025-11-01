@@ -42,6 +42,50 @@ The unified installer provides a single interface to install any Affinity applic
 bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.sh)"
 ```
 
+### Python GUI Installer
+
+A modern PyQt6-based graphical user interface for the Affinity Linux Installer, providing a clean and professional installation experience with a VS Code-inspired dark theme.
+
+**Features:**
+- **One-Click Full Setup** - Automatically detects your distribution, installs dependencies, sets up Wine, and configures everything
+- **System Setup Tools** - Install system dependencies, Winetricks components, and set up Wine environment separately
+- **Update Affinity Applications** - Update existing installations without creating new desktop entries or reinstalling dependencies
+- **Troubleshooting Tools** - Open Wine Configuration and set Windows 11 with OpenGL/Vulkan renderer selection
+- **Custom Installation** - Install any Windows application using the custom Wine environment
+- **Visual Progress Tracking** - Real-time progress bars and detailed logging
+- **Modern UI** - Clean, organized interface with grouped button sections
+
+**Installation:**
+
+```bash
+python AffinityScripts/AffinityLinuxInstaller.py
+```
+
+**Usage:**
+1. Run the installer - it will automatically attempt to install PyQt6 if needed
+2. Click **"One-Click Full Setup"** for automatic configuration, or use individual setup buttons
+3. Once Wine is set up, use **"Update Affinity Applications"** to install or update Affinity apps
+4. Use **"Troubleshooting"** tools to configure Wine settings and renderers
+
+**GUI Dependencies:**
+
+**Arch/CachyOS:**
+```bash
+sudo pacman -S python-pyqt6
+```
+
+**Fedora/Nobara:**
+```bash
+sudo dnf install python3-pyqt6
+```
+
+**PikaOS:**
+```bash
+sudo apt install python3-pyqt6
+```
+
+**Note:** The GUI installer will attempt to automatically install PyQt6 via pip if it's not found. For other distributions, please install the appropriate `python3-pyqt6` or `python3-qt6` package using your distribution's package manager.
+
 ### Individual Application Installers
 
 For users who prefer to install applications individually, dedicated installers are available:
