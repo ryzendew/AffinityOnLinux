@@ -53,7 +53,8 @@ A modern PyQt6-based graphical user interface for the Affinity Linux Installer, 
 - **Troubleshooting Tools** - Open Wine Configuration and set Windows 11 with OpenGL/Vulkan renderer selection
 - **Custom Installation** - Install any Windows application using the custom Wine environment
 - **Visual Progress Tracking** - Real-time progress bars and detailed logging
-- **Modern UI** - Clean, organized interface with grouped button sections
+- **Modern UI** - Clean, organized interface with grouped button sections and rounded corners
+- **Zoom Controls** - Adjustable log output font size with zoom buttons (🔍➖, 🔍, 🔍➕) or keyboard shortcuts (Ctrl++/Ctrl+-/Ctrl+0)
 
 **Installation:**
 
@@ -74,6 +75,13 @@ python AffinityScripts/AffinityLinuxInstaller.py
 2. Click **"One-Click Full Setup"** for automatic configuration, or use individual setup buttons
 3. Once Wine is set up, use **"Update Affinity Applications"** to install or update Affinity apps
 4. Use **"Troubleshooting"** tools to configure Wine settings and renderers
+
+**Zoom Controls:**
+- **Zoom In**: Click the **🔍➕** button or press `Ctrl++` / `Ctrl+=`
+- **Zoom Out**: Click the **🔍➖** button or press `Ctrl+-` / `Ctrl+Minus`
+- **Reset Zoom**: Click the **🔍** button or press `Ctrl+0`
+- **Mouse Wheel Zoom**: Hold `Ctrl` and scroll with the mouse wheel over the log area
+- Font size range: 6px (minimum) to 48px (maximum), default: 11px
 
 **GUI Dependencies:**
 

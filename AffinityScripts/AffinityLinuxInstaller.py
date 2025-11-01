@@ -81,7 +81,7 @@ try:
         QButtonGroup, QRadioButton
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
-    from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap
+    from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
     from PyQt6.QtSvgWidgets import QSvgWidget
     PYQT6_AVAILABLE = True
 except ImportError:
@@ -95,7 +95,7 @@ except ImportError:
                 QButtonGroup, QRadioButton
             )
             from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
-            from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap
+            from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
             from PyQt6.QtSvgWidgets import QSvgWidget
             PYQT6_AVAILABLE = True
             print("✓ PyQt6 installed and imported successfully")
@@ -119,6 +119,36 @@ if not PYQT6_AVAILABLE:
     sys.exit(1)
 
 
+class ZoomableTextEdit(QTextEdit):
+    """QTextEdit with Ctrl+Wheel zoom support"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.zoom_in_callback = None
+        self.zoom_out_callback = None
+    
+    def set_zoom_callbacks(self, zoom_in, zoom_out):
+        """Set callbacks for zoom in/out"""
+        self.zoom_in_callback = zoom_in
+        self.zoom_out_callback = zoom_out
+    
+    def wheelEvent(self, event):
+        """Handle mouse wheel events for zoom (Ctrl+Wheel) or scroll"""
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Zoom with Ctrl+Wheel
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoomIn(1)
+                if self.zoom_in_callback:
+                    self.zoom_in_callback()
+            elif delta < 0:
+                self.zoomOut(1)
+                if self.zoom_out_callback:
+                    self.zoom_out_callback()
+        else:
+            # Normal scrolling
+            super().wheelEvent(event)
+
+
 class AffinityInstallerGUI(QMainWindow):
     # Signals for thread-safe GUI updates
     log_signal = pyqtSignal(str, str)  # message, level
@@ -138,6 +168,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.setup_complete = False
         self.installer_file = None
         self.update_buttons = {}  # Store references to update buttons
+        self.log_font_size = 11  # Initial font size for log area
         
         # Connect signals
         self.log_signal.connect(self._log_safe)
@@ -152,6 +183,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Apply dark theme
         self.apply_dark_theme()
+        
+        # Setup zoom functionality
+        self.setup_zoom()
         
         # Center window
         self.center_window()
@@ -255,7 +289,7 @@ class AffinityInstallerGUI(QMainWindow):
                         font-size: 11px;
                         font-weight: 500;
                         text-align: left;
-                        border-radius: 3px;
+                        border-radius: 8px;
                     }
                 """)
             else:
@@ -268,6 +302,78 @@ class AffinityInstallerGUI(QMainWindow):
         screen = self.screen().availableGeometry().center()
         frame.moveCenter(screen)
         self.move(frame.topLeft())
+    
+    def setup_zoom(self):
+        """Setup zoom in/out functionality for log area"""
+        # Zoom in: Ctrl+Plus or Ctrl+=
+        zoom_in_shortcut = QShortcut(QKeySequence("Ctrl+Plus"), self)
+        zoom_in_shortcut.activated.connect(self.zoom_in)
+        zoom_in_shortcut_alt = QShortcut(QKeySequence("Ctrl+="), self)
+        zoom_in_shortcut_alt.activated.connect(self.zoom_in)
+        
+        # Zoom out: Ctrl+Minus or Ctrl+-
+        zoom_out_shortcut = QShortcut(QKeySequence("Ctrl+Minus"), self)
+        zoom_out_shortcut.activated.connect(self.zoom_out)
+        zoom_out_shortcut_alt = QShortcut(QKeySequence("Ctrl+-"), self)
+        zoom_out_shortcut_alt.activated.connect(self.zoom_out)
+        
+        # Reset zoom: Ctrl+0
+        zoom_reset_shortcut = QShortcut(QKeySequence("Ctrl+0"), self)
+        zoom_reset_shortcut.activated.connect(self.zoom_reset)
+    
+    def zoom_in(self):
+        """Zoom in (increase font size)"""
+        if not hasattr(self, 'log_text') or not self.log_text:
+            return
+        
+        new_size = min(self.log_font_size + 1, 48)
+        if new_size != self.log_font_size:
+            self.log_font_size = new_size
+            font = QFont("Consolas", self.log_font_size)
+            self.log_text.setFont(font)
+            # Also set document default font to affect HTML content
+            self.log_text.document().setDefaultFont(font)
+            self.update_zoom_buttons()
+    
+    def zoom_out(self):
+        """Zoom out (decrease font size)"""
+        if not hasattr(self, 'log_text') or not self.log_text:
+            return
+        
+        new_size = max(self.log_font_size - 1, 6)
+        if new_size != self.log_font_size:
+            self.log_font_size = new_size
+            font = QFont("Consolas", self.log_font_size)
+            self.log_text.setFont(font)
+            # Also set document default font to affect HTML content
+            self.log_text.document().setDefaultFont(font)
+            self.update_zoom_buttons()
+    
+    def zoom_reset(self):
+        """Reset zoom to default size"""
+        if not hasattr(self, 'log_text') or not self.log_text:
+            return
+        
+        self.log_font_size = 11
+        font = QFont("Consolas", 11)
+        self.log_text.setFont(font)
+        # Also set document default font to affect HTML content
+        self.log_text.document().setDefaultFont(font)
+        self.update_zoom_buttons()
+    
+    def update_zoom_buttons(self):
+        """Update zoom button states"""
+        try:
+            if hasattr(self, 'log_text') and self.log_text:
+                current_font = self.log_text.currentFont()
+                current_size = current_font.pointSize() if current_font else self.log_font_size
+                
+                if hasattr(self, 'zoom_in_btn'):
+                    self.zoom_in_btn.setEnabled(current_size < 48)
+                if hasattr(self, 'zoom_out_btn'):
+                    self.zoom_out_btn.setEnabled(current_size > 6)
+        except Exception:
+            pass
     
     def apply_dark_theme(self):
         """Apply modern dark theme"""
@@ -285,19 +391,22 @@ class AffinityInstallerGUI(QMainWindow):
                 background-color: #252526;
                 margin-top: 10px;
                 padding-top: 10px;
+                border-radius: 12px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 5px;
+                padding: 0 8px;
                 background-color: #2d2d30;
                 color: #cccccc;
                 font-weight: bold;
                 font-size: 11px;
+                border-radius: 6px;
             }
             QFrame {
                 background-color: #252526;
                 border: none;
+                border-radius: 0px;
             }
             QPushButton {
                 background-color: #3c3c3c;
@@ -308,7 +417,7 @@ class AffinityInstallerGUI(QMainWindow):
                 font-size: 11px;
                 font-weight: 500;
                 text-align: left;
-                border-radius: 3px;
+                border-radius: 8px;
             }
             QPushButton:hover {
                 background-color: #464647;
@@ -325,19 +434,69 @@ class AffinityInstallerGUI(QMainWindow):
                 border: 1px solid #3c3c3c;
                 font-family: 'Consolas', monospace;
                 font-size: 11px;
+                border-radius: 8px;
             }
             QProgressBar {
                 border: none;
                 background-color: #3c3c3c;
-                height: 4px;
-                border-radius: 2px;
+                height: 6px;
+                border-radius: 3px;
             }
             QProgressBar::chunk {
                 background-color: #0e639c;
-                border-radius: 2px;
+                border-radius: 3px;
             }
             QLabel {
                 color: #ffffff;
+            }
+            QDialog {
+                background-color: #252526;
+                border-radius: 12px;
+            }
+            QMessageBox {
+                background-color: #252526;
+                border-radius: 12px;
+            }
+            QRadioButton {
+                color: #cccccc;
+                spacing: 8px;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                border: 2px solid #4a4a4a;
+                background-color: #3c3c3c;
+            }
+            QRadioButton::indicator:hover {
+                border-color: #5a5a5a;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #0e639c;
+                border-color: #0e639c;
+            }
+            QDialogButtonBox QPushButton {
+                border-radius: 8px;
+                min-width: 80px;
+            }
+            QPushButton[zoomButton="true"] {
+                background-color: #2d2d2d;
+                color: #cccccc;
+                border: 1px solid #3a3a3a;
+                padding: 4px 8px;
+                min-height: 24px;
+                max-width: 35px;
+                font-size: 14px;
+                border-radius: 6px;
+            }
+            QPushButton[zoomButton="true"]:hover {
+                background-color: #3c3c3c;
+                border-color: #4a4a4a;
+            }
+            QPushButton[zoomButton="true"]:disabled {
+                background-color: #252526;
+                color: #666666;
+                border-color: #2d2d2d;
             }
         """)
     
@@ -354,7 +513,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Top bar
         top_bar = QFrame()
-        top_bar.setStyleSheet("background-color: #252526; padding: 15px 20px;")
+        top_bar.setStyleSheet("background-color: #252526; padding: 15px 20px; border-top-left-radius: 0px; border-top-right-radius: 0px;")
         top_bar_layout = QHBoxLayout(top_bar)
         top_bar_layout.setContentsMargins(20, 15, 20, 15)
         
@@ -426,11 +585,51 @@ class AffinityInstallerGUI(QMainWindow):
         self.progress.setTextVisible(False)
         group_layout.addWidget(self.progress)
         
-        # Log output
-        self.log_text = QTextEdit()
+        # Zoom controls
+        zoom_container = QWidget()
+        zoom_layout = QHBoxLayout(zoom_container)
+        zoom_layout.setContentsMargins(0, 0, 0, 0)
+        zoom_layout.setSpacing(5)
+        zoom_layout.addStretch()
+        
+        # Zoom out button
+        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+-)")
+        self.zoom_out_btn.setProperty("zoomButton", True)
+        self.zoom_out_btn.setMaximumWidth(35)
+        self.zoom_out_btn.setMinimumWidth(35)
+        self.zoom_out_btn.clicked.connect(self.zoom_out)
+        zoom_layout.addWidget(self.zoom_out_btn)
+        
+        # Zoom reset button
+        self.zoom_reset_btn = QPushButton("🔍")
+        self.zoom_reset_btn.setToolTip("Reset Zoom (Ctrl+0)")
+        self.zoom_reset_btn.setProperty("zoomButton", True)
+        self.zoom_reset_btn.setMaximumWidth(35)
+        self.zoom_reset_btn.setMinimumWidth(35)
+        self.zoom_reset_btn.clicked.connect(self.zoom_reset)
+        zoom_layout.addWidget(self.zoom_reset_btn)
+        
+        # Zoom in button
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setToolTip("Zoom In (Ctrl++)")
+        self.zoom_in_btn.setProperty("zoomButton", True)
+        self.zoom_in_btn.setMaximumWidth(35)
+        self.zoom_in_btn.setMinimumWidth(35)
+        self.zoom_in_btn.clicked.connect(self.zoom_in)
+        zoom_layout.addWidget(self.zoom_in_btn)
+        
+        group_layout.addWidget(zoom_container)
+        
+        # Log output with zoom support
+        self.log_text = ZoomableTextEdit(self)
         self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", 11))
+        self.log_text.setFont(QFont("Consolas", self.log_font_size))
+        self.log_text.set_zoom_callbacks(self.zoom_in, self.zoom_out)
         group_layout.addWidget(self.log_text)
+        
+        # Initialize zoom button states
+        self.update_zoom_buttons()
         
         return group
     
