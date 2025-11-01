@@ -97,7 +97,7 @@ sudo dnf install python3-pyqt6
 
 **openSUSE (Tumbleweed/Leap):**
 ```bash
-sudo zypper install python3-qt6
+sudo zypper install python313-PyQt6
 ```
 
 **PikaOS:**
