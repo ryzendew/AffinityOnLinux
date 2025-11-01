@@ -60,6 +60,8 @@ A modern PyQt6-based graphical user interface for the Affinity Linux Installer, 
 ```bash
 python AffinityScripts/AffinityLinuxInstaller.py
 ```
+<img width="984" height="1043" alt="image" src="https://github.com/user-attachments/assets/245abbb1-332a-4c65-95c1-e89fa296735a" />
+
 
 **Usage:**
 1. Run the installer - it will automatically attempt to install PyQt6 if needed
