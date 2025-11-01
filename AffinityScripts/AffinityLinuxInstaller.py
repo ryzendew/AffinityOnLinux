@@ -45,7 +45,7 @@ def install_package(package_name, import_name=None):
         # Try with --break-system-packages for PEP 668 systems
         distro = detect_distro_for_install()
         pip_flags = ["--user"]
-        if distro in ["arch", "cachyos", "manjaro", "endeavouros"]:
+        if distro in ["arch", "cachyos", "manjaro", "endeavouros", "xerolinux"]:
             pip_flags.append("--break-system-packages")
         # Add quiet only if we're not showing output
         if not sys.stdout.isatty():
@@ -112,7 +112,7 @@ if not PYQT6_AVAILABLE:
     print("Using pip:")
     print("  pip install --user PyQt6")
     print("\nOr using your distribution's package manager:")
-    print("  Arch/CachyOS/EndeavourOS: sudo pacman -S python-pyqt6")
+    print("  Arch/CachyOS/EndeavourOS/XeroLinux: sudo pacman -S python-pyqt6")
     print("  Fedora/Nobara: sudo dnf install python3-pyqt6")
     print("  Debian/Ubuntu/Mint/Pop/Zorin/PikaOS: sudo apt install python3-pyqt6")
     print("  openSUSE: sudo zypper install python3-qt6")
@@ -1178,6 +1178,7 @@ class AffinityInstallerGUI(QMainWindow):
             "arch": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
             "cachyos": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
             "endeavouros": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
+            "xerolinux": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
             "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
             "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
             "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
