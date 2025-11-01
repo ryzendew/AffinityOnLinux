@@ -79,6 +79,11 @@ sudo pacman -S python-pyqt6
 sudo dnf install python3-pyqt6
 ```
 
+**openSUSE (Tumbleweed/Leap):**
+```bash
+sudo zypper install python3-qt6
+```
+
 **PikaOS:**
 ```bash
 sudo apt install python3-pyqt6

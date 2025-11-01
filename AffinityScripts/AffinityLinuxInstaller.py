@@ -113,7 +113,7 @@ if not PYQT6_AVAILABLE:
     print("  pip install --user PyQt6")
     print("\nOr using your distribution's package manager:")
     print("  Arch/CachyOS: sudo pacman -S python-pyqt6")
-    print("  Fedora/Nobara: sudo dnf install python3-qt6")
+    print("  Fedora/Nobara: sudo dnf install python3-pyqt6")
     print("  Debian/Ubuntu/Mint/Pop/Zorin/PikaOS: sudo apt install python3-pyqt6")
     print("  openSUSE: sudo zypper install python3-qt6")
     sys.exit(1)
@@ -137,6 +137,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.directory = str(Path.home() / ".AffinityLinux")
         self.setup_complete = False
         self.installer_file = None
+        self.update_buttons = {}  # Store references to update buttons
         
         # Connect signals
         self.log_signal.connect(self._log_safe)
@@ -159,8 +160,107 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Affinity Linux Installer - Ready", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        self.log("System Detection:", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
+        
+        # Check installation status and update button states
+        self.check_installation_status()
+        
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
         self.log("Welcome! Please use the buttons on the right to get started.", "info")
-        self.log("Click 'Setup Wine Environment' to begin the installation process.", "info")
+        wine_path = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        if not wine_path.exists():
+            self.log("Click 'Setup Wine Environment' or 'One-Click Full Setup' to begin.", "info")
+        else:
+            self.log("Wine is set up. Use 'Update Affinity Applications' to install or update apps.", "info")
+    
+    def check_installation_status(self):
+        """Check if Wine and Affinity applications are installed, and update button states"""
+        # Check if Wine is set up
+        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_exists = wine.exists()
+        
+        # Log Wine status
+        if wine_exists:
+            self.log("Wine: ✓ Installed (ElementalWarriorWine)", "success")
+        else:
+            self.log("Wine: ✗ Not installed", "error")
+        
+        # Check each Affinity application
+        app_status = {}
+        app_names_display = {
+            "Add": "Affinity (Unified)",
+            "Photo": "Affinity Photo",
+            "Designer": "Affinity Designer",
+            "Publisher": "Affinity Publisher"
+        }
+        app_dirs = {
+            "Add": ("Affinity", "Affinity.exe"),
+            "Photo": ("Photo 2", "Photo.exe"),
+            "Designer": ("Designer 2", "Designer.exe"),
+            "Publisher": ("Publisher 2", "Publisher.exe")
+        }
+        
+        self.log("Affinity Applications:", "info")
+        for app_name, (dir_name, exe_name) in app_dirs.items():
+            app_path = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / dir_name / exe_name
+            is_installed = app_path.exists()
+            app_status[app_name] = is_installed
+            
+            display_name = app_names_display.get(app_name, app_name)
+            if is_installed:
+                self.log(f"  {display_name}: ✓ Installed", "success")
+            else:
+                self.log(f"  {display_name}: ✗ Not installed", "error")
+        
+        # Check dependencies
+        self.log("System Dependencies:", "info")
+        deps = ["wine", "winetricks", "wget", "curl", "7z", "tar", "jq"]
+        deps_installed = True
+        for dep in deps:
+            if self.check_command(dep):
+                self.log(f"  {dep}: ✓ Installed", "success")
+            else:
+                self.log(f"  {dep}: ✗ Not installed", "error")
+                deps_installed = False
+        
+        # Check zstd
+        if self.check_command("unzstd") or self.check_command("zstd"):
+            self.log(f"  zstd: ✓ Installed", "success")
+        else:
+            self.log(f"  zstd: ✗ Not installed", "error")
+            deps_installed = False
+        
+        self.log("", "info")  # Empty line for spacing
+        
+        # Update button states
+        for app_name, button in self.update_buttons.items():
+            if button is None:
+                continue
+            
+            # Button should be enabled only if Wine is set up AND the app is installed
+            is_installed = app_status.get(app_name, False)
+            enabled = wine_exists and is_installed
+            
+            button.setEnabled(enabled)
+            if not enabled:
+                # Make it visually disabled (grayed out)
+                button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #2d2d2d;
+                        color: #666666;
+                        border: 1px solid #3a3a3a;
+                        padding: 6px 12px;
+                        min-height: 28px;
+                        font-size: 11px;
+                        font-weight: 500;
+                        text-align: left;
+                        border-radius: 3px;
+                    }
+                """)
+            else:
+                # Reset to default style
+                button.setStyleSheet("")
     
     def center_window(self):
         """Center window on screen"""
@@ -364,14 +464,17 @@ class AffinityInstallerGUI(QMainWindow):
         container_layout.addWidget(sys_group)
         
         # Update Affinity Applications section
+        app_buttons = [
+            ("Affinity (Unified)", "Add"),
+            ("Affinity Photo", "Photo"),
+            ("Affinity Designer", "Designer"),
+            ("Affinity Publisher", "Publisher"),
+        ]
         app_group = self.create_button_group(
             "Update Affinity Applications",
-            [
-                ("Affinity (Unified)", lambda: self.update_application("Add")),
-                ("Affinity Photo", lambda: self.update_application("Photo")),
-                ("Affinity Designer", lambda: self.update_application("Designer")),
-                ("Affinity Publisher", lambda: self.update_application("Publisher")),
-            ]
+            [(text, lambda name=app_name: self.update_application(name)) for text, app_name in app_buttons],
+            button_refs=self.update_buttons,
+            button_keys=[app_name for _, app_name in app_buttons]
         )
         container_layout.addWidget(app_group)
         
@@ -399,14 +502,14 @@ class AffinityInstallerGUI(QMainWindow):
         
         return container
     
-    def create_button_group(self, title, buttons):
+    def create_button_group(self, title, buttons, button_refs=None, button_keys=None):
         """Create a grouped button section"""
         group = QGroupBox(title)
         group_layout = QVBoxLayout(group)
         group_layout.setSpacing(2)
         group_layout.setContentsMargins(8, 20, 8, 8)
         
-        for button_data in buttons:
+        for idx, button_data in enumerate(buttons):
             # Handle both (text, command) and (text, command, color) formats for backward compatibility
             if len(button_data) == 2:
                 text, command = button_data
@@ -417,6 +520,10 @@ class AffinityInstallerGUI(QMainWindow):
             # All buttons now use neutral colors for better readability
             btn.clicked.connect(command)
             group_layout.addWidget(btn)
+            
+            # Store button reference if requested
+            if button_refs is not None and button_keys is not None and idx < len(button_keys):
+                button_refs[button_keys[idx]] = btn
         
         return group
     
@@ -639,8 +746,11 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("\n✓ Full setup completed!", "success")
         self.log("You can now install Affinity applications using the buttons above.", "info")
         
+        # Refresh installation status to update button states
+        QTimer.singleShot(100, self.check_installation_status)
+        
         # Ask if user wants to install an Affinity app
-        QTimer.singleShot(0, self._prompt_affinity_install)
+        QTimer.singleShot(200, self._prompt_affinity_install)
     
     def _prompt_affinity_install(self):
         """Prompt user to install an Affinity application"""
@@ -934,6 +1044,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.setup_complete = True
         self.log("\n✓ Wine setup completed!", "success")
+        
+        # Refresh installation status to update button states
+        QTimer.singleShot(100, self.check_installation_status)
     
     def setup_winmetadata(self):
         """Download and extract WinMetadata"""
@@ -1465,6 +1578,9 @@ class AffinityInstallerGUI(QMainWindow):
             
             self.log(f"\n✓ {display_name} update completed!", "success")
             self.log("The application has been updated. Use your existing desktop entry to launch it.", "info")
+            
+            # Refresh installation status to update button states
+            QTimer.singleShot(100, self.check_installation_status)
             
             self.show_message(
                 "Update Complete",
