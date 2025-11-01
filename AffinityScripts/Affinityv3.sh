@@ -492,7 +492,7 @@ print_header "Post-Installation Configuration"
 print_info "Applying final configuration settings..."
 
 print_step "Applying Wine dark theme..."
-if wget -q "https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-theme.reg" -O "$directory/wine-dark-theme.reg"; then
+if wget -q "https://raw.githubusercontent.com/seapear/AffinityOnLinux/refs/heads/main/Auxiliary/Other/wine-dark-theme.reg" -O "$directory/wine-dark-theme.reg"; then
     WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/regedit" "$directory/wine-dark-theme.reg" >/dev/null 2>&1 || true
     rm -f "$directory/wine-dark-theme.reg"
     print_success "Dark theme applied to Wine"

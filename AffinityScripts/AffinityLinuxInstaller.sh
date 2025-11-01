@@ -566,7 +566,7 @@ setup_wine() {
     
     # Apply dark theme
     print_step "Applying Wine dark theme..."
-    if download_file "https://raw.githubusercontent.com/Twig6943/AffinityOnLinux/main/wine-dark-theme.reg" "$directory/wine-dark-theme.reg" "dark theme"; then
+    if download_file "https://raw.githubusercontent.com/seapear/AffinityOnLinux/refs/heads/main/Auxiliary/Other/wine-dark-theme.reg" "$directory/wine-dark-theme.reg" "dark theme"; then
         WINEPREFIX="$directory" "$directory/ElementalWarriorWine/bin/regedit" "$directory/wine-dark-theme.reg" >/dev/null 2>&1 || true
         rm -f "$directory/wine-dark-theme.reg"
         print_success "Dark theme applied to Wine"
