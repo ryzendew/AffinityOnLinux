@@ -177,6 +177,12 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 - openSUSE (Tumbleweed/Leap)
 
 **Note:** Ubuntu, Linux Mint, Pop!_OS, and Zorin OS are not officially supported due to outdated package management systems. Users on these distributions must manually install dependencies.
+## Ubuntu 25.10 issues
+This dep fixes the GUI
+
+```
+sudo apt install python3-pyqt6.qtsvg
+``` 
 
 ### Required Dependencies
 
