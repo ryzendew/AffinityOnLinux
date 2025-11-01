@@ -114,6 +114,10 @@ detect_distro() {
         . /etc/os-release
         DISTRO=$ID
         VERSION=$VERSION_ID
+        # Normalize "pika" to "pikaos" if detected
+        if [ "$DISTRO" = "pika" ]; then
+            DISTRO="pikaos"
+        fi
     else
         print_error "Could not detect Linux distribution"
         exit 1
@@ -832,8 +836,10 @@ install_affinity() {
         return 1
     fi
     
-    # Get the filename from the path
+    # Get the filename from the path and sanitize it (replace spaces)
     local filename=$(basename "$installer_path")
+    # Replace spaces with dashes to avoid issues
+    filename=$(echo "$filename" | tr ' ' '-')
     
     # Copy installer to Affinity directory
     print_step "Copying installer to installation directory..."

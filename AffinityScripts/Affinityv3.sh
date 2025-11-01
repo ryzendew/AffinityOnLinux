@@ -68,6 +68,10 @@ detect_distro() {
         . /etc/os-release
         DISTRO=$ID
         VERSION=$VERSION_ID
+        # Normalize "pika" to "pikaos" if detected
+        if [ "$DISTRO" = "pika" ]; then
+            DISTRO="pikaos"
+        fi
     else
         print_error "Could not detect Linux distribution"
         exit 1

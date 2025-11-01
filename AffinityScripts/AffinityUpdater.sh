@@ -18,6 +18,10 @@ detect_distro() {
         . /etc/os-release
         DISTRO=$ID
         VERSION=$VERSION_ID
+        # Normalize "pika" to "pikaos" if detected
+        if [ "$DISTRO" = "pika" ]; then
+            DISTRO="pikaos"
+        fi
     else
         echo -e "${RED}Error: Could not detect Linux distribution${NC}"
         exit 1
@@ -133,8 +137,10 @@ update_affinity() {
         return 1
     fi
     
-    # Get the filename from the path
+    # Get the filename from the path and sanitize it (replace spaces)
     local filename=$(basename "$installer_path")
+    # Replace spaces with dashes to avoid issues
+    filename=$(echo "$filename" | tr ' ' '-')
     
     # Kill any running Wine processes before updating
     echo -e "${YELLOW}Stopping any running Wine processes...${NC}"

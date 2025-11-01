@@ -25,7 +25,11 @@ def detect_distro_for_install():
             content = f.read()
         for line in content.split("\n"):
             if line.startswith("ID="):
-                return line.split("=", 1)[1].strip().strip('"').lower()
+                distro = line.split("=", 1)[1].strip().strip('"').lower()
+                # Normalize "pika" to "pikaos" if detected
+                if distro == "pika":
+                    distro = "pikaos"
+                return distro
     except:
         pass
     return None
@@ -748,6 +752,18 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception as e:
             self.affinity_icon_path = None
     
+    def sanitize_filename(self, filename):
+        """Sanitize filename by replacing spaces and other problematic characters"""
+        # Replace spaces with dashes
+        sanitized = filename.replace(" ", "-")
+        # Remove other potentially problematic characters
+        sanitized = sanitized.replace("(", "-").replace(")", "-")
+        sanitized = sanitized.replace("[", "-").replace("]", "-")
+        # Keep only one consecutive dash
+        while "--" in sanitized:
+            sanitized = sanitized.replace("--", "-")
+        return sanitized
+    
     def log(self, message, level="info"):
         """Add message to log (thread-safe via signal)"""
         self.log_signal.emit(message, level)
@@ -833,6 +849,10 @@ class AffinityInstallerGUI(QMainWindow):
                     self.distro = line.split("=", 1)[1].strip().strip('"')
                 elif line.startswith("VERSION_ID="):
                     self.distro_version = line.split("=", 1)[1].strip().strip('"')
+            
+            # Normalize "pika" to "pikaos" if detected
+            if self.distro == "pika":
+                self.distro = "pikaos"
             
             return True
         except Exception as e:
@@ -1061,7 +1081,8 @@ class AffinityInstallerGUI(QMainWindow):
                 download_url = "https://downloads.affinity.studio/Affinity%20x64.exe"
                 download_dir = Path.home() / ".cache" / "affinity-installer"
                 download_dir.mkdir(parents=True, exist_ok=True)
-                installer_path = download_dir / "Affinity x64.exe"
+                # Use filename without spaces to avoid issues
+                installer_path = download_dir / "Affinity-x64.exe"
                 
                 self.log(f"Downloading from: {download_url}", "info")
                 if self.download_file(download_url, str(installer_path), f"{display_name} installer"):
@@ -2147,8 +2168,10 @@ class AffinityInstallerGUI(QMainWindow):
         try:
             self.log(f"Selected installer: {installer_path}", "success")
             
-            # Copy installer to Wine prefix
-            installer_file = Path(self.directory) / Path(installer_path).name
+            # Copy installer to Wine prefix with sanitized filename (remove spaces)
+            original_filename = Path(installer_path).name
+            sanitized_filename = self.sanitize_filename(original_filename)
+            installer_file = Path(self.directory) / sanitized_filename
             shutil.copy2(installer_path, installer_file)
             self.log("Installer copied to Wine prefix", "success")
             
@@ -2285,8 +2308,10 @@ class AffinityInstallerGUI(QMainWindow):
         try:
             self.log(f"Selected installer: {installer_path}", "success")
             
-            # Copy installer
-            installer_file = Path(self.directory) / Path(installer_path).name
+            # Copy installer with sanitized filename (remove spaces)
+            original_filename = Path(installer_path).name
+            sanitized_filename = self.sanitize_filename(original_filename)
+            installer_file = Path(self.directory) / sanitized_filename
             shutil.copy2(installer_path, installer_file)
             self.log("Installer copied", "success")
             
@@ -2586,7 +2611,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Ask user where to save the file
         downloads_dir = Path.home() / "Downloads"
-        default_path = downloads_dir / "Affinity x64.exe"
+        default_path = downloads_dir / "Affinity-x64.exe"
         
         # Suggest Downloads folder by default, but let user choose
         suggested_path = str(default_path)
