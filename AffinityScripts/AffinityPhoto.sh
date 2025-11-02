@@ -565,6 +565,9 @@ print_step "Creating custom desktop entry..."
 desktop_file="$HOME/.local/share/applications/AffinityPhoto.desktop"
 mkdir -p "$HOME/.local/share/applications"
 
+# Normalize directory path (remove trailing slash if present)
+directory="${directory%/}"
+
 {
     echo "[Desktop Entry]"
     echo "Name=Affinity Photo"

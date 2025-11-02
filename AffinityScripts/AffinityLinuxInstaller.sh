@@ -656,13 +656,17 @@ create_desktop_entry() {
     local app_path=$2
     local icon_path=$3
     local desktop_file="$HOME/.local/share/applications/Affinity$app_name.desktop"
+    # Normalize paths to avoid double slashes
+    local directory="${HOME}/.AffinityLinux"
+    directory="${directory%/}"
+    app_path="${app_path//\\/\/}"  # Normalize Windows paths
     
     echo "[Desktop Entry]" > "$desktop_file"
     echo "Name=Affinity $app_name" >> "$desktop_file"
     echo "Comment=A powerful $app_name software." >> "$desktop_file"
     echo "Icon=$icon_path" >> "$desktop_file"
-    echo "Path=$HOME/.AffinityLinux" >> "$desktop_file"
-    echo "Exec=env WINEPREFIX=$HOME/.AffinityLinux $HOME/.AffinityLinux/ElementalWarriorWine/bin/wine \"$app_path\"" >> "$desktop_file"
+    echo "Path=$directory" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$app_path\"" >> "$desktop_file"
     echo "Terminal=false" >> "$desktop_file"
     echo "NoDisplay=false" >> "$desktop_file"
     echo "StartupWMClass=${app_name,,}.exe" >> "$desktop_file"
@@ -676,6 +680,8 @@ create_all_in_one_desktop_entry() {
     local icon_path=$1
     local desktop_file="$HOME/.local/share/applications/Affinity.desktop"
     local directory="$HOME/.AffinityLinux"
+    # Normalize directory path (remove trailing slash if present)
+    directory="${directory%/}"
     
     echo "[Desktop Entry]" > "$desktop_file"
     echo "Name=Affinity" >> "$desktop_file"

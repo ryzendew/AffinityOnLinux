@@ -2166,14 +2166,20 @@ class AffinityInstallerGUI(QMainWindow):
         
         wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
         
+        # Normalize all paths to strings to avoid double slashes
+        wine_str = str(wine)
+        directory_str = str(self.directory).rstrip("/")  # Remove trailing slash if present
+        exe_path_normalized = exe_path.replace("\\", "/")  # Normalize Windows paths
+        
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
             f.write(f"Name={app_name}\n")
             f.write(f"Comment={app_name} installed via Affinity Linux Installer\n")
             if icon_path:
-                f.write(f"Icon={icon_path}\n")
-            f.write(f"Path={self.directory}\n")
-            f.write(f'Exec=env WINEPREFIX={self.directory} {wine} "{exe_path}"\n')
+                icon_path_str = str(icon_path).rstrip("/")
+                f.write(f"Icon={icon_path_str}\n")
+            f.write(f"Path={directory_str}\n")
+            f.write(f'Exec=env WINEPREFIX={directory_str} {wine_str} "{exe_path_normalized}"\n')
             f.write("Terminal=false\n")
             f.write("Type=Application\n")
             f.write("Categories=Application;\n")
@@ -2517,13 +2523,19 @@ class AffinityInstallerGUI(QMainWindow):
         app_path = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / dir_name / exe
         icon_path = Path.home() / ".local" / "share" / "icons" / icon
         
+        # Normalize all paths to strings to avoid double slashes
+        wine_str = str(wine)
+        app_path_str = str(app_path).replace("\\", "/")  # Ensure forward slashes for Windows paths in Wine
+        directory_str = str(self.directory).rstrip("/")  # Remove trailing slash if present
+        icon_path_str = str(icon_path)
+        
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
             f.write(f"Name=Affinity {name}\n")
             f.write(f"Comment=A powerful {name.lower()} software.\n")
-            f.write(f"Icon={icon_path}\n")
-            f.write(f"Path={self.directory}\n")
-            f.write(f'Exec=env WINEPREFIX={self.directory} {wine} "{app_path}"\n')
+            f.write(f"Icon={icon_path_str}\n")
+            f.write(f"Path={directory_str}\n")
+            f.write(f'Exec=env WINEPREFIX={directory_str} {wine_str} "{app_path_str}"\n')
             f.write("Terminal=false\n")
             f.write("Type=Application\n")
             f.write("Categories=Graphics;\n")
