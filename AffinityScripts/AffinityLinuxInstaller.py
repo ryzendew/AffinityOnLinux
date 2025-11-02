@@ -2169,7 +2169,12 @@ class AffinityInstallerGUI(QMainWindow):
         # Normalize all paths to strings to avoid double slashes
         wine_str = str(wine)
         directory_str = str(self.directory).rstrip("/")  # Remove trailing slash if present
-        exe_path_normalized = exe_path.replace("\\", "/")  # Normalize Windows paths
+        
+        # Normalize path: convert Windows backslashes to forward slashes, remove double slashes
+        exe_path_normalized = exe_path.replace("\\", "/").replace("//", "/")
+        # If it's a Windows path starting with C:, convert to Linux path
+        if exe_path_normalized.startswith("C:/"):
+            exe_path_normalized = directory_str + "/drive_c" + exe_path_normalized[2:]
         
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
@@ -2179,6 +2184,7 @@ class AffinityInstallerGUI(QMainWindow):
                 icon_path_str = str(icon_path).rstrip("/")
                 f.write(f"Icon={icon_path_str}\n")
             f.write(f"Path={directory_str}\n")
+            # Use Linux path format with proper quoting for spaces
             f.write(f'Exec=env WINEPREFIX={directory_str} {wine_str} "{exe_path_normalized}"\n')
             f.write("Terminal=false\n")
             f.write("Type=Application\n")
@@ -2525,9 +2531,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Normalize all paths to strings to avoid double slashes
         wine_str = str(wine)
-        app_path_str = str(app_path).replace("\\", "/")  # Ensure forward slashes for Windows paths in Wine
         directory_str = str(self.directory).rstrip("/")  # Remove trailing slash if present
         icon_path_str = str(icon_path)
+        app_path_str = str(app_path).replace("\\", "/")  # Ensure forward slashes, no double slashes
         
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
@@ -2535,6 +2541,7 @@ class AffinityInstallerGUI(QMainWindow):
             f.write(f"Comment=A powerful {name.lower()} software.\n")
             f.write(f"Icon={icon_path_str}\n")
             f.write(f"Path={directory_str}\n")
+            # Use Linux path format with proper quoting for spaces
             f.write(f'Exec=env WINEPREFIX={directory_str} {wine_str} "{app_path_str}"\n')
             f.write("Terminal=false\n")
             f.write("Type=Application\n")

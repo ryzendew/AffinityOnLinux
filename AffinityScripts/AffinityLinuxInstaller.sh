@@ -659,7 +659,14 @@ create_desktop_entry() {
     # Normalize paths to avoid double slashes
     local directory="${HOME}/.AffinityLinux"
     directory="${directory%/}"
-    app_path="${app_path//\\/\/}"  # Normalize Windows paths
+    # Normalize path: ensure forward slashes, remove double slashes
+    app_path="${app_path//\\/\/}"
+    app_path="${app_path//\/\//\/}"
+    # Convert Windows path (C:/...) to Linux path if needed
+    if [[ "$app_path" == C:/ ]]; then
+        app_path="${app_path#C:/}"
+        app_path="$directory/drive_c/$app_path"
+    fi
     
     echo "[Desktop Entry]" > "$desktop_file"
     echo "Name=Affinity $app_name" >> "$desktop_file"
