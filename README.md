@@ -60,7 +60,12 @@ A modern PyQt6-based graphical user interface for the Affinity Linux Installer, 
 
 Run directly from GitHub (recommended):
 ```bash
-python3 -c "$(curl -sSL https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.py)"
+curl -sSL https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.py | python3
+```
+
+Or download and run locally:
+```bash
+curl -sSL https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.py -o install.py && python3 install.py
 ```
 
 Or clone the repository and run locally:
