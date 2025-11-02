@@ -1347,6 +1347,11 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("Wine binary verified", "success")
         
+        # Download and setup winetricks
+        self.log("\nSetting up winetricks...", "info")
+        if not self.setup_winetricks():
+            self.log("Warning: Failed to setup winetricks, will try system winetricks if available", "warning")
+        
         # Download icons
         self.log("\nSetting up application icons...", "info")
         icons_dir = Path.home() / ".local" / "share" / "icons"
@@ -1374,6 +1379,10 @@ class AffinityInstallerGUI(QMainWindow):
         self.setup_vkd3d()
         
         # Configure Wine
+        # Setup winetricks before configuring Wine
+        if not self.setup_winetricks():
+            self.log("Warning: Failed to setup winetricks, will try system winetricks if available", "warning")
+        
         self.configure_wine()
         
         self.setup_complete = True
@@ -1526,6 +1535,71 @@ class AffinityInstallerGUI(QMainWindow):
             shutil.rmtree(vkd3d_dir)
             self.log("vkd3d-proton setup completed", "success")
     
+    def setup_winetricks(self):
+        """Download and setup winetricks binaries"""
+        winetricks_url = "https://github.com/ryzendew/winetricks/releases/download/0.1.0/winetricks-binaries.zip"
+        winetricks_zip = Path(self.directory) / "winetricks-binaries.zip"
+        winetricks_dir = Path(self.directory) / "winetricks"
+        
+        # Check if already downloaded
+        winetricks_binary = winetricks_dir / "winetricks"
+        if winetricks_binary.exists() and winetricks_binary.is_file():
+            self.log("Winetricks already set up", "success")
+            return True
+        
+        self.log("Downloading winetricks binaries...", "info")
+        if not self.download_file(winetricks_url, str(winetricks_zip), "winetricks binaries"):
+            self.log("Failed to download winetricks binaries", "error")
+            return False
+        
+        # Extract winetricks
+        self.log("Extracting winetricks binaries...", "info")
+        try:
+            with zipfile.ZipFile(winetricks_zip, 'r') as zip_ref:
+                zip_ref.extractall(winetricks_dir)
+            winetricks_zip.unlink()
+            
+            # Find the winetricks binary in the extracted files
+            extracted_binary = None
+            for file in winetricks_dir.rglob("winetricks"):
+                if file.is_file():
+                    extracted_binary = file
+                    break
+            
+            # If found in a subdirectory, move it to the winetricks_dir root
+            if extracted_binary and extracted_binary != winetricks_binary:
+                if winetricks_binary.exists():
+                    winetricks_binary.unlink()
+                shutil.move(extracted_binary, winetricks_binary)
+                
+                # Clean up empty subdirectories
+                for item in winetricks_dir.iterdir():
+                    if item.is_dir():
+                        try:
+                            item.rmdir()
+                        except:
+                            pass
+            
+            # Make it executable
+            if winetricks_binary.exists():
+                winetricks_binary.chmod(0o755)
+                self.log("Winetricks binaries extracted and ready", "success")
+                return True
+            else:
+                self.log("Winetricks binary not found in archive", "error")
+                return False
+        except Exception as e:
+            self.log(f"Failed to extract winetricks: {e}", "error")
+            return False
+    
+    def get_winetricks_path(self):
+        """Get path to winetricks binary (prefer downloaded, fallback to system)"""
+        winetricks_binary = Path(self.directory) / "winetricks" / "winetricks"
+        if winetricks_binary.exists() and winetricks_binary.is_file():
+            return str(winetricks_binary)
+        # Fallback to system winetricks
+        return shutil.which("winetricks") or "winetricks"
+    
     def configure_wine(self):
         """Configure Wine with winetricks"""
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -1542,11 +1616,12 @@ class AffinityInstallerGUI(QMainWindow):
             "msxml3", "msxml6", "renderer=vulkan"
         ]
         
+        winetricks_path = self.get_winetricks_path()
         self.log("Installing Wine components (this may take several minutes)...", "info")
         for component in components:
             self.log(f"Installing {component}...", "info")
             self.run_command(
-                ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", component],
+                [winetricks_path, "--unattended", "--force", "--no-isolate", "--optout", component],
                 check=False,
                 env=env
             )
@@ -1627,12 +1702,13 @@ class AffinityInstallerGUI(QMainWindow):
             ("renderer=vulkan", "Vulkan Renderer")
         ]
         
+        winetricks_path = self.get_winetricks_path()
         self.log("Installing Wine components (this may take several minutes)...", "info")
         
         for component, description in components:
             self.log(f"Installing {description} ({component})...", "info")
             success, stdout, stderr = self.run_command(
-                ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", component],
+                [winetricks_path, "--unattended", "--force", "--no-isolate", "--optout", component],
                 check=False,
                 env=env
             )
@@ -1645,7 +1721,7 @@ class AffinityInstallerGUI(QMainWindow):
                 time.sleep(2)  # Brief pause before retry
                 
                 retry_success, retry_stdout, retry_stderr = self.run_command(
-                    ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", component],
+                    [winetricks_path, "--unattended", "--force", "--no-isolate", "--optout", component],
                     check=False,
                     env=env
                 )
@@ -2610,20 +2686,24 @@ class AffinityInstallerGUI(QMainWindow):
             self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
             return
         
-        # Check if winetricks is available
-        winetricks_path = shutil.which("winetricks")
-        if not winetricks_path:
-            self.log("Winetricks is not installed. Please install it using your package manager.", "error")
-            self.show_message(
-                "Winetricks Not Found",
-                "Winetricks is not installed. Please install it using:\n\n"
-                "Arch/CachyOS/EndeavourOS/XeroLinux: sudo pacman -S winetricks\n"
-                "Fedora/Nobara: sudo dnf install winetricks\n"
-                "Debian/Ubuntu/Mint/Pop/Zorin/PikaOS: sudo apt install winetricks\n"
-                "openSUSE: sudo zypper install winetricks",
-                "error"
-            )
-            return
+        # Use downloaded winetricks or fallback to system
+        winetricks_path = self.get_winetricks_path()
+        if not winetricks_path or winetricks_path == "winetricks":
+            # Check if system winetricks exists
+            system_winetricks = shutil.which("winetricks")
+            if not system_winetricks:
+                self.log("Winetricks is not available. Please install it using your package manager.", "error")
+                self.show_message(
+                    "Winetricks Not Found",
+                    "Winetricks is not installed. Please install it using:\n\n"
+                    "Arch/CachyOS/EndeavourOS/XeroLinux: sudo pacman -S winetricks\n"
+                    "Fedora/Nobara: sudo dnf install winetricks\n"
+                    "Debian/Ubuntu/Mint/Pop/Zorin/PikaOS: sudo apt install winetricks\n"
+                    "openSUSE: sudo zypper install winetricks",
+                    "error"
+                )
+                return
+            winetricks_path = system_winetricks
         
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
@@ -2708,8 +2788,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Configure renderer using winetricks
         self.log(f"Configuring {renderer_name} renderer...", "info")
+        winetricks_path = self.get_winetricks_path()
         success, stdout, stderr = self.run_command(
-            ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", f"renderer={renderer_value}"],
+            [winetricks_path, "--unattended", "--force", "--no-isolate", "--optout", f"renderer={renderer_value}"],
             check=False,
             env=env
         )

@@ -285,6 +285,64 @@ else
     print_warning "Failed to download official icon (will continue without it)"
 fi
 
+# Function to download and setup winetricks binaries
+setup_winetricks() {
+    local directory="$1"
+    local winetricks_url="https://github.com/ryzendew/winetricks/releases/download/0.1.0/winetricks-binaries.zip"
+    local winetricks_zip="$directory/winetricks-binaries.zip"
+    local winetricks_dir="$directory/winetricks"
+    local winetricks_binary="$winetricks_dir/winetricks"
+    
+    # Check if already downloaded
+    if [ -f "$winetricks_binary" ]; then
+        return 0
+    fi
+    
+    if command -v wget &> /dev/null; then
+        wget -q --show-progress "$winetricks_url" -O "$winetricks_zip" 2>/dev/null || return 1
+    elif command -v curl &> /dev/null; then
+        curl -sSL "$winetricks_url" -o "$winetricks_zip" || return 1
+    else
+        return 1
+    fi
+    
+    # Extract winetricks
+    mkdir -p "$winetricks_dir"
+    if command -v unzip &> /dev/null; then
+        if unzip -q "$winetricks_zip" -d "$winetricks_dir" 2>/dev/null; then
+            rm -f "$winetricks_zip"
+            
+            # Find the winetricks binary in extracted files
+            extracted_binary=$(find "$winetricks_dir" -name "winetricks" -type f | head -1)
+            if [ -n "$extracted_binary" ] && [ "$extracted_binary" != "$winetricks_binary" ]; then
+                mv "$extracted_binary" "$winetricks_binary"
+                find "$winetricks_dir" -type d -empty -delete 2>/dev/null || true
+            fi
+            
+            # Make it executable
+            if [ -f "$winetricks_binary" ]; then
+                chmod +x "$winetricks_binary"
+                return 0
+            fi
+        fi
+    fi
+    
+    rm -f "$winetricks_zip"
+    return 1
+}
+
+# Function to get winetricks path (prefer downloaded, fallback to system)
+get_winetricks_path() {
+    local directory="$1"
+    local winetricks_binary="$directory/winetricks/winetricks"
+    
+    if [ -f "$winetricks_binary" ]; then
+        echo "$winetricks_binary"
+    else
+        command -v winetricks || echo "winetricks"
+    fi
+}
+
 ################################################################################
 # SECTION 5: Wine Configuration and Dependencies
 ################################################################################
@@ -292,32 +350,36 @@ fi
 print_header "Wine Configuration"
 print_info "Installing required Windows libraries and configuring Wine..."
 
+# Setup winetricks if not already done
+print_step "Setting up winetricks..."
+setup_winetricks "$directory"
+
 print_step "Installing .NET Framework 3.5..."
-WINEPREFIX="$directory" winetricks --unattended dotnet35 >/dev/null 2>&1 || true
+WINEPREFIX="$directory" "$(get_winetricks_path "$directory")" --unattended dotnet35 >/dev/null 2>&1 || true
 print_progress ".NET 3.5 installation attempted"
 
 print_step "Installing .NET Framework 4.8..."
-WINEPREFIX="$directory" winetricks --unattended dotnet48 >/dev/null 2>&1 || true
+WINEPREFIX="$directory" "$(get_winetricks_path "$directory")" --unattended dotnet48 >/dev/null 2>&1 || true
 print_progress ".NET 4.8 installation attempted"
 
 print_step "Installing Windows core fonts..."
-WINEPREFIX="$directory" winetricks --unattended corefonts >/dev/null 2>&1 || true
+WINEPREFIX="$directory" "$(get_winetricks_path "$directory")" --unattended corefonts >/dev/null 2>&1 || true
 print_progress "Core fonts installation attempted"
 
 print_step "Installing Visual C++ Redistributables 2022..."
-WINEPREFIX="$directory" winetricks --unattended vcrun2022 >/dev/null 2>&1 || true
+WINEPREFIX="$directory" "$(get_winetricks_path "$directory")" --unattended vcrun2022 >/dev/null 2>&1 || true
 print_progress "VC++ 2022 installation attempted"
 
 print_step "Installing MSXML 3.0..."
-WINEPREFIX="$directory" winetricks --unattended msxml3 >/dev/null 2>&1 || true
+WINEPREFIX="$directory" "$(get_winetricks_path "$directory")" --unattended msxml3 >/dev/null 2>&1 || true
 print_progress "MSXML 3.0 installation attempted"
 
 print_step "Installing MSXML 6.0..."
-WINEPREFIX="$directory" winetricks --unattended msxml6 >/dev/null 2>&1 || true
+WINEPREFIX="$directory" "$(get_winetricks_path "$directory")" --unattended msxml6 >/dev/null 2>&1 || true
 print_progress "MSXML 6.0 installation attempted"
 
 print_step "Configuring Wine to use Vulkan renderer..."
-WINEPREFIX="$directory" winetricks renderer=vulkan >/dev/null 2>&1 || true
+WINEPREFIX="$directory" "$(get_winetricks_path "$directory")" renderer=vulkan >/dev/null 2>&1 || true
 print_success "Wine configured with Vulkan renderer"
 
 print_info "Note: The above installations may take several minutes. Errors are normal if components are already installed."
