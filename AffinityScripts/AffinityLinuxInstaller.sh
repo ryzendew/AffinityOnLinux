@@ -14,8 +14,14 @@ fi
 
 # Ensure script is being run with bash
 if [ -z "$BASH_VERSION" ]; then
-    echo "This script must be run with bash"
-    exit 1
+    echo "Running script in bash"
+    # Check bash existence
+    if command -v bash >/dev/null 2>&1; then
+        exec bash "$0" "$@"
+    else
+        echo "This script must be run with bash" >&2
+        exit 1
+    fi
 fi
 
 # ==========================================
