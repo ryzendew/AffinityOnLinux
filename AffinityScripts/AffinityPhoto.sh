@@ -445,7 +445,7 @@ fi
 ################################################################################
 
 print_header "Affinity Photo Installation"
-print_info "You will now install Affinity Photo using its Windows installer You Already Downloaded Before!""
+print_info "You will now install Affinity Photo using its Windows installer You Already Downloaded Before!"
 print_step "Once downloaded, place the .exe file in:"
 echo -e "  ${CYAN}$directory${NC}"
 echo ""
