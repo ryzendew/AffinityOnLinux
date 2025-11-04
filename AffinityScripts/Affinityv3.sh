@@ -279,7 +279,7 @@ fi
 
 print_step "Downloading official Affinity V3 icon..."
 mkdir -p "/home/$USER/.local/share/icons"
-if wget -q --show-progress "https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-V3.svg" -O "/home/$USER/.local/share/icons/Affinity.svg"; then
+if wget -q --show-progress "https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-Canva.svg" -O "/home/$USER/.local/share/icons/Affinity.svg"; then
     print_success "Official Affinity V3 icon downloaded to ~/.local/share/icons/Affinity.svg"
 else
     print_warning "Failed to download official icon (will continue without it)"
