@@ -445,7 +445,7 @@ fi
 ################################################################################
 
 print_header "Affinity Designer Installation"
-print_info "You will now install Affinity Publisher using its Windows installer You Already Downloaded Before!"
+print_info "You will now install Affinity Designer using its Windows installer You Already Downloaded Before!"
 echo ""
 print_step "Once downloaded, place the .exe file in:"
 echo -e "  ${CYAN}$directory${NC}"
