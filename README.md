@@ -21,7 +21,7 @@ OpenCL support is fully functional, enabling GPU acceleration for improved perfo
 <img src="https://github.com/user-attachments/assets/96ae06f8-470b-451f-ba29-835324b5b552" width="200" alt="Affinity Publisher"/>
 <img src="https://github.com/user-attachments/assets/8ea7f748-c455-4ee8-9a94-775de40dbbf3" width="200" alt="Affinity Designer"/>
 <img src="https://github.com/user-attachments/assets/c7b70ee5-58e3-46c6-b385-7c3d02749664" width="200" alt="Affinity Photo"/>
-<img src="https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-V3.svg" width="200" alt="Affinity V3"/>
+<img src="https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-Canva.svg" width="200" alt="Affinity V3"/>
 
 ## Installation
 
