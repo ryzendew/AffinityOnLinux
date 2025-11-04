@@ -390,7 +390,7 @@ setup_wine() {
     download_file "https://upload.wikimedia.org/wikipedia/commons/9/9c/Affinity_Publisher_V2_icon.svg" "$HOME/.local/share/icons/AffinityPublisher.svg" "Affinity Publisher icon" || true
     
     # Download official Affinity V3 icon
-    download_file "https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-V3.svg" "$HOME/.local/share/icons/Affinity.svg" "Affinity V3 icon" || true
+    download_file "https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-Canva.svg" "$HOME/.local/share/icons/Affinity.svg" "Affinity V3 icon" || true
     
     # Download WinMetadata
     print_header "Windows Metadata Installation"
