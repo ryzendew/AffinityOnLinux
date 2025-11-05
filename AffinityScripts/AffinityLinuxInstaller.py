@@ -742,7 +742,7 @@ class AffinityInstallerGUI(QMainWindow):
             
             # Download if not exists
             if not icon_path.exists():
-                icon_url = "https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-V3.svg"
+                icon_url = "https://github.com/seapear/AffinityOnLinux/blob/main/Assets/Icons/Affinity-Canva.svg"
                 try:
                     urllib.request.urlretrieve(icon_url, str(icon_path))
                     self.affinity_icon_path = str(icon_path)
@@ -1359,7 +1359,7 @@ class AffinityInstallerGUI(QMainWindow):
              icons_dir / "AffinityDesigner.svg", "Designer icon"),
             ("https://github.com/user-attachments/assets/96ae06f8-470b-451f-ba29-835324b5b552",
              icons_dir / "AffinityPublisher.svg", "Publisher icon"),
-            ("https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-V3.svg",
+            ("https://github.com/seapear/AffinityOnLinux/blob/main/Assets/Icons/Affinity-Canva.svg",
              icons_dir / "Affinity.svg", "Affinity V3 icon")
         ]
         
