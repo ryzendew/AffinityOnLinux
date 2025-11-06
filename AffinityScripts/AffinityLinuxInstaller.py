@@ -1657,6 +1657,7 @@ class AffinityInstallerGUI(QMainWindow):
             ("vcrun2022", "Visual C++ Redistributables 2022"),
             ("msxml3", "MSXML 3.0"),
             ("msxml6", "MSXML 6.0"),
+            ("tahoma", "Tahoma Font"),
             ("renderer=vulkan", "Vulkan Renderer")
         ]
         
