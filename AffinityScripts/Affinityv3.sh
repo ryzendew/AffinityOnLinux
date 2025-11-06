@@ -163,7 +163,17 @@ check_dependency "wine"
 check_dependency "winetricks"
 check_dependency "wget"
 check_dependency "curl"
-check_dependency "7z"
+# Check for either 7z or unzip (both can extract archives)
+if ! command -v 7z &> /dev/null && ! command -v unzip &> /dev/null; then
+    missing_deps+="7z or unzip "
+    print_error "Neither 7z nor unzip is installed (at least one is required)"
+else
+    if command -v 7z &> /dev/null; then
+        print_success "7z is installed"
+    else
+        print_success "unzip is installed (will be used instead of 7z)"
+    fi
+fi
 check_dependency "tar"
 
 if [ -n "$missing_deps" ]; then
@@ -171,18 +181,45 @@ if [ -n "$missing_deps" ]; then
     echo ""
     case $DISTRO in
         "ubuntu"|"linuxmint"|"pop"|"zorin")
-            echo -e "${RED}${BOLD}This script will NOT automatically install dependencies for unsupported distributions.${NC}"
+            echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${RED}${BOLD}                    ⚠️   WARNING: UNSUPPORTED DISTRIBUTION   ⚠️${NC}"
+            echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo -e "${YELLOW}${BOLD}This script will NOT automatically install dependencies for unsupported distributions.${NC}"
             echo -e "${YELLOW}Please install the required dependencies manually:${NC}"
             echo -e "${CYAN}  wine winetricks wget curl p7zip-full tar${NC}"
             echo ""
-            echo -e "${RED}${BOLD}This script will now exit.${NC}"
+            while true; do
+                echo -e "${YELLOW}Press Enter to check dependencies again, or 'q' to exit:${NC}"
+                read -r response
+                if [ "$response" = "q" ] || [ "$response" = "Q" ]; then
+                    echo -e "${RED}${BOLD}Exiting...${NC}"
+                    exit 1
+                fi
+                # Re-check dependencies
+                missing_deps=""
+                check_dependency "wine"
+                check_dependency "winetricks"
+                check_dependency "wget"
+                check_dependency "curl"
+                if ! command -v 7z &> /dev/null && ! command -v unzip &> /dev/null; then
+                    missing_deps+="7z or unzip "
+                fi
+                check_dependency "tar"
+                if [ -z "$missing_deps" ]; then
+                    print_success "All dependencies are now installed!"
+                    break
+                else
+                    print_error "Still missing: ${missing_deps}"
+                fi
+            done
             ;;
         *)
-    print_info "Please install the missing dependencies and rerun this script."
-    print_info "Example for Arch-based systems: sudo pacman -S wine winetricks wget curl p7zip tar"
+            print_info "Please install the missing dependencies and rerun this script."
+            print_info "Example for Arch-based systems: sudo pacman -S wine winetricks wget curl p7zip tar"
+            exit 1
             ;;
     esac
-    exit 1
 fi
 
 print_success "All required dependencies are installed!"
@@ -315,6 +352,10 @@ print_progress "MSXML 3.0 installation attempted"
 print_step "Installing MSXML 6.0..."
 WINEPREFIX="$directory" winetricks --unattended msxml6 >/dev/null 2>&1 || true
 print_progress "MSXML 6.0 installation attempted"
+
+print_step "Installing Tahoma font..."
+WINEPREFIX="$directory" winetricks --unattended tahoma >/dev/null 2>&1 || true
+print_progress "Tahoma font installation attempted"
 
 print_step "Configuring Wine to use Vulkan renderer..."
 WINEPREFIX="$directory" winetricks renderer=vulkan >/dev/null 2>&1 || true

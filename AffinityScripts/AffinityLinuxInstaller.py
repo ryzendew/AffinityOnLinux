@@ -1142,7 +1142,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.show_unsupported_warning()
         
         missing = []
-        deps = ["wine", "winetricks", "wget", "curl", "7z", "tar", "jq"]
+        deps = ["wine", "winetricks", "wget", "curl", "tar", "jq"]
         
         for dep in deps:
             if self.check_command(dep):
@@ -1151,6 +1151,16 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"{dep} is not installed", "error")
                 missing.append(dep)
         
+        # Check for either 7z or unzip (both can extract archives)
+        if not self.check_command("7z") and not self.check_command("unzip"):
+            self.log("Neither 7z nor unzip is installed (at least one is required)", "error")
+            missing.append("7z or unzip")
+        else:
+            if self.check_command("7z"):
+                self.log("7z is installed", "success")
+            else:
+                self.log("unzip is installed (will be used instead of 7z)", "success")
+        
         # Check zstd
         if not (self.check_command("unzstd") or self.check_command("zstd")):
             self.log("zstd or unzstd is not installed", "error")
@@ -1158,18 +1168,41 @@ class AffinityInstallerGUI(QMainWindow):
         else:
             self.log("zstd support is available", "success")
         
-        # Handle unsupported distributions
+        # Handle unsupported distributions - show warning and allow retry
         if self.distro in ["ubuntu", "linuxmint", "pop", "zorin"]:
             if missing:
+                self.log("\n" + "="*80, "error")
+                self.log("⚠️  WARNING: UNSUPPORTED DISTRIBUTION", "error")
+                self.log("="*80, "error")
                 self.log("\nMissing dependencies detected.", "error")
                 self.log("This script will NOT auto-install for unsupported distributions.", "error")
-                return False
+                self.log("Please install the required dependencies manually.", "warning")
+                self.log(f"Missing: {', '.join(missing)}", "warning")
+                
+                # Show dialog asking user to install and retry
+                from PyQt6.QtWidgets import QMessageBox
+                reply = QMessageBox.question(
+                    self,
+                    "Unsupported Distribution - Missing Dependencies",
+                    f"⚠️  WARNING: UNSUPPORTED DISTRIBUTION\n\n"
+                    f"Missing dependencies: {', '.join(missing)}\n\n"
+                    f"This script will NOT auto-install for unsupported distributions.\n"
+                    f"Please install the required dependencies manually.\n\n"
+                    f"Click 'Retry' after installing dependencies, or 'Cancel' to exit.",
+                    QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Cancel
+                )
+                
+                if reply == QMessageBox.StandardButton.Retry:
+                    # Re-check dependencies
+                    return self.check_and_install_dependencies()
+                else:
+                    return False
             else:
                 self.log("\nAll dependencies installed, but you are on an unsupported distribution.", "warning")
                 self.log("No support will be provided if issues arise.", "warning")
         
-        # Install missing dependencies
-        if missing:
+        # Install missing dependencies (only for supported distributions)
+        if missing and self.distro not in ["ubuntu", "linuxmint", "pop", "zorin"]:
             self.log(f"\nInstalling missing dependencies: {', '.join(missing)}", "info")
             if not self.install_dependencies():
                 return False
@@ -1539,7 +1572,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         components = [
             "dotnet35", "dotnet48", "corefonts", "vcrun2022", 
-            "msxml3", "msxml6", "renderer=vulkan"
+            "msxml3", "msxml6", "tahoma", "renderer=vulkan"
         ]
         
         self.log("Installing Wine components (this may take several minutes)...", "info")

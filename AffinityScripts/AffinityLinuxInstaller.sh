@@ -185,17 +185,45 @@ check_dependencies() {
         "ubuntu"|"linuxmint"|"pop"|"zorin")
             if [ -n "$missing_deps" ]; then
                 echo ""
+                echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${RED}${BOLD}                    ⚠️   WARNING: UNSUPPORTED DISTRIBUTION   ⚠️${NC}"
+                echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
                 echo -e "${RED}${BOLD}Missing dependencies detected: $missing_deps${NC}"
                 echo ""
-                echo -e "${RED}${BOLD}This script will NOT automatically install dependencies for unsupported distributions.${NC}"
+                echo -e "${YELLOW}${BOLD}This script will NOT automatically install dependencies for unsupported distributions.${NC}"
                 echo -e "${YELLOW}Please install the required dependencies manually:${NC}"
                 echo -e "${CYAN}  wine winetricks wget curl p7zip-full tar jq zstd${NC}"
                 echo ""
-                echo -e "${RED}${BOLD}This script will now exit.${NC}"
-                echo ""
-                echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo ""
-                exit 1
+                while true; do
+                    echo -e "${YELLOW}Press Enter to check dependencies again, or 'q' to exit:${NC}"
+                    read -r response
+                    if [ "$response" = "q" ] || [ "$response" = "Q" ]; then
+                        echo -e "${RED}${BOLD}Exiting...${NC}"
+                        exit 1
+                    fi
+                    # Re-check dependencies
+                    missing_deps=""
+                    for dep in wine winetricks wget curl tar jq; do
+                        if ! command -v "$dep" &> /dev/null; then
+                            missing_deps+="$dep "
+                        fi
+                    done
+                    # Check for 7z or unzip
+                    if ! command -v 7z &> /dev/null && ! command -v unzip &> /dev/null; then
+                        missing_deps+="7z or unzip "
+                    fi
+                    # Check for zstd
+                    if ! command -v unzstd &> /dev/null && ! command -v zstd &> /dev/null; then
+                        missing_deps+="zstd "
+                    fi
+                    if [ -z "$missing_deps" ]; then
+                        print_success "All dependencies are now installed!"
+                        break
+                    else
+                        print_error "Still missing: ${missing_deps}"
+                    fi
+                done
             else
                 echo ""
                 echo -e "${YELLOW}${BOLD}All required dependencies are installed.${NC}"
@@ -560,6 +588,10 @@ setup_wine() {
     print_step "Installing MSXML 6.0..."
     WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout msxml6 >/dev/null 2>&1 || true
     print_progress "MSXML 6.0 installation attempted"
+    
+    print_step "Installing Tahoma font..."
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout tahoma >/dev/null 2>&1 || true
+    print_progress "Tahoma font installation attempted"
     
     print_step "Configuring Wine to use Vulkan renderer..."
     WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan >/dev/null 2>&1 || true
