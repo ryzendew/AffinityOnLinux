@@ -1170,7 +1170,22 @@ class AffinityInstallerGUI(QMainWindow):
         if not self.check_dependencies():
             self.log("Dependency check failed. Please resolve issues and try again.", "error")
             self.update_progress_text("Ready")
-            return
+            
+            # Show retry dialog
+            from PyQt6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self,
+                "Dependency Check Failed",
+                "Dependency check failed. Please resolve issues and try again.\n\n"
+                "Would you like to retry the dependency check?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Retry dependency check
+                return self._one_click_setup_thread()
+            else:
+                return
         
         # Step 3: Setup Wine environment (this includes winetricks dependencies via configure_wine)
         self.update_progress_text("Step 3/4: Setting up Wine environment...")
@@ -1410,7 +1425,7 @@ class AffinityInstallerGUI(QMainWindow):
                 
                 if reply == QMessageBox.StandardButton.Retry:
                     # Re-check dependencies
-                    return self.check_and_install_dependencies()
+                    return self.check_dependencies()
                 else:
                     return False
             else:
@@ -1446,10 +1461,10 @@ class AffinityInstallerGUI(QMainWindow):
             return self.install_pikaos_dependencies()
         
         commands = {
-            "arch": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "cachyos": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "endeavouros": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "xerolinux": ["sudo", "pacman", "-S", "--needed", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
+            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
+            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
+            "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
+            "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
             "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
             "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
             "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
@@ -1464,7 +1479,22 @@ class AffinityInstallerGUI(QMainWindow):
                 return True
             else:
                 self.log(f"Failed to install dependencies: {stderr}", "error")
-                return False
+                
+                # Show retry dialog
+                from PyQt6.QtWidgets import QMessageBox
+                reply = QMessageBox.question(
+                    self,
+                    "Dependency Installation Failed",
+                    f"Failed to install dependencies:\n{stderr}\n\n"
+                    "Would you like to retry the installation?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    # Retry installation
+                    return self.install_dependencies()
+                else:
+                    return False
         
         self.log(f"Unsupported distribution: {self.distro}", "error")
         return False
