@@ -694,6 +694,15 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(troubleshoot_group)
         
+        # Launch section
+        launch_group = self.create_button_group(
+            "Launch Affinity",
+            [
+                ("Launch Affinity v3", self.launch_affinity_v3),
+            ]
+        )
+        container_layout.addWidget(launch_group)
+        
         # Other section
         other_group = self.create_button_group(
             "Other",
@@ -2759,6 +2768,106 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  Error: {stderr[:200] if stderr else 'Unknown error'}", "error")
         
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
+    
+    def launch_affinity_v3(self):
+        """Launch Affinity v3 with optimized environment variables"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Launch Affinity v3", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Check if Affinity is installed
+        affinity_exe = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / "Affinity" / "Affinity.exe"
+        if not affinity_exe.exists():
+            self.log("✗ Affinity v3 is not installed", "error")
+            self.log("Please install Affinity v3 first using 'Update Affinity Applications' → 'Affinity (Unified)'", "info")
+            self.show_message(
+                "Affinity Not Found",
+                "Affinity v3 is not installed.\n\nPlease install it first using:\n'Update Affinity Applications' → 'Affinity (Unified)'",
+                QMessageBox.Icon.Warning
+            )
+            return
+        
+        # Check if Wine is set up
+        # Try both possible directory names
+        runner_path = Path(self.directory) / "ElementalWarriorWine-x86_64"
+        if not runner_path.exists():
+            runner_path = Path(self.directory) / "ElementalWarriorWine"
+        wine_bin = runner_path / "bin" / "wine"
+        if not wine_bin.exists():
+            self.log("✗ Wine is not set up", "error")
+            self.log("Please run 'Setup Wine Environment' first", "info")
+            self.show_message(
+                "Wine Not Found",
+                "Wine is not set up.\n\nPlease run 'Setup Wine Environment' first.",
+                QMessageBox.Icon.Warning
+            )
+            return
+        
+        self.log("Setting up environment variables...", "info")
+        
+        # Prepare environment variables
+        env = os.environ.copy()
+        
+        # Set PATH to include Wine binaries
+        runner_path_str = str(runner_path)
+        current_path = env.get("PATH", "")
+        env["PATH"] = f"{runner_path_str}/bin:{current_path}"
+        
+        # Set Wine-related environment variables
+        env["WINE"] = str(wine_bin)
+        env["WINEPREFIX"] = self.directory
+        env["WINEDEBUG"] = "-all,fixme-all"
+        env["WINEDLLOVERRIDES"] = "opencl="
+        
+        # DXVK settings
+        env["DXVK_ASYNC"] = "0"
+        env["DXVK_CONFIG"] = "d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1"
+        env["DXVK_FRAME_RATE"] = "60"
+        env["DXVK_LOG_LEVEL"] = "none"
+        
+        # VKD3D settings
+        env["VKD3D_DEBUG"] = "none"
+        env["VKD3D_DISABLE_EXTENSIONS"] = "VK_KHR_present_id"
+        env["VKD3D_FEATURE_LEVEL"] = "12_1"
+        env["VKD3D_FRAME_RATE"] = "60"
+        env["VKD3D_SHADER_DEBUG"] = "none"
+        env["VKD3D_SHADER_MODEL"] = "6_5"
+        
+        self.log("✓ Environment variables configured", "success")
+        self.log(f"Wine: {wine_bin}", "info")
+        self.log(f"WINEPREFIX: {self.directory}", "info")
+        self.log(f"Affinity: {affinity_exe}", "info")
+        
+        # Launch Affinity using wine start
+        self.log("\nLaunching Affinity v3...", "info")
+        
+        # Use wine start to launch the application
+        wine_start_cmd = [
+            str(wine_bin),
+            "start",
+            "C:/Program Files/Affinity/Affinity/Affinity.exe"
+        ]
+        
+        try:
+            # Launch in background (non-blocking)
+            process = subprocess.Popen(
+                wine_start_cmd,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            
+            self.log("✓ Affinity v3 launched successfully", "success")
+            self.log("The application should open in a moment...", "info")
+            
+        except Exception as e:
+            self.log(f"✗ Failed to launch Affinity v3: {e}", "error")
+            self.show_message(
+                "Launch Failed",
+                f"Failed to launch Affinity v3:\n\n{str(e)}",
+                QMessageBox.Icon.Critical
+            )
     
     def download_affinity_installer(self):
         """Download the Affinity installer by itself"""
