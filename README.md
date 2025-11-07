@@ -23,34 +23,71 @@ OpenCL support is fully functional, enabling GPU acceleration for improved perfo
 <img src="https://github.com/user-attachments/assets/c7b70ee5-58e3-46c6-b385-7c3d02749664" width="200" alt="Affinity Photo"/>
 <img src="https://github.com/seapear/AffinityOnLinux/raw/main/Assets/Icons/Affinity-Canva.svg" width="200" alt="Affinity V3"/>
 
-## Installation
+<details>
 
-### All-in-One Installer (Recommended)
+<summary><strong>Python GUI Framework Requirements</strong></summary>
 
-The unified installer provides a single interface to install any Affinity application with automatic dependency management and an interactive menu.
-
-**Features:**
-- Automatic Linux distribution detection
-- Dependency installation and verification
-- Interactive application selection menu
-- Drag-and-drop installer file support
-- Automatic desktop entry creation
-
-**Installation:**
-
+**Arch/CachyOS/EndeavourOS/XeroLinux:**
 ```bash
-bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.sh)"
+sudo pacman -S python-pyqt6
 ```
 
+**Fedora/Nobara:**
+```bash
+sudo dnf install python3-pyqt6
+```
+
+**openSUSE (Tumbleweed/Leap):**
+```bash
+sudo zypper install python313-PyQt6
+```
+
+**PikaOS:**
+```bash
+sudo apt install python3-pyqt6
+```
+
+**Note:** PyQt6 is required to run the GUI installer. The installer will attempt to install it automatically if missing.
+
+**Ubuntu 25.10 Issues:**
+
+If you encounter issues with the GUI on Ubuntu 25.10, install this additional dependency:
+
+```bash
+sudo apt install python3-pyqt6.qtsvg
+```
+
+</details>
+
+<details>
+
+<summary><strong>Installation</strong></summary>
+
 ### Python GUI Installer
+
+**Recommended - Modern graphical interface with one-click setup**
 
 A modern PyQt6-based graphical user interface for the Affinity Linux Installer, providing a clean and professional installation experience with a VS Code-inspired dark theme.
 
 **Features:**
 - **One-Click Full Setup** - Automatically detects your distribution, installs dependencies, sets up Wine, and configures everything
-- **System Setup Tools** - Install system dependencies, Winetricks components, and set up Wine environment separately
+- **System Setup Tools** - Download Affinity installers and install custom Windows applications using the Wine environment
 - **Update Affinity Applications** - Update existing installations without creating new desktop entries or reinstalling dependencies
-- **Troubleshooting Tools** - Open Wine Configuration and set Windows 11 with OpenGL/Vulkan renderer selection
+- **Automatic WebView2 Runtime Installation** - Automatically detects and installs Microsoft Edge WebView2 Runtime for Affinity v3 to enable Help > View Help functionality
+- **Enhanced Status Detection** - Real-time status display showing:
+  - System dependencies (wine, winetricks, wget, curl, etc.)
+  - Winetricks dependencies (.NET Framework, Visual C++, MSXML, fonts, Vulkan renderer)
+  - WebView2 Runtime installation status
+  - Affinity application installation status
+- **DPI Scaling Configuration** - Adjust DPI scaling for Affinity applications with an intuitive slider (96-480 DPI range) to optimize UI size for different displays
+- **Troubleshooting Tools**:
+  - Open Wine Configuration (winecfg)
+  - Open Winetricks GUI
+  - Set Windows 11 + Renderer (Vulkan/OpenGL/GDI)
+  - Reinstall WinMetadata (fixes corrupted Windows metadata)
+  - Install WebView2 Runtime manually (for Affinity v3)
+  - Set DPI Scaling
+  - **Uninstall** - Completely remove the .AffinityLinux folder and all installations
 - **Custom Installation** - Install any Windows application using the custom Wine environment
 - **Visual Progress Tracking** - Real-time progress bars and detailed logging
 - **Modern UI** - Clean, organized interface with grouped button sections and rounded corners
@@ -78,9 +115,15 @@ python AffinityScripts/AffinityLinuxInstaller.py
 
 **Usage:**
 1. Run the installer - it will automatically attempt to install PyQt6 if needed
-2. Click **"One-Click Full Setup"** for automatic configuration, or use individual setup buttons
+2. Click **"One-Click Full Setup"** for automatic configuration
 3. Once Wine is set up, use **"Update Affinity Applications"** to install or update Affinity apps
-4. Use **"Troubleshooting"** tools to configure Wine settings and renderers
+   - For Affinity v3 (Unified), WebView2 Runtime will be automatically installed if missing
+4. Use **"Troubleshooting"** tools to:
+   - Configure Wine settings and renderers
+   - Adjust DPI scaling for better UI visibility
+   - Reinstall WinMetadata if needed
+   - Completely uninstall Affinity Linux if desired
+5. Check the status log on startup to see what's installed and what's missing
 
 **📖 Need Help?** Check out the [GUI Installer Guide](Guide/GUI-Installer-Guide.md) for detailed step-by-step instructions, button explanations, and troubleshooting tips.
 
@@ -91,29 +134,26 @@ python AffinityScripts/AffinityLinuxInstaller.py
 - **Mouse Wheel Zoom**: Hold `Ctrl` and scroll with the mouse wheel over the log area
 - Font size range: 6px (minimum) to 48px (maximum), default: 11px
 
-**GUI Dependencies:**
+<details>
 
-**Arch/CachyOS/EndeavourOS/XeroLinux:**
+<summary><strong><big>Legacy Scripts</big></strong></summary>
+
+### All-in-One Installer
+
+The unified installer provides a single interface to install any Affinity application with automatic dependency management and an interactive menu.
+
+**Features:**
+- Automatic Linux distribution detection
+- Dependency installation and verification
+- Interactive application selection menu
+- Drag-and-drop installer file support
+- Automatic desktop entry creation
+
+**Installation:**
+
 ```bash
-sudo pacman -S python-pyqt6
+bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.sh)"
 ```
-
-**Fedora/Nobara:**
-```bash
-sudo dnf install python3-pyqt6
-```
-
-**openSUSE (Tumbleweed/Leap):**
-```bash
-sudo zypper install python313-PyQt6
-```
-
-**PikaOS:**
-```bash
-sudo apt install python3-pyqt6
-```
-
-**Note:** PyQt6 is required to run the GUI installer.
 
 ### Individual Application Installers
 
@@ -151,7 +191,7 @@ The new unified Affinity application that combines Photo, Designer, and Publishe
 bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/Affinityv3.sh)"
 ```
 
-## Updating Existing Installations
+### Affinity Updater
 
 The Affinity Updater provides a lightweight way to update your existing Affinity installations without going through the full installation process.
 
@@ -166,6 +206,10 @@ The Affinity Updater provides a lightweight way to update your existing Affinity
 ```bash
 bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityUpdater.sh)"
 ```
+
+</details>
+
+</details>
 
 ## System Requirements
 
@@ -182,12 +226,10 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 - openSUSE (Tumbleweed/Leap)
 
 **Note:** Ubuntu, Linux Mint, Pop!_OS, and Zorin OS are not officially supported due to outdated package management systems. Users on these distributions must manually install dependencies.
-## Ubuntu 25.10 issues
-This dep fixes the GUI
 
-```
-sudo apt install python3-pyqt6.qtsvg
-``` 
+<details>
+
+<summary><strong>System Dependencies</strong></summary>
 
 ### Required Dependencies
 
@@ -199,6 +241,10 @@ sudo apt install python3-pyqt6.qtsvg
 - tar
 - jq
 - zstd
+
+**Note:** These dependencies are automatically installed by the GUI installer during "One-Click Full Setup". For legacy scripts, you may need to install them manually using your distribution's package manager.
+
+</details>
 
 ### PikaOS Special Instructions
 

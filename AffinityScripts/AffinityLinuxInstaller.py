@@ -14,6 +14,7 @@ import threading
 import platform
 import urllib.request
 import urllib.error
+import re
 from pathlib import Path
 import time
 
@@ -82,7 +83,7 @@ try:
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
         QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-        QButtonGroup, QRadioButton, QInputDialog
+        QButtonGroup, QRadioButton, QInputDialog, QSlider
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
     from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -96,7 +97,7 @@ except ImportError:
                 QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                 QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
                 QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-                QButtonGroup, QRadioButton, QInputDialog
+                QButtonGroup, QRadioButton, QInputDialog, QSlider
             )
             from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
             from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -268,6 +269,68 @@ class AffinityInstallerGUI(QMainWindow):
         else:
             self.log(f"  zstd: ✗ Not installed", "error")
             deps_installed = False
+        
+        # Check Winetricks Dependencies (only if Wine is set up)
+        if wine_exists:
+            self.log("Winetricks Dependencies:", "info")
+            env = os.environ.copy()
+            env["WINEPREFIX"] = self.directory
+            wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            
+            # List of winetricks components to check
+            winetricks_components = [
+                ("dotnet35", ".NET Framework 3.5"),
+                ("dotnet48", ".NET Framework 4.8"),
+                ("corefonts", "Windows Core Fonts"),
+                ("vcrun2022", "Visual C++ Redistributables 2022"),
+                ("msxml3", "MSXML 3.0"),
+                ("msxml6", "MSXML 6.0"),
+            ]
+            
+            for component, description in winetricks_components:
+                if self._check_winetricks_component(component, wine, env):
+                    self.log(f"  {description}: ✓ Installed", "success")
+                else:
+                    self.log(f"  {description}: ✗ Not installed", "error")
+            
+            # Check Vulkan renderer
+            try:
+                success, stdout, _ = self.run_command(
+                    [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D"],
+                    check=False,
+                    env=env,
+                    capture=True
+                )
+                if success:
+                    # Check if renderer is set to vulkan
+                    vulkan_set = False
+                    try:
+                        renderer_success, renderer_stdout, _ = self.run_command(
+                            [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D", "/v", "renderer"],
+                            check=False,
+                            env=env,
+                            capture=True
+                        )
+                        if renderer_success and "vulkan" in renderer_stdout.lower():
+                            vulkan_set = True
+                    except:
+                        pass
+                    
+                    if vulkan_set:
+                        self.log(f"  Vulkan Renderer: ✓ Configured", "success")
+                    else:
+                        self.log(f"  Vulkan Renderer: ⚠ Not configured", "warning")
+                else:
+                    self.log(f"  Vulkan Renderer: ✗ Not configured", "error")
+            except:
+                self.log(f"  Vulkan Renderer: ✗ Not configured", "error")
+            
+            # Check WebView2 Runtime
+            self.log("WebView2 Runtime:", "info")
+            if self.check_webview2_installed():
+                self.log(f"  Microsoft Edge WebView2 Runtime: ✓ Installed", "success")
+            else:
+                self.log(f"  Microsoft Edge WebView2 Runtime: ✗ Not installed", "error")
         
         self.log("", "info")  # Empty line for spacing
         
@@ -657,10 +720,6 @@ class AffinityInstallerGUI(QMainWindow):
         sys_group = self.create_button_group(
             "System Setup",
             [
-                ("Setup Wine Environment", self.start_initialization),
-                ("Install System Dependencies", self.install_system_dependencies),
-                ("Install Winetricks Dependencies", self.install_winetricks_dependencies),
-                ("Reinstall WinMetadata", self.reinstall_winmetadata),
                 ("Download Affinity Installer", self.download_affinity_installer),
                 ("Install from File Manager", self.install_from_file),
             ]
@@ -689,7 +748,10 @@ class AffinityInstallerGUI(QMainWindow):
                 ("Open Wine Configuration", self.open_winecfg),
                 ("Open Winetricks", self.open_winetricks),
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer),
-                ("Fix Settings", self.install_affinity_settings),
+                ("Reinstall WinMetadata", self.reinstall_winmetadata),
+                ("Install WebView2 Runtime (v3)", self.install_webview2_runtime),
+                ("Set DPI Scaling", self.set_dpi_scaling),
+                ("Uninstall", self.uninstall_affinity_linux),
             ]
         )
         container_layout.addWidget(troubleshoot_group)
@@ -707,7 +769,6 @@ class AffinityInstallerGUI(QMainWindow):
         other_group = self.create_button_group(
             "Other",
             [
-                ("Special Thanks", self.show_thanks),
                 ("Exit", self.close),
             ]
         )
@@ -1991,12 +2052,302 @@ class AffinityInstallerGUI(QMainWindow):
             
             self.log("\n✓ Affinity v3 settings installation completed!", "success")
             self.log("Settings files have been installed for Affinity v3 (Unified).", "info")
-            self.log(f"Settings location: {target_dir}", "info")
-            self.log("", "info")
-            self.log("Note: If settings still don't save:", "info")
-            self.log("  1. Try launching Affinity v3 once to ensure it creates its directory structure", "info")
-            self.log("  2. Check that the Settings folder exists at the path shown above", "info")
-            self.log("  3. Verify file permissions allow read/write access", "info")
+            
+        except Exception as e:
+            import traceback
+            self.log(f"Error installing settings: {e}", "error")
+            self.log(f"Traceback: {traceback.format_exc()}", "error")
+            # Clean up on error
+            try:
+                shutil.rmtree(temp_dir)
+                repo_zip.unlink(missing_ok=True)
+            except:
+                pass
+    
+    def _check_winetricks_component(self, component, wine, env):
+        """Check if a winetricks component is installed"""
+        try:
+            # Different checks for different components
+            if component == "dotnet35":
+                # Check for .NET 3.5 in registry
+                success, stdout, _ = self.run_command(
+                    [str(wine), "reg", "query", "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5", "/v", "Install"],
+                    check=False,
+                    env=env,
+                    capture=True
+                )
+                if success and stdout:
+                    # Check if Install value is 1
+                    if "0x1" in stdout or "REG_DWORD" in stdout:
+                        return True
+            elif component == "dotnet48":
+                # Check for .NET 4.8 in registry
+                success, stdout, _ = self.run_command(
+                    [str(wine), "reg", "query", "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full", "/v", "Release"],
+                    check=False,
+                    env=env,
+                    capture=True
+                )
+                if success and stdout:
+                    # .NET 4.8 has release number 528040 or higher
+                    match = re.search(r'0x([0-9a-fA-F]+)', stdout)
+                    if match:
+                        release = int(match.group(1), 16)
+                        if release >= 528040:  # .NET 4.8
+                            return True
+            elif component == "corefonts":
+                # Check if core fonts directory exists
+                fonts_dir = Path(self.directory) / "drive_c" / "windows" / "Fonts"
+                if fonts_dir.exists():
+                    # Check for some common core fonts
+                    core_fonts = ["arial.ttf", "times.ttf", "courier.ttf", "tahoma.ttf"]
+                    for font in core_fonts:
+                        if (fonts_dir / font).exists():
+                            return True
+            elif component == "vcrun2022":
+                # Check for Visual C++ 2022 redistributables
+                vcrun_paths = [
+                    Path(self.directory) / "drive_c" / "windows" / "system32" / "vcruntime140.dll",
+                    Path(self.directory) / "drive_c" / "windows" / "syswow64" / "vcruntime140.dll",
+                ]
+                for vcrun_path in vcrun_paths:
+                    if vcrun_path.exists():
+                        return True
+            elif component == "msxml3":
+                # Check for MSXML3
+                msxml3_path = Path(self.directory) / "drive_c" / "windows" / "system32" / "msxml3.dll"
+                if msxml3_path.exists():
+                    return True
+            elif component == "msxml6":
+                # Check for MSXML6
+                msxml6_path = Path(self.directory) / "drive_c" / "windows" / "system32" / "msxml6.dll"
+                if msxml6_path.exists():
+                    return True
+        except:
+            pass
+        
+        return False
+    
+    def check_webview2_installed(self):
+        """Check if WebView2 Runtime is already installed"""
+        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        if not wine.exists():
+            return False
+        
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        
+        # Check for WebView2 installation directory
+        webview2_paths = [
+            Path(self.directory) / "drive_c" / "Program Files (x86)" / "Microsoft" / "EdgeWebView" / "Application",
+            Path(self.directory) / "drive_c" / "Program Files" / "Microsoft" / "EdgeWebView" / "Application",
+        ]
+        
+        for webview2_path in webview2_paths:
+            if webview2_path.exists():
+                # Check if msedgewebview2.exe exists
+                msedgewebview2_exe = webview2_path / "msedgewebview2.exe"
+                if msedgewebview2_exe.exists():
+                    return True
+        
+        # Also check registry for WebView2 installation
+        try:
+            success, stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"],
+                check=False,
+                env=env,
+                capture=True
+            )
+            if success:
+                return True
+        except:
+            pass
+        
+        return False
+    
+    def install_webview2_runtime(self):
+        """Install Microsoft Edge WebView2 Runtime for Affinity v3 (Unified)"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Installing Microsoft Edge WebView2 Runtime (Affinity v3)", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Check if Wine is set up
+        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        if not wine_binary.exists():
+            self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
+            QMessageBox.warning(
+                self,
+                "Wine Not Ready",
+                "Wine setup must complete before installing WebView2 Runtime.\n"
+                "Please setup Wine environment first."
+            )
+            return
+        
+        threading.Thread(target=self._install_webview2_runtime_thread, daemon=True).start()
+    
+    def _install_webview2_runtime_thread(self):
+        """Install Microsoft Edge WebView2 Runtime in background thread"""
+        # Check if Wine is set up
+        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        if not wine_binary.exists():
+            self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
+            return False
+        
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        
+        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+        regedit = Path(self.directory) / "ElementalWarriorWine" / "bin" / "regedit"
+        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        
+        # Check if WebView2 Runtime is already installed
+        self.log("Checking if WebView2 Runtime is already installed...", "info")
+        webview2_installed = False
+        
+        # Check for WebView2 installation directory
+        webview2_paths = [
+            Path(self.directory) / "drive_c" / "Program Files (x86)" / "Microsoft" / "EdgeWebView" / "Application",
+            Path(self.directory) / "drive_c" / "Program Files" / "Microsoft" / "EdgeWebView" / "Application",
+        ]
+        
+        for webview2_path in webview2_paths:
+            if webview2_path.exists():
+                # Check if msedgewebview2.exe exists
+                msedgewebview2_exe = webview2_path / "msedgewebview2.exe"
+                if msedgewebview2_exe.exists():
+                    webview2_installed = True
+                    self.log(f"WebView2 Runtime found at: {webview2_path}", "success")
+                    break
+        
+        # Also check registry for WebView2 installation
+        if not webview2_installed:
+            try:
+                success, stdout, _ = self.run_command(
+                    [str(wine), "reg", "query", "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"],
+                    check=False,
+                    env=env,
+                    capture=True
+                )
+                if success:
+                    webview2_installed = True
+                    self.log("WebView2 Runtime found in registry", "success")
+            except:
+                pass
+        
+        if webview2_installed:
+            self.log("WebView2 Runtime is already installed. Skipping installation.", "info")
+            self.log("Verifying configuration...", "info")
+            
+            # Still configure the compatibility settings even if already installed
+            # Step 1: Disable Microsoft Edge Update services (if not already done)
+            self.log("Ensuring Edge Update services are disabled...", "info")
+            disable_edge_update_reg = Path(self.directory) / "disable-edge-update.reg"
+            with open(disable_edge_update_reg, "w") as f:
+                f.write("Windows Registry Editor Version 5.00\n\n")
+                f.write("[HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\edgeupdate]\n")
+                f.write("\"Start\"=dword:00000004\n\n")
+                f.write("[HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\edgeupdatem]\n")
+                f.write("\"Start\"=dword:00000004\n")
+            
+            self.run_command([str(regedit), str(disable_edge_update_reg)], check=False, env=env)
+            disable_edge_update_reg.unlink()
+            
+            # Step 2: Set msedgewebview2.exe to Windows 7 compatibility (if not already set)
+            self.log("Ensuring msedgewebview2.exe Windows 7 compatibility is set...", "info")
+            webview2_win7_reg = Path(self.directory) / "webview2-win7-cap.reg"
+            with open(webview2_win7_reg, "w") as f:
+                f.write("Windows Registry Editor Version 5.00\n\n")
+                f.write("[HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults]\n\n")
+                f.write("[HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\msedgewebview2.exe]\n")
+                f.write("\"Version\"=\"win7\"\n")
+            
+            self.run_command([str(regedit), str(webview2_win7_reg)], check=False, env=env)
+            webview2_win7_reg.unlink()
+            
+            self.log("\n✓ WebView2 Runtime configuration verified!", "success")
+            self.log("WebView2 Runtime is installed and configured correctly.", "info")
+            return True
+        
+        # WebView2 not found, proceed with installation
+        self.log("WebView2 Runtime not found. Proceeding with installation...", "info")
+        
+        try:
+            # Step 1: Set Windows 7 compatibility mode
+            self.log("Setting Windows 7 compatibility mode...", "info")
+            self.run_command([str(wine_cfg), "-v", "win7"], check=False, env=env)
+            self.log("Windows 7 compatibility mode set", "success")
+            
+            # Step 2: Download Microsoft Edge WebView2 Runtime
+            self.log("Downloading Microsoft Edge WebView2 Runtime (v109.0.1518.78)...", "info")
+            webview2_url = "https://archive.org/download/microsoft-edge-web-view-2-runtime-installer-v109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+            webview2_file = Path(self.directory) / "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+            
+            if not self.download_file(webview2_url, str(webview2_file), "WebView2 Runtime"):
+                self.log("Failed to download WebView2 Runtime", "error")
+                return False
+            
+            self.log("WebView2 Runtime downloaded", "success")
+            
+            # Step 3: Install WebView2 Runtime
+            self.log("Installing Microsoft Edge WebView2 Runtime...", "info")
+            self.log("This may take a few minutes...", "info")
+            env["WINEDEBUG"] = "-all"
+            self.run_command([str(wine), str(webview2_file)], check=False, env=env, capture=False)
+            
+            # Wait for installation to complete
+            time.sleep(5)
+            self.log("WebView2 Runtime installation completed", "success")
+            
+            # Step 4: Disable Microsoft Edge Update services
+            self.log("Disabling Microsoft Edge Update services...", "info")
+            disable_edge_update_reg = Path(self.directory) / "disable-edge-update.reg"
+            with open(disable_edge_update_reg, "w") as f:
+                f.write("Windows Registry Editor Version 5.00\n\n")
+                f.write("[HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\edgeupdate]\n")
+                f.write("\"Start\"=dword:00000004\n\n")
+                f.write("[HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services\\edgeupdatem]\n")
+                f.write("\"Start\"=dword:00000004\n")
+            
+            self.run_command([str(regedit), str(disable_edge_update_reg)], check=False, env=env)
+            disable_edge_update_reg.unlink()
+            self.log("Edge Update services disabled", "success")
+            
+            # Step 5: Set back to Windows 11 compatibility
+            self.log("Setting Windows 11 compatibility mode...", "info")
+            self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
+            self.log("Windows 11 compatibility mode set", "success")
+            
+            # Step 6: Set msedgewebview2.exe to Windows 7 compatibility
+            self.log("Setting msedgewebview2.exe to Windows 7 compatibility...", "info")
+            webview2_win7_reg = Path(self.directory) / "webview2-win7-cap.reg"
+            with open(webview2_win7_reg, "w") as f:
+                f.write("Windows Registry Editor Version 5.00\n\n")
+                f.write("[HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults]\n\n")
+                f.write("[HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\msedgewebview2.exe]\n")
+                f.write("\"Version\"=\"win7\"\n")
+            
+            self.run_command([str(regedit), str(webview2_win7_reg)], check=False, env=env)
+            webview2_win7_reg.unlink()
+            self.log("msedgewebview2.exe Windows 7 compatibility set", "success")
+            
+            # Clean up installer file
+            if webview2_file.exists():
+                webview2_file.unlink()
+                self.log("WebView2 installer file removed", "success")
+            
+            self.log("\n✓ Microsoft Edge WebView2 Runtime installation completed!", "success")
+            self.log("WebView2 Runtime v109.0.1518.78 has been installed for Affinity v3.", "info")
+            self.log("Help > View Help should now work in Affinity v3.", "info")
+            return True
+            
+        except Exception as e:
+            self.log(f"Error installing WebView2 Runtime: {e}", "error")
+            # Try to restore Windows 11 compatibility even if something failed
+            try:
+                self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
+            except:
+                pass
+            return False
             
         except Exception as e:
             import traceback
@@ -2391,8 +2742,19 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Installing fresh WinMetadata...", "info")
             self.setup_winmetadata()
             
-            # For Affinity v3 (Unified), reinstall settings files after update
+            # For Affinity v3 (Unified), check and install WebView2 Runtime if needed, then reinstall settings files
             if display_name and ("Unified" in display_name or display_name == "Affinity (Unified)"):
+                # Check if WebView2 Runtime is installed, install if missing
+                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log("Checking WebView2 Runtime for Affinity v3...", "info")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                if not self.check_webview2_installed():
+                    self.log("WebView2 Runtime not found. Installing automatically...", "info")
+                    self._install_webview2_runtime_thread()  # Install synchronously in this thread
+                else:
+                    self.log("WebView2 Runtime is already installed.", "success")
+                
+                # Reinstall settings files
                 self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 self.log("Reinstalling Affinity v3 settings files...", "info")
                 self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -2458,6 +2820,17 @@ class AffinityInstallerGUI(QMainWindow):
             
             # Configure OpenCL
             self.configure_opencl(app_name)
+            
+            # For Affinity v3 (Unified), check and install WebView2 Runtime if needed
+            if app_name == "Add" or app_name == "Affinity (Unified)":
+                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log("Checking WebView2 Runtime for Affinity v3...", "info")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                if not self.check_webview2_installed():
+                    self.log("WebView2 Runtime not found. Installing automatically...", "info")
+                    self._install_webview2_runtime_thread()  # Install synchronously in this thread
+                else:
+                    self.log("WebView2 Runtime is already installed.", "success")
             
             # Create desktop entry
             self.create_desktop_entry(app_name)
@@ -2768,6 +3141,229 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  Error: {stderr[:200] if stderr else 'Unknown error'}", "error")
         
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
+    
+    def set_dpi_scaling(self):
+        """Set DPI scaling for Affinity applications"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("DPI Scaling Configuration", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        
+        if not wine.exists():
+            self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
+            self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
+            return
+        
+        # Try to get current DPI value from registry
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        current_dpi = 96  # Default value
+        
+        # Try to read current DPI from registry
+        try:
+            success, stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Control Panel\\Desktop", "/v", "LogPixels"],
+                check=False,
+                env=env,
+                capture=True
+            )
+            if success and stdout:
+                # Parse the output to extract DPI value
+                # Output format: "LogPixels    REG_DWORD    0x000000c0 (192)"
+                match = re.search(r'0x[0-9a-fA-F]+|(\d+)', stdout)
+                if match:
+                    # Try to find hex value first
+                    hex_match = re.search(r'0x([0-9a-fA-F]+)', stdout)
+                    if hex_match:
+                        current_dpi = int(hex_match.group(1), 16)
+                    else:
+                        # Try decimal
+                        dec_match = re.search(r'\((\d+)\)', stdout)
+                        if dec_match:
+                            current_dpi = int(dec_match.group(1))
+        except:
+            pass  # Use default if reading fails
+        
+        # Create dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Set DPI Scaling")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+        
+        # Info label
+        info_label = QLabel(
+            "Adjust DPI scaling for Affinity applications.\n"
+            "Higher values make UI elements larger.\n\n"
+            "Common values:\n"
+            "• 96 = 100% (1080p, 24-27 inches)\n"
+            "• 120 = 125% (1080p, 13-15 inch laptops)\n"
+            "• 144 = 150% (1440p, 27-32 inches)\n"
+            "• 192 = 200% (4K, 27-32 inches)"
+        )
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Current value display
+        value_label = QLabel()
+        value_label.setStyleSheet("font-size: 14px; font-weight: bold; padding: 10px;")
+        layout.addWidget(value_label)
+        
+        # Slider
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setMinimum(96)
+        slider.setMaximum(480)
+        slider.setValue(current_dpi)
+        slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        slider.setTickInterval(24)  # Show ticks every 24 DPI
+        slider.setSingleStep(12)  # Step by 12 DPI for smoother adjustment
+        layout.addWidget(slider)
+        
+        # Min/Max labels
+        minmax_layout = QHBoxLayout()
+        minmax_layout.addWidget(QLabel("96 (100%)"))
+        minmax_layout.addStretch()
+        minmax_layout.addWidget(QLabel("480 (500%)"))
+        layout.addLayout(minmax_layout)
+        
+        # Update label when slider changes
+        def update_label(value):
+            percentage = int((value / 96) * 100)
+            value_label.setText(f"DPI: {value} ({percentage}%)")
+        
+        slider.valueChanged.connect(update_label)
+        update_label(current_dpi)  # Set initial value
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Save")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            self.log("DPI scaling configuration cancelled", "warning")
+            return
+        
+        selected_dpi = slider.value()
+        percentage = int((selected_dpi / 96) * 100)
+        
+        # Apply DPI setting via registry
+        self.log(f"Setting DPI scaling to {selected_dpi} ({percentage}%)...", "info")
+        
+        # Use wine reg add command
+        success, stdout, stderr = self.run_command(
+            [
+                str(wine), "reg", "add",
+                "HKEY_CURRENT_USER\\Control Panel\\Desktop",
+                "/v", "LogPixels",
+                "/t", "REG_DWORD",
+                "/d", str(selected_dpi),
+                "/f"
+            ],
+            check=False,
+            env=env
+        )
+        
+        if success:
+            self.log(f"✓ DPI scaling set to {selected_dpi} ({percentage}%)", "success")
+            self.log("Note: You may need to restart Affinity applications for the change to take effect.", "info")
+            self.show_message(
+                "DPI Scaling Updated",
+                f"DPI scaling has been set to {selected_dpi} ({percentage}%).\n\n"
+                "You may need to restart Affinity applications for the change to take effect.",
+                "info"
+            )
+        else:
+            self.log(f"✗ Failed to set DPI scaling: {stderr or 'Unknown error'}", "error")
+            self.show_message(
+                "Error",
+                f"Failed to set DPI scaling:\n{stderr or 'Unknown error'}",
+                "error"
+            )
+    
+    def uninstall_affinity_linux(self):
+        """Uninstall Affinity Linux by deleting the .AffinityLinux folder"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Uninstall Affinity Linux", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Show warning dialog with Yes/No buttons
+        reply = QMessageBox.warning(
+            self,
+            "Uninstall Affinity Linux",
+            "WARNING: This will permanently delete the .AffinityLinux folder and all its contents.\n\n"
+            "This includes:\n"
+            "• All Wine configuration and settings\n"
+            "• All installed Affinity applications (Photo, Designer, Publisher, Unified)\n"
+            "• All application data and preferences\n"
+            "• All downloaded installers and cached files\n"
+            "• WebView2 Runtime and other dependencies\n\n"
+            "This action CANNOT be undone!\n\n"
+            "Do you want to proceed with the uninstall?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            self.log("Uninstall cancelled by user", "warning")
+            return
+        
+        # Stop Wine processes first
+        self.log("Stopping Wine processes...", "info")
+        try:
+            self.run_command(["wineserver", "-k"], check=False)
+            time.sleep(2)
+            self.log("Wine processes stopped", "success")
+        except Exception as e:
+            self.log(f"Warning: Could not stop all Wine processes: {e}", "warning")
+        
+        # Delete the .AffinityLinux folder
+        affinity_dir = Path(self.directory)
+        if not affinity_dir.exists():
+            self.log("Affinity Linux directory not found. Nothing to uninstall.", "warning")
+            self.show_message(
+                "Nothing to Uninstall",
+                "The .AffinityLinux folder does not exist.\n\nNothing to uninstall.",
+                "info"
+            )
+            return
+        
+        self.log(f"Deleting directory: {affinity_dir}", "info")
+        try:
+            shutil.rmtree(affinity_dir)
+            self.log("✓ .AffinityLinux folder deleted successfully", "success")
+            self.log("\n✓ Uninstall completed!", "success")
+            self.log("All Affinity Linux files have been removed.", "info")
+            
+            self.show_message(
+                "Uninstall Complete",
+                "The .AffinityLinux folder has been successfully deleted.\n\n"
+                "All Affinity installations and configurations have been removed.\n\n"
+                "You may close this installer now.",
+                "info"
+            )
+            
+            # Refresh installation status
+            QTimer.singleShot(100, self.check_installation_status)
+            
+        except PermissionError:
+            self.log("✗ Permission denied. Some files may be in use.", "error")
+            self.log("Please close all Affinity applications and try again.", "error")
+            self.show_message(
+                "Uninstall Failed",
+                "Permission denied. Some files may be in use.\n\n"
+                "Please close all Affinity applications and Wine processes, then try again.",
+                "error"
+            )
+        except Exception as e:
+            self.log(f"✗ Failed to delete directory: {e}", "error")
+            self.show_message(
+                "Uninstall Failed",
+                f"Failed to delete the .AffinityLinux folder:\n\n{str(e)}\n\n"
+                "You may need to manually delete it.",
+                "error"
+            )
     
     def launch_affinity_v3(self):
         """Launch Affinity v3 with optimized environment variables"""
