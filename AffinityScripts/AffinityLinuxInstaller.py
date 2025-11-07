@@ -158,6 +158,7 @@ class AffinityInstallerGUI(QMainWindow):
     # Signals for thread-safe GUI updates
     log_signal = pyqtSignal(str, str)  # message, level
     progress_signal = pyqtSignal(float)  # value (0.0-1.0)
+    progress_text_signal = pyqtSignal(str)  # progress text
     show_message_signal = pyqtSignal(str, str, str)  # title, message, type (info/error/warning)
     
     def __init__(self):
@@ -175,9 +176,15 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_buttons = {}  # Store references to update buttons
         self.log_font_size = 11  # Initial font size for log area
         
+        # Setup log file
+        self.log_file_path = Path.home() / "AffinitySetup.log"
+        self.log_file = None
+        self._init_log_file()
+        
         # Connect signals
         self.log_signal.connect(self._log_safe)
         self.progress_signal.connect(self._update_progress_safe)
+        self.progress_text_signal.connect(self._update_progress_text_safe)
         self.show_message_signal.connect(self._show_message_safe)
         
         # Load Affinity icon
@@ -645,6 +652,12 @@ class AffinityInstallerGUI(QMainWindow):
         group_layout.setSpacing(10)
         group_layout.setContentsMargins(12, 25, 12, 12)
         
+        # Progress status label (above progress bar)
+        self.progress_label = QLabel("Ready")
+        self.progress_label.setStyleSheet("font-size: 12px; font-weight: 500; color: #cccccc; padding: 5px 0px;")
+        self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        group_layout.addWidget(self.progress_label)
+        
         # Progress bar
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
@@ -810,9 +823,29 @@ class AffinityInstallerGUI(QMainWindow):
             icon_dir.mkdir(parents=True, exist_ok=True)
             icon_path = icon_dir / "Affinity.svg"
             
-            # Download if not exists
-            if not icon_path.exists():
-                icon_url = "https://github.com/seapear/AffinityOnLinux/blob/main/Assets/Icons/Affinity-Canva.svg"
+            # Check if file exists and is valid SVG
+            needs_download = True
+            if icon_path.exists():
+                try:
+                    # Check if file is valid SVG (not HTML)
+                    with open(icon_path, 'r', encoding='utf-8') as f:
+                        first_line = f.readline().strip()
+                        # Valid SVG should start with <?xml or <svg, not <!DOCTYPE or <html
+                        if first_line.startswith('<?xml') or first_line.startswith('<svg'):
+                            needs_download = False
+                        else:
+                            # File is corrupted (likely HTML), delete it
+                            icon_path.unlink()
+                except:
+                    # If we can't read it, delete and re-download
+                    try:
+                        icon_path.unlink()
+                    except:
+                        pass
+            
+            # Download if needed
+            if needs_download:
+                icon_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/Assets/Icons/Affinity-Canva.svg"
                 try:
                     urllib.request.urlretrieve(icon_url, str(icon_path))
                     self.affinity_icon_path = str(icon_path)
@@ -822,6 +855,19 @@ class AffinityInstallerGUI(QMainWindow):
                 self.affinity_icon_path = str(icon_path)
         except Exception as e:
             self.affinity_icon_path = None
+    
+    def closeEvent(self, event):
+        """Handle window close event - close log file"""
+        if self.log_file:
+            try:
+                log_footer = f"{'='*80}\n"
+                log_footer += f"Session Ended: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                log_footer += f"{'='*80}\n\n"
+                self.log_file.write(log_footer)
+                self.log_file.close()
+            except Exception:
+                pass
+        event.accept()
     
     def sanitize_filename(self, filename):
         """Sanitize filename by replacing spaces and other problematic characters"""
@@ -838,6 +884,22 @@ class AffinityInstallerGUI(QMainWindow):
     def log(self, message, level="info"):
         """Add message to log (thread-safe via signal)"""
         self.log_signal.emit(message, level)
+    
+    def _init_log_file(self):
+        """Initialize log file"""
+        try:
+            # Open log file in append mode
+            self.log_file = open(self.log_file_path, 'a', encoding='utf-8')
+            # Write header
+            log_header = f"\n{'='*80}\n"
+            log_header += f"Affinity Linux Installer - Session Started\n"
+            log_header += f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            log_header += f"{'='*80}\n"
+            self.log_file.write(log_header)
+            self.log_file.flush()
+        except Exception as e:
+            # If we can't open the log file, continue without file logging
+            self.log_file = None
     
     def _log_safe(self, message, level="info"):
         """Thread-safe log handler (called from main thread)"""
@@ -862,6 +924,19 @@ class AffinityInstallerGUI(QMainWindow):
         self.log_text.verticalScrollBar().setValue(
             self.log_text.verticalScrollBar().maximum()
         )
+        
+        # Write to log file (plain text, no HTML)
+        if self.log_file:
+            try:
+                # Remove HTML tags and convert to plain text for file
+                plain_message = message
+                # Write with timestamp and level
+                log_entry = f"{prefix}{plain_message}\n"
+                self.log_file.write(log_entry)
+                self.log_file.flush()  # Ensure it's written immediately
+            except Exception:
+                # If file write fails, continue without file logging
+                pass
     
     def update_progress(self, value):
         """Update progress bar (thread-safe via signal)"""
@@ -870,6 +945,14 @@ class AffinityInstallerGUI(QMainWindow):
     def _update_progress_safe(self, value):
         """Thread-safe progress update handler (called from main thread)"""
         self.progress.setValue(int(value * 100))
+    
+    def _update_progress_text_safe(self, text):
+        """Thread-safe progress text update handler (called from main thread)"""
+        self.progress_label.setText(text)
+    
+    def update_progress_text(self, text):
+        """Update progress label text (thread-safe via signal)"""
+        self.progress_text_signal.emit(text)
     
     def show_message(self, title, message, msg_type="info"):
         """Show message box (thread-safe via signal)"""
@@ -904,6 +987,62 @@ class AffinityInstallerGUI(QMainWindow):
             return False, e.stdout if hasattr(e, 'stdout') else "", e.stderr if hasattr(e, 'stderr') else ""
         except Exception as e:
             return False, "", str(e)
+    
+    def run_command_streaming(self, command, env=None, progress_callback=None):
+        """Execute command and stream output to log in real-time"""
+        try:
+            if isinstance(command, str):
+                command = command.split()
+            
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+                env=env if env else os.environ.copy()
+            )
+            
+            # Stream output line by line
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    # Clean up the line and log it
+                    line = line.rstrip()
+                    if line:
+                        # Show important progress messages
+                        line_lower = line.lower()
+                        # Always show progress-related messages
+                        if any(keyword in line_lower for keyword in [
+                            'progress', 'downloading', 'installing', 'extracting', 
+                            'configuring', 'executing', 'running', 'done', 'complete',
+                            'success', 'error', 'failed', 'warning', '%', 'mb', 'kb'
+                        ]):
+                            self.log(f"  {line}", "info")
+                            
+                            # Try to extract progress percentage if callback provided
+                            if progress_callback:
+                                # Look for percentage patterns like "50%", "50 %", "(50%)", etc.
+                                import re
+                                percent_match = re.search(r'(\d+)\s*%', line, re.IGNORECASE)
+                                if percent_match:
+                                    try:
+                                        percent = int(percent_match.group(1))
+                                        progress_callback(percent / 100.0)
+                                    except:
+                                        pass
+                        # Filter out very verbose Wine debug messages but keep important ones
+                        elif not any(skip in line_lower for skip in [
+                            'fixme:', 'trace:', 'debug:'
+                        ]):
+                            # Show other non-debug messages
+                            self.log(f"  {line}", "info")
+            
+            process.wait()
+            return process.returncode == 0
+        except Exception as e:
+            self.log(f"Error running command: {e}", "error")
+            return False
     
     def check_command(self, cmd):
         """Check if command exists"""
@@ -1016,30 +1155,37 @@ class AffinityInstallerGUI(QMainWindow):
     def _one_click_setup_thread(self):
         """One-click setup in background thread"""
         # Step 1: Detect distribution
+        self.update_progress_text("Step 1/4: Detecting Linux distribution...")
         self.update_progress(0.05)
         if not self.detect_distro():
             self.log("Failed to detect distribution. Cannot continue.", "error")
+            self.update_progress_text("Ready")
             return
         
         self.log(f"Detected distribution: {self.distro} {self.distro_version or ''}", "success")
         
         # Step 2: Check and install dependencies
+        self.update_progress_text("Step 2/4: Checking and installing system dependencies...")
         self.update_progress(0.15)
         if not self.check_dependencies():
             self.log("Dependency check failed. Please resolve issues and try again.", "error")
+            self.update_progress_text("Ready")
             return
         
         # Step 3: Setup Wine environment (this includes winetricks dependencies via configure_wine)
+        self.update_progress_text("Step 3/4: Setting up Wine environment...")
         self.update_progress(0.40)
         self.setup_wine()
         
         # Step 4: Install Affinity v3 settings to enable settings saving
+        self.update_progress_text("Step 4/4: Installing Affinity v3 settings...")
         self.update_progress(0.90)
         self.log("Installing Affinity v3 settings files...", "info")
         self._install_affinity_settings_thread()
         
         # Complete!
         self.update_progress(1.0)
+        self.update_progress_text("Setup Complete!")
         self.log("\n✓ Full setup completed!", "success")
         self.log("You can now install Affinity applications using the buttons above.", "info")
         
@@ -1406,10 +1552,14 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
         # Stop Wine processes
+        self.update_progress_text("Preparing Wine environment...")
+        self.update_progress(0.0)
         self.log("Stopping Wine processes...", "info")
         self.run_command(["wineserver", "-k"], check=False)
         
         # Create directory
+        self.update_progress_text("Creating installation directory...")
+        self.update_progress(0.05)
         Path(self.directory).mkdir(parents=True, exist_ok=True)
         self.log("Installation directory created", "success")
         
@@ -1417,12 +1567,17 @@ class AffinityInstallerGUI(QMainWindow):
         wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
         wine_file = Path(self.directory) / "ElementalWarriorWine-x86_64.tar.gz"
         
+        self.update_progress_text("Downloading Wine binary...")
+        self.update_progress(0.10)
         self.log("Downloading Wine binary...", "info")
         if not self.download_file(wine_url, str(wine_file), "Wine binaries"):
             self.log("Failed to download Wine binary", "error")
+            self.update_progress_text("Ready")
             return False
         
         # Extract Wine
+        self.update_progress_text("Extracting Wine binary...")
+        self.update_progress(0.50)
         self.log("Extracting Wine binary...", "info")
         try:
             with tarfile.open(wine_file, "r:gz") as tar:
@@ -1431,9 +1586,11 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Wine binary extracted", "success")
         except Exception as e:
             self.log(f"Failed to extract Wine: {e}", "error")
+            self.update_progress_text("Ready")
             return False
         
         # Find and link Wine directory
+        self.update_progress(0.55)
         wine_dir = next(Path(self.directory).glob("ElementalWarriorWine*"), None)
         if wine_dir and wine_dir != Path(self.directory) / "ElementalWarriorWine":
             target = Path(self.directory) / "ElementalWarriorWine"
@@ -1443,14 +1600,18 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Wine symlink created", "success")
         
         # Verify Wine binary
+        self.update_progress(0.60)
         wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
         if not wine_binary.exists():
             self.log("Wine binary not found", "error")
+            self.update_progress_text("Ready")
             return False
         
         self.log("Wine binary verified", "success")
         
         # Download icons
+        self.update_progress_text("Downloading application icons...")
+        self.update_progress(0.65)
         self.log("\nSetting up application icons...", "info")
         icons_dir = Path.home() / ".local" / "share" / "icons"
         icons_dir.mkdir(parents=True, exist_ok=True)
@@ -1462,24 +1623,35 @@ class AffinityInstallerGUI(QMainWindow):
              icons_dir / "AffinityDesigner.svg", "Designer icon"),
             ("https://github.com/user-attachments/assets/96ae06f8-470b-451f-ba29-835324b5b552",
              icons_dir / "AffinityPublisher.svg", "Publisher icon"),
-            ("https://github.com/seapear/AffinityOnLinux/blob/main/Assets/Icons/Affinity-Canva.svg",
+            ("https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/Assets/Icons/Affinity-Canva.svg",
              icons_dir / "Affinity.svg", "Affinity V3 icon")
         ]
         
-        for url, path, desc in icons:
+        total_icons = len(icons)
+        for idx, (url, path, desc) in enumerate(icons):
+            icon_progress = 0.65 + (idx / total_icons) * 0.05
+            self.update_progress(icon_progress)
             if not self.download_file(url, str(path), desc):
                 self.log(f"Warning: {desc} download failed, but continuing...", "warning")
         
         # Setup WinMetadata
+        self.update_progress_text("Setting up Windows Metadata...")
+        self.update_progress(0.70)
         self.setup_winmetadata()
         
         # Setup vkd3d-proton
+        self.update_progress_text("Setting up vkd3d-proton...")
+        self.update_progress(0.80)
         self.setup_vkd3d()
         
         # Configure Wine
+        self.update_progress_text("Configuring Wine with winetricks...")
+        self.update_progress(0.90)
         self.configure_wine()
         
         self.setup_complete = True
+        self.update_progress(1.0)
+        self.update_progress_text("Wine setup complete!")
         self.log("\n✓ Wine setup completed!", "success")
         
         # Refresh installation status to update button states
@@ -1495,6 +1667,7 @@ class AffinityInstallerGUI(QMainWindow):
         system32_dir = Path(self.directory) / "drive_c" / "windows" / "system32"
         system32_dir.mkdir(parents=True, exist_ok=True)
         
+        self.update_progress_text("Downloading Windows Metadata...")
         self.log("Downloading Windows metadata...", "info")
         if not self.download_file(
             "https://archive.org/download/win-metadata/WinMetadata.zip",
@@ -1505,6 +1678,7 @@ class AffinityInstallerGUI(QMainWindow):
             return
         
         # Extract WinMetadata
+        self.update_progress_text("Extracting Windows Metadata...")
         self.log("Extracting Windows metadata...", "info")
         try:
             if self.check_command("7z"):
@@ -1593,12 +1767,14 @@ class AffinityInstallerGUI(QMainWindow):
         vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
         vkd3d_temp.mkdir(exist_ok=True)
         
+        self.update_progress_text("Downloading vkd3d-proton...")
         self.log("Downloading vkd3d-proton...", "info")
         if not self.download_file(vkd3d_url, str(vkd3d_file), "vkd3d-proton"):
             self.log("Failed to download vkd3d-proton", "error")
             return
         
         # Extract vkd3d-proton
+        self.update_progress_text("Extracting vkd3d-proton...")
         self.log("Extracting vkd3d-proton...", "info")
         if self.check_command("unzstd"):
             tar_file = Path(self.directory) / "vkd3d-proton.tar"
@@ -1646,13 +1822,34 @@ class AffinityInstallerGUI(QMainWindow):
         ]
         
         self.log("Installing Wine components (this may take several minutes)...", "info")
-        for component in components:
-            self.log(f"Installing {component}...", "info")
-            self.run_command(
-                ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", component],
-                check=False,
-                env=env
+        total_components = len(components)
+        for idx, component in enumerate(components):
+            # Calculate base progress for this component (0.0 to 1.0 across all components)
+            base_progress = idx / total_components
+            component_progress_range = 1.0 / total_components
+            
+            # Update progress label to show current component
+            self.update_progress_text(f"Installing: {component} ({idx + 1}/{total_components})")
+            
+            self.log(f"Installing {component}... [{idx + 1}/{total_components}]", "info")
+            self.log("  (Progress will be shown below)", "info")
+            
+            # Progress callback that updates based on component progress
+            def update_component_progress(percent):
+                # percent is 0.0-1.0 for this component
+                # Map it to overall progress
+                overall_progress = base_progress + (percent * component_progress_range)
+                self.update_progress(overall_progress)
+            
+            # Use streaming to show progress
+            self.run_command_streaming(
+                ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", component],
+                env=env,
+                progress_callback=update_component_progress
             )
+            
+            # Mark this component as complete
+            self.update_progress(base_progress + component_progress_range)
         
         # Set Windows version to 11
         self.log("Setting Windows version to 11...", "info")
@@ -1671,6 +1868,7 @@ class AffinityInstallerGUI(QMainWindow):
             theme_file.unlink()
         
         self.log("Wine configuration completed", "success")
+        self.update_progress_text("Ready")
     
     def show_main_menu(self):
         """Display main application menu"""
@@ -1733,13 +1931,36 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("Installing Wine components (this may take several minutes)...", "info")
         
-        for component, description in components:
-            self.log(f"Installing {description} ({component})...", "info")
-            success, stdout, stderr = self.run_command(
-                ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", component],
-                check=False,
-                env=env
+        total_components = len(components)
+        for idx, (component, description) in enumerate(components):
+            # Calculate base progress for this component (0.0 to 1.0 across all components)
+            base_progress = idx / total_components
+            component_progress_range = 1.0 / total_components
+            
+            # Update progress label to show current component
+            self.update_progress_text(f"Installing: {description} ({idx + 1}/{total_components})")
+            
+            self.log(f"Installing {description} ({component})... [{idx + 1}/{total_components}]", "info")
+            self.log("  (This may take several minutes - progress will be shown below)", "info")
+            
+            # Progress callback that updates based on component progress
+            def update_component_progress(percent):
+                # percent is 0.0-1.0 for this component
+                # Map it to overall progress
+                overall_progress = base_progress + (percent * component_progress_range)
+                self.update_progress(overall_progress)
+            
+            # Use streaming to show progress in real-time
+            # Keep --unattended to prevent dialogs, but remove it for verbose output
+            # We'll use verbose mode to see progress
+            success = self.run_command_streaming(
+                ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", component],
+                env=env,
+                progress_callback=update_component_progress
             )
+            
+            # Mark this component as complete
+            self.update_progress(base_progress + component_progress_range)
             
             if success:
                 self.log(f"✓ {description} installed", "success")
@@ -1748,22 +1969,25 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"⚠ {description} installation failed, retrying...", "warning")
                 time.sleep(2)  # Brief pause before retry
                 
-                retry_success, retry_stdout, retry_stderr = self.run_command(
-                    ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", component],
-                    check=False,
-                    env=env
+                self.log(f"Retrying {description} installation...", "info")
+                retry_success = self.run_command_streaming(
+                    ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", component],
+                    env=env,
+                    progress_callback=update_component_progress
                 )
+                
+                # Mark component as complete after retry
+                self.update_progress(base_progress + component_progress_range)
                 
                 if retry_success:
                     self.log(f"✓ {description} installed successfully on retry", "success")
                 else:
-                    # Check if it might already be installed (common error pattern)
-                    error_msg = (retry_stderr or "").lower()
-                    if "already installed" in error_msg or "already exists" in error_msg:
+                    # Check if it might already be installed by checking the component
+                    if self._check_winetricks_component(component.split('=')[0] if '=' in component else component, 
+                                                         Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine", env):
                         self.log(f"✓ {description} appears to already be installed", "success")
                     else:
                         self.log(f"✗ {description} installation failed after retry. You may need to install manually.", "error")
-                        self.log(f"  Error details: {retry_stderr[:200] if retry_stderr else 'Unknown error'}", "error")
         
         # Set Windows version to 11
         wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
@@ -1784,6 +2008,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Dark theme applied", "success")
         
         self.log("\n✓ Winetricks dependencies installation completed!", "success")
+        self.update_progress_text("Ready")
     
     def install_affinity_settings(self):
         """Install Affinity v3 (Unified) settings files to enable settings saving"""
@@ -1838,6 +2063,8 @@ class AffinityInstallerGUI(QMainWindow):
         temp_dir.mkdir(exist_ok=True)
         
         # Download the repository as a zip file
+        self.update_progress_text("Downloading Settings from repository...")
+        self.update_progress(0.1)
         self.log("Downloading Settings from GitHub repository...", "info")
         repo_zip = temp_dir / "AffinityOnLinux.zip"
         repo_url = "https://github.com/seapear/AffinityOnLinux/archive/refs/heads/main.zip"
@@ -1863,6 +2090,8 @@ class AffinityInstallerGUI(QMainWindow):
         self.log(f"Downloaded zip file size: {repo_zip.stat().st_size / 1024 / 1024:.2f} MB", "info")
         
         # Extract the zip file
+        self.update_progress_text("Extracting Settings repository...")
+        self.update_progress(0.3)
         self.log("Extracting Settings repository...", "info")
         try:
             if self.check_command("7z"):
@@ -1930,6 +2159,8 @@ class AffinityInstallerGUI(QMainWindow):
             # Source Settings directory path - For Affinity v3 (Unified), use 3.0
             # $APP would be "Affinity" and version is 3.0
             # So the source should be: Auxiliary/Settings/Affinity/3.0/Settings
+            self.update_progress_text("Locating Settings files...")
+            self.update_progress(0.5)
             settings_source_dirs = [
                 settings_dir / "Affinity" / "3.0" / "Settings",  # Affinity v3 uses 3.0
                 settings_dir / "Affinity" / "Settings",
@@ -2010,6 +2241,8 @@ class AffinityInstallerGUI(QMainWindow):
                     self.log(f"Warning: Could not fully remove old settings: {e}", "warning")
             
             # Copy settings from source to target
+            self.update_progress_text("Copying Settings files...")
+            self.update_progress(0.7)
             target_dir.parent.mkdir(parents=True, exist_ok=True)
             self.log(f"Copying settings from repository to Wine prefix...", "info")
             self.log(f"  From: {settings_source}", "info")
@@ -2017,6 +2250,7 @@ class AffinityInstallerGUI(QMainWindow):
             
             # Copy with metadata preservation
             shutil.copytree(settings_source, target_dir, dirs_exist_ok=True)
+            self.update_progress(0.9)
             self.log(f"Settings copied successfully to: {target_dir}", "success")
             
             # Verify the copy
@@ -2050,6 +2284,8 @@ class AffinityInstallerGUI(QMainWindow):
             except Exception as e:
                 self.log(f"Note: Could not clean up temp files: {e}", "warning")
             
+            self.update_progress(1.0)
+            self.update_progress_text("Settings installation complete!")
             self.log("\n✓ Affinity v3 settings installation completed!", "success")
             self.log("Settings files have been installed for Affinity v3 (Unified).", "info")
             
@@ -2633,9 +2869,13 @@ class AffinityInstallerGUI(QMainWindow):
     def run_update(self, display_name, installer_path):
         """Run the update process - simple installer without desktop entries or deps"""
         try:
+            self.update_progress_text("Preparing update...")
+            self.update_progress(0.0)
             self.log(f"Selected installer: {installer_path}", "success")
             
             # Copy installer to Wine prefix with sanitized filename (remove spaces)
+            self.update_progress_text("Copying installer...")
+            self.update_progress(0.2)
             original_filename = Path(installer_path).name
             sanitized_filename = self.sanitize_filename(original_filename)
             installer_file = Path(self.directory) / sanitized_filename
@@ -2643,11 +2883,15 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Installer copied to Wine prefix", "success")
             
             # Set up environment
+            self.update_progress_text("Configuring Wine...")
+            self.update_progress(0.3)
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             env["WINEDEBUG"] = "-all"
             
             # Run installer with custom Wine
+            self.update_progress_text("Running updater...")
+            self.update_progress(0.4)
             wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
             self.log("Launching installer...", "info")
             self.log("Follow the installation wizard in the window that opens.", "info")
@@ -2760,6 +3004,8 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 self._install_affinity_settings_thread()
             
+            self.update_progress(1.0)
+            self.update_progress_text("Update complete!")
             self.log(f"\n✓ {display_name} update completed!", "success")
             self.log("The application has been updated. Use your existing desktop entry to launch it.", "info")
             
@@ -2784,9 +3030,13 @@ class AffinityInstallerGUI(QMainWindow):
     def run_installation(self, app_name, installer_path):
         """Run the installation process"""
         try:
+            self.update_progress_text("Preparing installation...")
+            self.update_progress(0.0)
             self.log(f"Selected installer: {installer_path}", "success")
             
             # Copy installer with sanitized filename (remove spaces)
+            self.update_progress_text("Copying installer...")
+            self.update_progress(0.1)
             original_filename = Path(installer_path).name
             sanitized_filename = self.sanitize_filename(original_filename)
             installer_file = Path(self.directory) / sanitized_filename
@@ -2794,12 +3044,16 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Installer copied", "success")
             
             # Set Windows version
+            self.update_progress_text("Configuring Wine...")
+            self.update_progress(0.2)
             wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
             
             # Run installer
+            self.update_progress_text("Running installer...")
+            self.update_progress(0.3)
             wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
             env["WINEDEBUG"] = "-all"
             self.log("Launching installer...", "info")
@@ -2812,17 +3066,24 @@ class AffinityInstallerGUI(QMainWindow):
             time.sleep(3)
             
             # Clean up installer
+            self.update_progress(0.5)
             installer_file.unlink()
             self.log("Installer file removed", "success")
             
             # Restore WinMetadata
+            self.update_progress_text("Restoring Windows Metadata...")
+            self.update_progress(0.6)
             self.restore_winmetadata()
             
             # Configure OpenCL
+            self.update_progress_text("Configuring OpenCL...")
+            self.update_progress(0.7)
             self.configure_opencl(app_name)
             
             # For Affinity v3 (Unified), check and install WebView2 Runtime if needed
             if app_name == "Add" or app_name == "Affinity (Unified)":
+                self.update_progress_text("Checking WebView2 Runtime...")
+                self.update_progress(0.8)
                 self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 self.log("Checking WebView2 Runtime for Affinity v3...", "info")
                 self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -2833,8 +3094,12 @@ class AffinityInstallerGUI(QMainWindow):
                     self.log("WebView2 Runtime is already installed.", "success")
             
             # Create desktop entry
+            self.update_progress_text("Creating desktop entry...")
+            self.update_progress(0.9)
             self.create_desktop_entry(app_name)
             
+            self.update_progress(1.0)
+            self.update_progress_text("Installation complete!")
             self.log(f"\n✓ {app_name} installation completed!", "success")
             self.log("You can now launch it from your application menu.", "info")
             
