@@ -25,7 +25,7 @@ OpenCL support is fully functional, enabling GPU acceleration for improved perfo
 
 <details>
 
-<summary><strong>Python GUI Framework Requirements</strong></summary>
+<summary><strong><span style="color: red;">Python GUI Dependencies Install Me!</span></strong></summary>
 
 **Arch/CachyOS/EndeavourOS/XeroLinux:**
 ```bash
