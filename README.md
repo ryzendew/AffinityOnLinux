@@ -61,7 +61,7 @@ sudo apt install python3-pyqt6.qtsvg
 
 <details>
 
-<summary><strong>Installation</strong></summary>
+<summary><strong>GUI Installer Click Me!</strong></summary>
 
 ### Python GUI Installer
 
