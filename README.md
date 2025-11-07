@@ -109,7 +109,8 @@ Or clone the repository and run locally:
 ```bash
 python AffinityScripts/AffinityLinuxInstaller.py
 ```
-<img width="1280" height="1440" alt="image" src="https://github.com/user-attachments/assets/44ba7b58-204f-4fa8-9fb8-2cdea9f32c50" />
+<img width="1280" height="1337" alt="image" src="https://github.com/user-attachments/assets/c05241ff-4dac-4674-a19b-a41a773394fe" />
+
 
 
 
