@@ -489,29 +489,30 @@ class AffinityInstallerGUI(QMainWindow):
         """Apply modern dark theme"""
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #1e1e1e;
+                background-color: #1c1c1c;
             }
             QWidget {
-                background-color: #1e1e1e;
-                color: #cccccc;
+                background-color: #1c1c1c;
+                color: #dcdcdc;
                 font-family: 'Segoe UI', sans-serif;
             }
             QGroupBox {
-                border: none;
+                border: 1px solid #2d2d2d;
                 background-color: #252526;
                 margin-top: 8px;
-                padding-top: 8px;
+                padding-top: 12px;
                 border-radius: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 6px;
-                background-color: #2d2d30;
-                color: #cccccc;
+                padding: 2px 8px;
+                background-color: #3c3c3c;
+                color: #dcdcdc;
                 font-weight: bold;
                 font-size: 10px;
                 border-radius: 4px;
+                margin-left: 10px;
             }
             QFrame {
                 background-color: #252526;
@@ -520,58 +521,68 @@ class AffinityInstallerGUI(QMainWindow):
             }
             QPushButton {
                 background-color: #3c3c3c;
-                color: #e0e0e0;
-                border: 1px solid #4a4a4a;
-                padding: 5px 10px;
-                min-height: 26px;
-                font-size: 10px;
+                color: #f0f0f0;
+                border: 1px solid #555555;
+                padding: 8px 12px;
+                min-height: 28px;
+                font-size: 11px;
                 font-weight: 500;
                 text-align: left;
                 border-radius: 6px;
             }
             QPushButton:hover {
-                background-color: #464647;
-                border-color: #5a5a5a;
+                background-color: #4a4a4a;
+                border-color: #6a6a6a;
                 color: #ffffff;
             }
             QPushButton:disabled {
-                background-color: #2d2d2d;
-                color: #666666;
-                border-color: #333333;
+                background-color: #2a2a2a;
+                color: #555555;
+                border-color: #3a3a3a;
             }
             QPushButton:pressed {
                 background-color: #2d2d2d;
-                border-color: #3a3a3a;
+                border-color: #4a4a4a;
+            }
+            QPushButton[class="primary"] {
+                background-color: #8ff361;
+                color: #1c1c1c;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #7acb52;
+            }
+            QPushButton[class="primary"]:hover {
+                background-color: #a0f579;
+                border-color: #8ff361;
             }
             QTextEdit {
                 background-color: #1a1a1a;
                 color: #d4d4d4;
-                border: 1px solid #3c3c3c;
+                border: 1px solid #333333;
                 font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                 font-size: 11px;
                 border-radius: 8px;
-                selection-background-color: #264f78;
+                selection-background-color: #007acc;
                 padding: 8px;
-                line-height: 1.5;
             }
             QProgressBar {
                 border: none;
                 background-color: #2d2d30;
-                height: 8px;
-                border-radius: 4px;
+                height: 10px;
+                border-radius: 5px;
                 text-align: center;
             }
             QProgressBar::chunk {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #0e639c, stop:1 #1177bb);
-                border-radius: 4px;
+                    stop:0 #007acc, stop:1 #008ae6);
+                border-radius: 5px;
             }
             QLabel {
-                color: #cccccc;
+                color: #dcdcdc;
             }
             QToolTip {
                 background-color: #2d2d30;
-                color: #cccccc;
+                color: #dcdcdc;
                 border: 1px solid #4a4a4a;
                 padding: 6px;
                 border-radius: 4px;
@@ -586,31 +597,32 @@ class AffinityInstallerGUI(QMainWindow):
                 border-radius: 12px;
             }
             QRadioButton {
-                color: #cccccc;
+                color: #dcdcdc;
                 spacing: 8px;
             }
             QRadioButton::indicator {
                 width: 16px;
                 height: 16px;
                 border-radius: 8px;
-                border: 2px solid #4a4a4a;
+                border: 2px solid #555555;
                 background-color: #3c3c3c;
             }
             QRadioButton::indicator:hover {
-                border-color: #5a5a5a;
+                border-color: #6a6a6a;
             }
             QRadioButton::indicator:checked {
-                background-color: #0e639c;
-                border-color: #0e639c;
+                background-color: #007acc;
+                border-color: #007acc;
             }
             QDialogButtonBox QPushButton {
                 border-radius: 8px;
                 min-width: 80px;
+                padding: 8px 16px;
             }
             QPushButton[zoomButton="true"] {
                 background-color: #2d2d2d;
-                color: #cccccc;
-                border: 1px solid #3a3a3a;
+                color: #dcdcdc;
+                border: 1px solid #4a4a4a;
                 padding: 4px 8px;
                 min-height: 24px;
                 max-width: 35px;
@@ -619,17 +631,17 @@ class AffinityInstallerGUI(QMainWindow):
             }
             QPushButton[zoomButton="true"]:hover {
                 background-color: #3c3c3c;
-                border-color: #4a4a4a;
+                border-color: #5a5a5a;
             }
             QPushButton[zoomButton="true"]:disabled {
                 background-color: #252526;
-                color: #666666;
+                color: #555555;
                 border-color: #2d2d2d;
             }
             QPushButton[cancelButton="true"] {
-                background-color: #d32f2f;
+                background-color: #c74e4e;
                 color: #ffffff;
-                border: 1px solid #b71c1c;
+                border: 1px solid #a33a3a;
                 padding: 4px 8px;
                 min-height: 24px;
                 max-width: 30px;
@@ -638,11 +650,11 @@ class AffinityInstallerGUI(QMainWindow):
                 border-radius: 6px;
             }
             QPushButton[cancelButton="true"]:hover {
-                background-color: #f44336;
-                border-color: #d32f2f;
+                background-color: #d95f5f;
+                border-color: #b74a4a;
             }
             QPushButton[cancelButton="true"]:pressed {
-                background-color: #b71c1c;
+                background-color: #a33a3a;
             }
         """)
     
@@ -655,11 +667,11 @@ class AffinityInstallerGUI(QMainWindow):
         # Main layout
         main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(1, 1, 1, 1)
         
         # Top bar
         top_bar = QFrame()
-        top_bar.setStyleSheet("background-color: #252526; padding: 10px 15px; border-top-left-radius: 0px; border-top-right-radius: 0px;")
+        top_bar.setStyleSheet("background-color: #2d2d2d; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px;")
         top_bar_layout = QHBoxLayout(top_bar)
         top_bar_layout.setContentsMargins(15, 10, 15, 10)
         
@@ -672,30 +684,29 @@ class AffinityInstallerGUI(QMainWindow):
                     icon = QIcon(self.affinity_icon_path)
                     self.setWindowIcon(icon)
                     
-                    # Use QSvgWidget for proper SVG display (smaller for compact UI)
+                    # Use QSvgWidget for proper SVG display
                     svg_widget = QSvgWidget(self.affinity_icon_path)
                     svg_widget.setFixedSize(32, 32)
                     svg_widget.setStyleSheet("background: transparent;")
                     top_bar_layout.addWidget(svg_widget)
-                    top_bar_layout.addSpacing(8)
+                    top_bar_layout.addSpacing(12)
                 except:
                     # Fallback to QIcon if QSvgWidget fails
                     icon = QIcon(self.affinity_icon_path)
                     self.setWindowIcon(icon)
                     
                     icon_label = QLabel()
-                    # Use smaller size for compact UI
                     pixmap = icon.pixmap(32, 32)
                     if not pixmap.isNull():
                         icon_label.setPixmap(pixmap.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
                         icon_label.setFixedSize(32, 32)
                         top_bar_layout.addWidget(icon_label)
-                        top_bar_layout.addSpacing(8)
+                        top_bar_layout.addSpacing(12)
             except Exception as e:
                 pass  # If icon loading fails, continue without icon
         
-        title = QLabel("Affinity Linux Installer")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
+        title = QLabel("Affinity on Linux Installer")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         top_bar_layout.addWidget(title)
         top_bar_layout.addStretch()
         
@@ -712,12 +723,12 @@ class AffinityInstallerGUI(QMainWindow):
         # Content area with scroll support
         content_widget = QWidget()
         content_layout = QHBoxLayout(content_widget)
-        content_layout.setSpacing(15)
-        content_layout.setContentsMargins(15, 15, 15, 15)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(10, 10, 10, 10)
         
         # Left panel - Status/Log
         left_panel = self.create_status_section()
-        content_layout.addWidget(left_panel, stretch=2)
+        content_layout.addWidget(left_panel, stretch=3)
         
         # Right panel - Buttons (wrapped in scroll area for small screens)
         right_scroll = QScrollArea()
@@ -727,11 +738,11 @@ class AffinityInstallerGUI(QMainWindow):
         right_scroll.setFrameShape(QFrame.Shape.NoFrame)
         right_scroll.setStyleSheet("""
             QScrollArea {
-                background-color: #1e1e1e;
+                background-color: #1c1c1c;
                 border: none;
             }
             QScrollBar:vertical {
-                background-color: #1e1e1e;
+                background-color: #1c1c1c;
                 width: 12px;
                 border-radius: 6px;
             }
@@ -753,10 +764,10 @@ class AffinityInstallerGUI(QMainWindow):
         
         right_panel = self.create_button_sections()
         right_scroll.setWidget(right_panel)
-        right_scroll.setMinimumWidth(280)
-        right_scroll.setMaximumWidth(350)
+        right_scroll.setMinimumWidth(320)
+        right_scroll.setMaximumWidth(400)
         
-        content_layout.addWidget(right_scroll, stretch=0)
+        content_layout.addWidget(right_scroll, stretch=1)
         
         main_layout.addWidget(content_widget, stretch=1)
     
@@ -770,8 +781,8 @@ class AffinityInstallerGUI(QMainWindow):
         # Progress status label (above progress bar)
         self.progress_label = QLabel("Ready")
         self.progress_label.setStyleSheet(
-            "font-size: 11px; font-weight: 500; color: #cccccc; "
-            "padding: 5px 10px; background-color: #2d2d30; border-radius: 4px;"
+            "font-size: 11px; font-weight: 500; color: #dcdcdc; "
+            "padding: 5px 10px; background-color: #2d2d2d; border-radius: 4px;"
         )
         self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         group_layout.addWidget(self.progress_label)
@@ -800,6 +811,12 @@ class AffinityInstallerGUI(QMainWindow):
         
         group_layout.addWidget(progress_container)
         
+        # Log and zoom controls container
+        log_container = QWidget()
+        log_layout = QVBoxLayout(log_container)
+        log_layout.setContentsMargins(0, 5, 0, 0)
+        log_layout.setSpacing(5)
+
         # Zoom controls
         zoom_container = QWidget()
         zoom_layout = QHBoxLayout(zoom_container)
@@ -846,14 +863,16 @@ class AffinityInstallerGUI(QMainWindow):
         self.zoom_in_btn.clicked.connect(self.zoom_in)
         zoom_layout.addWidget(self.zoom_in_btn)
         
-        group_layout.addWidget(zoom_container)
+        log_layout.addWidget(zoom_container)
         
         # Log output with zoom support
         self.log_text = ZoomableTextEdit(self)
         self.log_text.setReadOnly(True)
         self.log_text.setFont(QFont("Consolas", self.log_font_size))
         self.log_text.set_zoom_callbacks(self.zoom_in, self.zoom_out)
-        group_layout.addWidget(self.log_text)
+        log_layout.addWidget(self.log_text)
+        
+        group_layout.addWidget(log_container)
         
         # Initialize zoom button states
         self.update_zoom_buttons()
@@ -948,8 +967,8 @@ class AffinityInstallerGUI(QMainWindow):
         """Create a grouped button section"""
         group = QGroupBox(title)
         group_layout = QVBoxLayout(group)
-        group_layout.setSpacing(2)
-        group_layout.setContentsMargins(8, 18, 8, 8)
+        group_layout.setSpacing(4)
+        group_layout.setContentsMargins(10, 20, 10, 10)
         
         for idx, button_data in enumerate(buttons):
             # Handle (text, command), (text, command, tooltip), (text, command, tooltip, icon) formats
@@ -976,6 +995,10 @@ class AffinityInstallerGUI(QMainWindow):
             # Add tooltip if provided
             if tooltip:
                 btn.setToolTip(tooltip)
+            
+            # Set primary class for the main call-to-action button
+            if text == "One-Click Full Setup":
+                btn.setProperty("class", "primary")
             
             group_layout.addWidget(btn)
             
@@ -1076,28 +1099,31 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Determine icon, color, and styling based on level
         if level == "error":
-            icon = "✗"
-            color = "#f48771"
-            bg_color = "#2d1f1f"
-            icon_color = "#ff6b6b"
+            icon = "❌"
+            color = "#ff7b72"
+            bg_color = "rgba(255, 123, 114, 0.1)"
+            icon_color = "#ff7b72"
         elif level == "success":
-            icon = "✓"
-            color = "#4ec9b0"
-            bg_color = "#1f2d26"
-            icon_color = "#50fa7b"
+            icon = "✔"
+            color = "#6a9955"
+            bg_color = "rgba(106, 153, 85, 0.1)"
+            icon_color = "#6a9955"
         elif level == "warning":
-            icon = "⚠"
-            color = "#ce9178"
-            bg_color = "#2d271f"
-            icon_color = "#f1fa8c"
+            icon = "⚠️"
+            color = "#cd9731"
+            bg_color = "rgba(205, 151, 49, 0.1)"
+            icon_color = "#cd9731"
         else:
             icon = "•"
-            color = "#d4d4d4"
+            color = "#9cdcfe"
             bg_color = "transparent"
-            icon_color = "#6272a4"
-        
+            icon_color = "#569cd6"
+
+        # Sanitize message to prevent HTML injection issues
+        message = message.replace("<", "&lt;").replace(">", "&gt;")
+
         # Format message with better styling
-        timestamp_html = f'<span style="color: #6272a4; font-weight: 500;">[{timestamp}]</span>'
+        timestamp_html = f'<span style="color: #6c7886; font-weight: 500;">[{timestamp}]</span>'
         icon_html = f'<span style="color: {icon_color}; font-weight: bold; font-size: 12px;">{icon}</span>'
         
         # Add subtle background for important messages
@@ -1114,11 +1140,9 @@ class AffinityInstallerGUI(QMainWindow):
         # Write to log file (plain text, no HTML)
         if self.log_file:
             try:
-                # Remove HTML tags and convert to plain text for file
-                plain_message = message
-                # Write with timestamp and level
-                log_entry = f"{prefix}{plain_message}\n"
-                self.log_file.write(log_entry)
+                # Create a plain text version for the log file
+                plain_message = f"[{timestamp}] [{level.upper()}] {message}"
+                self.log_file.write(plain_message + "\n")
                 self.log_file.flush()  # Ensure it's written immediately
             except Exception:
                 # If file write fails, continue without file logging
