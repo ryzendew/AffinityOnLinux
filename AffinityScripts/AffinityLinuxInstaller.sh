@@ -136,7 +136,7 @@ check_dependencies() {
     
     # Check if this is an unsupported distribution
     case $DISTRO in
-        "ubuntu"|"linuxmint"|"pop"|"zorin")
+        "ubuntu"|"linuxmint"|"zorin")
             print_header ""
             echo ""
             echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -182,7 +182,7 @@ check_dependencies() {
     
     # For unsupported distributions, check if we can continue
     case $DISTRO in
-        "ubuntu"|"linuxmint"|"pop"|"zorin")
+        "ubuntu"|"linuxmint"|"zorin")
             if [ -n "$missing_deps" ]; then
                 echo ""
                 echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -308,7 +308,68 @@ install_dependencies() {
             sudo apt install -y winetricks wget curl p7zip-full tar jq zstd
             print_success "All dependencies installed for PikaOS"
             ;;
-        "ubuntu"|"linuxmint"|"pop"|"zorin")
+        "pop")
+            # Pop!_OS also has a special case for Wine
+            print_header "Pop!_OS Special Configuration"
+            print_info "Pop!_OS's built-in Wine can have compatibility issues."
+            print_info "Setting up WineHQ staging from Ubuntu for better compatibility..."
+            echo ""
+            
+            print_step "Setting up WineHQ repository..."
+            print_progress "Creating APT keyrings directory..."
+            sudo mkdir -pm755 /etc/apt/keyrings
+            
+            print_progress "Adding WineHQ GPG key..."
+            if wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key - 2>/dev/null; then
+                print_success "WineHQ GPG key added"
+            else
+                print_error "Failed to add WineHQ GPG key"
+                exit 1
+            fi
+            
+            print_progress "Adding i386 architecture support..."
+            if sudo dpkg --add-architecture i386; then
+                print_success "i386 architecture added"
+            else
+                print_error "Failed to add i386 architecture"
+                exit 1
+            fi
+            
+            print_progress "Adding WineHQ repository..."
+            # Get Ubuntu version codename
+            local codename="jammy"
+            if [ -f /etc/os-release ]; then
+                codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+            fi
+            
+            if sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/$codename/winehq-$codename.sources" 2>/dev/null; then
+                print_success "WineHQ repository added"
+            else
+                print_error "Failed to add WineHQ repository"
+                exit 1
+            fi
+            
+            print_progress "Updating package lists..."
+            if sudo apt update; then
+                print_success "Package lists updated"
+            else
+                print_error "Failed to update package lists"
+                exit 1
+            fi
+            
+            print_step "Installing WineHQ staging..."
+            if sudo apt install --install-recommends -y winehq-staging; then
+                print_success "WineHQ staging installed"
+            else
+                print_error "Failed to install WineHQ staging"
+                exit 1
+            fi
+            
+            print_step "Installing remaining dependencies..."
+            sudo apt install -y winetricks wget curl p7zip-full tar jq zstd
+            print_success "All dependencies installed for Pop!_OS"
+            ;;
+        "ubuntu"|"linuxmint"|"zorin")
             # This should never be reached if check_dependencies works correctly,
             # but if it is, we'll show the warning and exit
             print_error "Unsupported distribution detected in install_dependencies()"

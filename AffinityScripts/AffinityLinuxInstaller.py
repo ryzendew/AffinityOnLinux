@@ -83,7 +83,7 @@ try:
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
         QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-        QButtonGroup, QRadioButton, QInputDialog, QSlider
+        QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
     from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -97,7 +97,7 @@ except ImportError:
                 QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                 QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
                 QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-                QButtonGroup, QRadioButton, QInputDialog, QSlider
+                QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit
             )
             from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
             from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -160,6 +160,9 @@ class AffinityInstallerGUI(QMainWindow):
     progress_signal = pyqtSignal(float)  # value (0.0-1.0)
     progress_text_signal = pyqtSignal(str)  # progress text
     show_message_signal = pyqtSignal(str, str, str)  # title, message, type (info/error/warning)
+    sudo_password_signal = pyqtSignal()  # Signal to request sudo password
+    interactive_prompt_signal = pyqtSignal(str, str)  # prompt_text, default_response
+    question_dialog_signal = pyqtSignal(str, str, list)  # title, message, buttons
     
     def __init__(self):
         super().__init__()
@@ -180,6 +183,12 @@ class AffinityInstallerGUI(QMainWindow):
         self.operation_cancelled = False  # Flag to track if operation was cancelled
         self.current_operation = None  # Track current operation name
         self.operation_in_progress = False  # Track if an operation is running
+        self.sudo_password = None  # Cached sudo password
+        self.sudo_password_validated = False  # Whether password has been validated
+        self.interactive_response = None  # Response to interactive prompts
+        self.waiting_for_response = False  # Whether we're waiting for user response
+        self.question_dialog_response = None  # Response from question dialogs
+        self.waiting_for_question_response = False  # Whether waiting for question dialog response
         
         # Setup log file
         self.log_file_path = Path.home() / "AffinitySetup.log"
@@ -191,6 +200,9 @@ class AffinityInstallerGUI(QMainWindow):
         self.progress_signal.connect(self._update_progress_safe)
         self.progress_text_signal.connect(self._update_progress_text_safe)
         self.show_message_signal.connect(self._show_message_safe)
+        self.sudo_password_signal.connect(self._request_sudo_password_safe)
+        self.interactive_prompt_signal.connect(self._request_interactive_response_safe)
+        self.question_dialog_signal.connect(self._show_question_dialog_safe)
         
         # Load Affinity icon
         self.load_affinity_icon()
@@ -1190,22 +1202,266 @@ class AffinityInstallerGUI(QMainWindow):
         else:
             QMessageBox.information(self, title, message)
     
+    def _request_sudo_password_safe(self):
+        """Request sudo password from user (called from main thread)"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Administrator Authentication Required")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+        
+        # Add explanation label
+        label = QLabel(
+            "This operation requires administrator privileges.\n\n"
+            "Please enter your password to continue:"
+        )
+        layout.addWidget(label)
+        
+        # Add password input
+        password_input = QLineEdit()
+        password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        password_input.setPlaceholderText("Enter your password")
+        layout.addWidget(password_input)
+        
+        # Add buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        # Allow Enter key to submit
+        password_input.returnPressed.connect(dialog.accept)
+        
+        # Focus the password input
+        password_input.setFocus()
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.sudo_password = password_input.text()
+        else:
+            self.sudo_password = None
+    
+    def get_sudo_password(self):
+        """Get sudo password from user (thread-safe)"""
+        # If we already have a validated password, return it
+        if self.sudo_password_validated and self.sudo_password:
+            return self.sudo_password
+        
+        # Request password from main thread
+        self.sudo_password = None
+        self.sudo_password_signal.emit()
+        
+        # Wait for password to be entered (with timeout)
+        max_wait = 300  # 30 seconds timeout
+        waited = 0
+        while self.sudo_password is None and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.sudo_password
+    
+    def validate_sudo_password(self, password):
+        """Validate sudo password by running a test command"""
+        try:
+            # Test the password with a harmless sudo command
+            process = subprocess.Popen(
+                ["sudo", "-S", "true"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = process.communicate(input=f"{password}\n", timeout=5)
+            
+            if process.returncode == 0:
+                self.sudo_password_validated = True
+                return True
+            else:
+                self.sudo_password_validated = False
+                return False
+        except Exception as e:
+            self.log(f"Error validating sudo password: {e}", "error")
+            self.sudo_password_validated = False
+            return False
+    
+    def _request_interactive_response_safe(self, prompt_text, default_response):
+        """Request user response to interactive prompt (called from main thread)"""
+        # Parse the prompt to determine type
+        prompt_lower = prompt_text.lower()
+        
+        # Detect yes/no questions
+        if any(pattern in prompt_lower for pattern in ["(y/n)", "[y/n]", "yes/no", "overwrite?"]):
+            # Extract default from prompt
+            default_yes = "y" in default_response.lower() if default_response else False
+            
+            reply = QMessageBox.question(
+                self,
+                "User Input Required",
+                prompt_text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes if default_yes else QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.interactive_response = "y\n"
+            else:
+                self.interactive_response = "n\n"
+        else:
+            # For other prompts, use input dialog
+            response, ok = QInputDialog.getText(
+                self,
+                "User Input Required",
+                prompt_text,
+                QLineEdit.EchoMode.Normal,
+                default_response or ""
+            )
+            
+            if ok:
+                self.interactive_response = response + "\n"
+            else:
+                self.interactive_response = "\n"  # Empty response (just Enter)
+        
+        self.waiting_for_response = False
+    
+    def get_interactive_response(self, prompt_text, default_response=""):
+        """Get user response to interactive prompt (thread-safe)"""
+        self.interactive_response = None
+        self.waiting_for_response = True
+        self.interactive_prompt_signal.emit(prompt_text, default_response)
+        
+        # Wait for response with timeout
+        max_wait = 300  # 30 seconds
+        waited = 0
+        while self.waiting_for_response and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.interactive_response or "\n"
+    
+    def _show_question_dialog_safe(self, title, message, buttons):
+        """Show question dialog (called from main thread)"""
+        from PyQt6.QtWidgets import QMessageBox
+        
+        # Convert button list to QMessageBox buttons
+        qbuttons = QMessageBox.StandardButton.NoButton
+        for btn in buttons:
+            if btn == "Yes":
+                qbuttons |= QMessageBox.StandardButton.Yes
+            elif btn == "No":
+                qbuttons |= QMessageBox.StandardButton.No
+            elif btn == "Retry":
+                qbuttons |= QMessageBox.StandardButton.Retry
+            elif btn == "Cancel":
+                qbuttons |= QMessageBox.StandardButton.Cancel
+        
+        reply = QMessageBox.question(self, title, message, qbuttons)
+        
+        # Store response
+        if reply == QMessageBox.StandardButton.Yes:
+            self.question_dialog_response = "Yes"
+        elif reply == QMessageBox.StandardButton.No:
+            self.question_dialog_response = "No"
+        elif reply == QMessageBox.StandardButton.Retry:
+            self.question_dialog_response = "Retry"
+        elif reply == QMessageBox.StandardButton.Cancel:
+            self.question_dialog_response = "Cancel"
+        else:
+            self.question_dialog_response = "Cancel"
+        
+        self.waiting_for_question_response = False
+    
+    def show_question_dialog(self, title, message, buttons=["Yes", "No"]):
+        """Show question dialog (thread-safe)"""
+        self.question_dialog_response = None
+        self.waiting_for_question_response = True
+        self.question_dialog_signal.emit(title, message, buttons)
+        
+        # Wait for response with timeout
+        max_wait = 300  # 30 seconds
+        waited = 0
+        while self.waiting_for_question_response and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.question_dialog_response or "Cancel"
+    
     def run_command(self, command, check=True, shell=False, capture=True, env=None):
-        """Execute shell command"""
+        """Execute shell command with GUI sudo password support"""
         try:
             if isinstance(command, str) and not shell:
                 command = command.split()
-            result = subprocess.run(
-                command,
-                shell=shell,
-                capture_output=capture,
-                text=capture,
-                check=check,
-                env=env if env else os.environ.copy()
-            )
-            if capture:
-                return result.returncode == 0, result.stdout, result.stderr
-            return result.returncode == 0, "", ""
+            
+            # Set up environment for non-interactive operation
+            if env is None:
+                env = os.environ.copy()
+            
+            # Force non-interactive mode for various tools
+            env['DEBIAN_FRONTEND'] = 'noninteractive'
+            env['NEEDRESTART_MODE'] = 'a'  # Auto-restart services without asking
+            env['DEBIAN_PRIORITY'] = 'critical'
+            env['APT_LISTCHANGES_FRONTEND'] = 'none'
+            env['LANG'] = 'C'  # Use C locale to avoid encoding issues
+            env['LC_ALL'] = 'C'
+            
+            # Check if this is a sudo command
+            is_sudo = isinstance(command, list) and len(command) > 0 and command[0] == "sudo"
+            
+            if is_sudo:
+                # Get password if needed
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    password = self.get_sudo_password()
+                    
+                    if password is None:
+                        self.log("Authentication cancelled by user", "warning")
+                        return False, "", "Authentication cancelled"
+                    
+                    # Validate password first
+                    if not self.sudo_password_validated:
+                        if self.validate_sudo_password(password):
+                            self.log("Authentication successful", "success")
+                            break
+                        else:
+                            self.log("Authentication failed. Please try again.", "error")
+                            self.sudo_password = None
+                            self.sudo_password_validated = False
+                            if attempt == max_attempts - 1:
+                                return False, "", "Authentication failed after multiple attempts"
+                    else:
+                        break
+                
+                # Run command with password via stdin
+                # Add -S flag to read password from stdin if not present
+                if "-S" not in command:
+                    command.insert(1, "-S")
+                
+                process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE if capture else None,
+                    stderr=subprocess.PIPE if capture else None,
+                    text=True,
+                    env=env if env else os.environ.copy()
+                )
+                
+                stdout, stderr = process.communicate(input=f"{self.sudo_password}\n")
+                
+                if capture:
+                    return process.returncode == 0, stdout or "", stderr or ""
+                return process.returncode == 0, "", ""
+            else:
+                # Non-sudo command, run normally
+                result = subprocess.run(
+                    command,
+                    shell=shell,
+                    capture_output=capture,
+                    text=capture,
+                    check=check,
+                    env=env if env else os.environ.copy()
+                )
+                if capture:
+                    return result.returncode == 0, result.stdout, result.stderr
+                return result.returncode == 0, "", ""
         except subprocess.CalledProcessError as e:
             return False, e.stdout if hasattr(e, 'stdout') else "", e.stderr if hasattr(e, 'stderr') else ""
         except Exception as e:
@@ -1217,6 +1473,18 @@ class AffinityInstallerGUI(QMainWindow):
             if isinstance(command, str):
                 command = command.split()
             
+            # Set up environment for non-interactive operation
+            if env is None:
+                env = os.environ.copy()
+            
+            # Force non-interactive mode for various tools
+            env['DEBIAN_FRONTEND'] = 'noninteractive'
+            env['NEEDRESTART_MODE'] = 'a'  # Auto-restart services without asking
+            env['DEBIAN_PRIORITY'] = 'critical'
+            env['APT_LISTCHANGES_FRONTEND'] = 'none'
+            env['LANG'] = 'C'  # Use C locale to avoid encoding issues
+            env['LC_ALL'] = 'C'
+            
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
@@ -1224,7 +1492,7 @@ class AffinityInstallerGUI(QMainWindow):
                 text=True,
                 bufsize=1,
                 universal_newlines=True,
-                env=env if env else os.environ.copy()
+                env=env
             )
             
             # Stream output line by line
@@ -1267,6 +1535,138 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Error running command: {e}", "error")
             return False
     
+    def run_command_interactive(self, command, env=None):
+        """Execute command and handle interactive prompts via GUI"""
+        try:
+            if isinstance(command, str):
+                command = command.split()
+            
+            # Set up environment for non-interactive operation
+            if env is None:
+                env = os.environ.copy()
+            
+            # Force non-interactive mode for various tools
+            env['DEBIAN_FRONTEND'] = 'noninteractive'
+            env['NEEDRESTART_MODE'] = 'a'
+            env['DEBIAN_PRIORITY'] = 'critical'
+            env['APT_LISTCHANGES_FRONTEND'] = 'none'
+            env['LANG'] = 'C'
+            env['LC_ALL'] = 'C'
+            
+            # Check if this is a sudo command
+            is_sudo = isinstance(command, list) and len(command) > 0 and command[0] == "sudo"
+            
+            if is_sudo:
+                # Get password if needed
+                password = self.get_sudo_password()
+                if password is None:
+                    self.log("Authentication cancelled by user", "warning")
+                    return False, "", "Authentication cancelled"
+                
+                # Validate password if not already validated
+                if not self.sudo_password_validated:
+                    if not self.validate_sudo_password(password):
+                        self.log("Authentication failed", "error")
+                        return False, "", "Authentication failed"
+                
+                # Add -S flag if not present
+                if "-S" not in command:
+                    command.insert(1, "-S")
+            
+            # Start process
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env
+            )
+            
+            # If sudo, send password first
+            if is_sudo and self.sudo_password:
+                process.stdin.write(f"{self.sudo_password}\n")
+                process.stdin.flush()
+            
+            # Read output and detect prompts
+            output_lines = []
+            error_lines = []
+            
+            import select
+            
+            while True:
+                # Check if process has finished
+                if process.poll() is not None:
+                    # Read any remaining output
+                    remaining_out = process.stdout.read()
+                    remaining_err = process.stderr.read()
+                    if remaining_out:
+                        output_lines.append(remaining_out)
+                    if remaining_err:
+                        error_lines.append(remaining_err)
+                    break
+                
+                # Try to read from stdout with timeout
+                try:
+                    # Use select to check if data is available (Unix-like systems)
+                    import sys
+                    if hasattr(select, 'select'):
+                        readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
+                        
+                        for stream in readable:
+                            line = stream.readline()
+                            if line:
+                                if stream == process.stdout:
+                                    output_lines.append(line)
+                                    self.log(f"  {line.rstrip()}", "info")
+                                else:
+                                    error_lines.append(line)
+                                
+                                # Detect interactive prompts
+                                line_lower = line.lower()
+                                if any(pattern in line_lower for pattern in [
+                                    "overwrite?", "(y/n)", "[y/n]", "yes/no",
+                                    "continue?", "proceed?", "replace?"
+                                ]):
+                                    # Interactive prompt detected!
+                                    self.log(f"Interactive prompt detected: {line.rstrip()}", "warning")
+                                    
+                                    # Extract default response if present
+                                    default = ""
+                                    if "(y/n)" in line_lower:
+                                        # Check which is capitalized
+                                        if "(Y/n)" in line:
+                                            default = "y"
+                                        elif "(y/N)" in line:
+                                            default = "n"
+                                    
+                                    # Get user response via GUI
+                                    response = self.get_interactive_response(line.rstrip(), default)
+                                    
+                                    # Send response to process
+                                    if process.stdin:
+                                        process.stdin.write(response)
+                                        process.stdin.flush()
+                                        self.log(f"User responded: {response.rstrip()}", "info")
+                    else:
+                        # Fallback for systems without select
+                        time.sleep(0.1)
+                except Exception as e:
+                    self.log(f"Error reading process output: {e}", "warning")
+                    time.sleep(0.1)
+            
+            # Get return code
+            return_code = process.wait()
+            
+            stdout_text = "".join(output_lines)
+            stderr_text = "".join(error_lines)
+            
+            return return_code == 0, stdout_text, stderr_text
+            
+        except Exception as e:
+            self.log(f"Error in interactive command: {e}", "error")
+            return False, "", str(e)
+    
     def check_command(self, cmd):
         """Check if command exists"""
         return shutil.which(cmd) is not None
@@ -1286,6 +1686,10 @@ class AffinityInstallerGUI(QMainWindow):
             # Normalize "pika" to "pikaos" if detected
             if self.distro == "pika":
                 self.distro = "pikaos"
+            
+            # Normalize "pop" to "pop" if detected
+            if self.distro == "pop":
+                self.distro = "pop"
             
             return True
         except Exception as e:
@@ -1419,16 +1823,14 @@ class AffinityInstallerGUI(QMainWindow):
             self.end_operation()
             
             # Show retry dialog
-            from PyQt6.QtWidgets import QMessageBox
-            reply = QMessageBox.question(
-                self,
+            reply = self.show_question_dialog(
                 "Dependency Check Failed",
                 "Dependency check failed. Please resolve issues and try again.\n\n"
                 "Would you like to retry the dependency check?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                ["Yes", "No"]
             )
             
-            if reply == QMessageBox.StandardButton.Yes:
+            if reply == "Yes":
                 # Retry dependency check
                 return self._one_click_setup_thread()
             else:
@@ -1636,14 +2038,22 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Dependency Verification", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
+        self.update_progress_text("Checking dependencies...")
+        self.update_progress(0.0)
+        
         # Show unsupported warning
-        if self.distro in ["ubuntu", "linuxmint", "pop", "zorin"]:
+        if self.distro in ["ubuntu", "linuxmint", "zorin"]:
             self.show_unsupported_warning()
         
         missing = []
         deps = ["wine", "winetricks", "wget", "curl", "tar", "jq"]
+        total_checks = len(deps) + 2  # +2 for archive tools and zstd
         
-        for dep in deps:
+        for idx, dep in enumerate(deps):
+            progress = (idx + 1) / total_checks * 0.5  # Use first 50% for checking
+            self.update_progress(progress)
+            self.update_progress_text(f"Checking {dep}...")
+            
             if self.check_command(dep):
                 self.log(f"{dep} is installed", "success")
             else:
@@ -1651,6 +2061,10 @@ class AffinityInstallerGUI(QMainWindow):
                 missing.append(dep)
         
         # Check for either 7z or unzip (both can extract archives)
+        progress = (len(deps) + 1) / total_checks * 0.5
+        self.update_progress(progress)
+        self.update_progress_text("Checking archive tools...")
+        
         if not self.check_command("7z") and not self.check_command("unzip"):
             self.log("Neither 7z nor unzip is installed (at least one is required)", "error")
             missing.append("7z or unzip")
@@ -1661,6 +2075,10 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("unzip is installed (will be used instead of 7z)", "success")
         
         # Check zstd
+        progress = (len(deps) + 2) / total_checks * 0.5
+        self.update_progress(progress)
+        self.update_progress_text("Checking zstd...")
+        
         if not (self.check_command("unzstd") or self.check_command("zstd")):
             self.log("zstd or unzstd is not installed", "error")
             missing.append("zstd")
@@ -1679,19 +2097,17 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"Missing: {', '.join(missing)}", "warning")
                 
                 # Show dialog asking user to install and retry
-                from PyQt6.QtWidgets import QMessageBox
-                reply = QMessageBox.question(
-                    self,
+                reply = self.show_question_dialog(
                     "Unsupported Distribution - Missing Dependencies",
                     f"⚠️  WARNING: UNSUPPORTED DISTRIBUTION\n\n"
                     f"Missing dependencies: {', '.join(missing)}\n\n"
                     f"This script will NOT auto-install for unsupported distributions.\n"
                     f"Please install the required dependencies manually.\n\n"
                     f"Click 'Retry' after installing dependencies, or 'Cancel' to exit.",
-                    QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Cancel
+                    ["Retry", "Cancel"]
                 )
                 
-                if reply == QMessageBox.StandardButton.Retry:
+                if reply == "Retry":
                     # Re-check dependencies
                     return self.check_dependencies()
                 else:
@@ -1703,9 +2119,15 @@ class AffinityInstallerGUI(QMainWindow):
         # Install missing dependencies (only for supported distributions)
         if missing and self.distro not in ["ubuntu", "linuxmint", "pop", "zorin"]:
             self.log(f"\nInstalling missing dependencies: {', '.join(missing)}", "info")
+            self.update_progress_text(f"Installing {len(missing)} missing packages...")
+            self.update_progress(0.5)  # Start second half of progress
+            
             if not self.install_dependencies():
+                self.update_progress_text("Dependency installation failed")
                 return False
         
+        self.update_progress(1.0)
+        self.update_progress_text("All dependencies installed")
         self.log("\n✓ All required dependencies are installed!", "success")
         return True
     
@@ -1727,6 +2149,8 @@ class AffinityInstallerGUI(QMainWindow):
         """Install dependencies based on distribution"""
         if self.distro == "pikaos":
             return self.install_pikaos_dependencies()
+        if self.distro == "pop":
+            return self.install_popos_dependencies()
         
         commands = {
             "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
@@ -1741,24 +2165,28 @@ class AffinityInstallerGUI(QMainWindow):
         
         if self.distro in commands:
             self.log(f"Installing dependencies for {self.distro}...", "info")
+            self.update_progress_text(f"Installing packages for {self.distro}...")
+            self.update_progress(0.6)
+            
             success, stdout, stderr = self.run_command(commands[self.distro])
+            
             if success:
+                self.update_progress(1.0)
+                self.update_progress_text("Dependencies installed")
                 self.log("Dependencies installed successfully", "success")
                 return True
             else:
                 self.log(f"Failed to install dependencies: {stderr}", "error")
                 
                 # Show retry dialog
-                from PyQt6.QtWidgets import QMessageBox
-                reply = QMessageBox.question(
-                    self,
+                reply = self.show_question_dialog(
                     "Dependency Installation Failed",
                     f"Failed to install dependencies:\n{stderr}\n\n"
                     "Would you like to retry the installation?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    ["Yes", "No"]
                 )
                 
-                if reply == QMessageBox.StandardButton.Yes:
+                if reply == "Yes":
                     # Retry installation
                     return self.install_dependencies()
                 else:
@@ -1775,7 +2203,14 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("PikaOS's built-in Wine has compatibility issues.", "warning")
         self.log("Setting up WineHQ staging from Debian...\n", "info")
         
+        # Total steps: keyrings, gpg key, i386, repo, apt update, wine install, deps install = 7 steps
+        total_steps = 7
+        current_step = 0
+        
         # Create keyrings directory
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Creating keyrings directory...")
+        self.update_progress(current_step / total_steps)
         self.log("Creating APT keyrings directory...", "info")
         success, _, _ = self.run_command(["sudo", "mkdir", "-pm755", "/etc/apt/keyrings"])
         if not success:
@@ -1783,24 +2218,49 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Add GPG key
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ GPG key...")
+        self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ GPG key...", "info")
         success, stdout, _ = self.run_command(["wget", "-O", "-", "https://dl.winehq.org/wine-builds/winehq.key"])
         if success:
+            # Get sudo password for GPG operation
+            password = self.get_sudo_password()
+            if password is None:
+                self.log("Authentication cancelled by user", "error")
+                return False
+            
+            # Validate password if not already validated
+            if not self.sudo_password_validated:
+                if not self.validate_sudo_password(password):
+                    self.log("Authentication failed", "error")
+                    return False
+            
+            # Run GPG command with sudo
             gpg_proc = subprocess.Popen(
-                ["sudo", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
-                stdin=subprocess.PIPE
+                ["sudo", "-S", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
             )
-            gpg_proc.communicate(input=stdout.encode())
+            # Send password first, then the key data
+            gpg_input = f"{self.sudo_password}\n" + stdout
+            gpg_stdout, gpg_stderr = gpg_proc.communicate(input=gpg_input)
+            
             if gpg_proc.returncode == 0:
                 self.log("WineHQ GPG key added", "success")
             else:
-                self.log("Failed to add GPG key", "error")
+                self.log(f"Failed to add GPG key: {gpg_stderr}", "error")
                 return False
         else:
             self.log("Failed to download GPG key", "error")
             return False
         
         # Add i386 architecture
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding i386 architecture...")
+        self.update_progress(current_step / total_steps)
         self.log("Adding i386 architecture...", "info")
         success, _, _ = self.run_command(["sudo", "dpkg", "--add-architecture", "i386"])
         if not success:
@@ -1808,9 +2268,17 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Add repository
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ repository...")
+        self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ repository...", "info")
+        # Remove existing file first to avoid overwrite prompt
+        repo_file = Path("/etc/apt/sources.list.d/winehq-forky.sources")
+        if repo_file.exists():
+            self.run_command(["sudo", "rm", "-f", str(repo_file)], check=False)
+        
         success, _, _ = self.run_command([
-            "sudo", "wget", "-NP", "/etc/apt/sources.list.d/",
+            "sudo", "wget", "-P", "/etc/apt/sources.list.d/",
             "https://dl.winehq.org/wine-builds/debian/dists/forky/winehq-forky.sources"
         ])
         if not success:
@@ -1818,6 +2286,9 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Update package lists
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Updating package lists...")
+        self.update_progress(current_step / total_steps)
         self.log("Updating package lists...", "info")
         success, _, _ = self.run_command(["sudo", "apt", "update"])
         if not success:
@@ -1825,6 +2296,9 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Install WineHQ staging
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing WineHQ staging...")
+        self.update_progress(current_step / total_steps)
         self.log("Installing WineHQ staging...", "info")
         success, _, _ = self.run_command(["sudo", "apt", "install", "--install-recommends", "-y", "winehq-staging"])
         if not success:
@@ -1832,6 +2306,9 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Install remaining dependencies
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing remaining dependencies...")
+        self.update_progress(current_step / total_steps)
         self.log("Installing remaining dependencies...", "info")
         success, _, _ = self.run_command([
             "sudo", "apt", "install", "-y", "winetricks", "wget", "curl", "p7zip-full", "tar", "jq", "zstd"
@@ -1840,7 +2317,146 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Failed to install remaining dependencies", "error")
             return False
         
+        self.update_progress(1.0)
+        self.update_progress_text("PikaOS dependencies installed")
         self.log("All dependencies installed for PikaOS", "success")
+        return True
+    
+    def install_popos_dependencies(self):
+        """Install Pop!_OS dependencies with WineHQ staging"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Pop!_OS Special Configuration", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        self.log("Pop!_OS's built-in Wine has compatibility issues.", "warning")
+        self.log("Setting up WineHQ staging from Ubuntu...\n", "info")
+        
+        # Total steps: keyrings, gpg key, i386, repo, apt update, wine install, deps install = 7 steps
+        total_steps = 7
+        current_step = 0
+        
+        # Create keyrings directory
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Creating keyrings directory...")
+        self.update_progress(current_step / total_steps)
+        self.log("Creating APT keyrings directory...", "info")
+        success, _, _ = self.run_command(["sudo", "mkdir", "-pm755", "/etc/apt/keyrings"])
+        if not success:
+            self.log("Failed to create keyrings directory", "error")
+            return False
+        
+        # Add GPG key
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ GPG key...")
+        self.update_progress(current_step / total_steps)
+        self.log("Adding WineHQ GPG key...", "info")
+        success, stdout, _ = self.run_command(["wget", "-O", "-", "https://dl.winehq.org/wine-builds/winehq.key"])
+        if success:
+            # Get sudo password for GPG operation
+            password = self.get_sudo_password()
+            if password is None:
+                self.log("Authentication cancelled by user", "error")
+                return False
+            
+            # Validate password if not already validated
+            if not self.sudo_password_validated:
+                if not self.validate_sudo_password(password):
+                    self.log("Authentication failed", "error")
+                    return False
+            
+            # Run GPG command with sudo
+            gpg_proc = subprocess.Popen(
+                ["sudo", "-S", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            # Send password first, then the key data
+            gpg_input = f"{self.sudo_password}\n" + stdout
+            gpg_stdout, gpg_stderr = gpg_proc.communicate(input=gpg_input)
+            
+            if gpg_proc.returncode == 0:
+                self.log("WineHQ GPG key added", "success")
+            else:
+                self.log(f"Failed to add GPG key: {gpg_stderr}", "error")
+                return False
+        else:
+            self.log("Failed to download GPG key", "error")
+            return False
+        
+        # Add i386 architecture
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding i386 architecture...")
+        self.update_progress(current_step / total_steps)
+        self.log("Adding i386 architecture...", "info")
+        success, _, _ = self.run_command(["sudo", "dpkg", "--add-architecture", "i386"])
+        if not success:
+            self.log("Failed to add i386 architecture", "error")
+            return False
+        
+        # Add repository
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ repository...")
+        self.update_progress(current_step / total_steps)
+        self.log("Adding WineHQ repository...", "info")
+        # Get Ubuntu version codename
+        codename = "jammy"
+        try:
+            with open("/etc/os-release", "r") as f:
+                for line in f:
+                    if line.startswith("VERSION_CODENAME="):
+                        codename = line.split("=")[1].strip()
+        except:
+            pass # Default to jammy
+            
+        # Remove existing file first to avoid overwrite prompt
+        repo_file = Path(f"/etc/apt/sources.list.d/winehq-{codename}.sources")
+        if repo_file.exists():
+            self.run_command(["sudo", "rm", "-f", str(repo_file)], check=False)
+        
+        success, _, _ = self.run_command([
+            "sudo", "wget", "-P", "/etc/apt/sources.list.d/",
+            f"https://dl.winehq.org/wine-builds/ubuntu/dists/{codename}/winehq-{codename}.sources"
+        ])
+        if not success:
+            self.log("Failed to add repository", "error")
+            return False
+        
+        # Update package lists
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Updating package lists...")
+        self.update_progress(current_step / total_steps)
+        self.log("Updating package lists...", "info")
+        success, _, _ = self.run_command(["sudo", "apt", "update"])
+        if not success:
+            self.log("Failed to update package lists", "error")
+            return False
+        
+        # Install WineHQ staging
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing WineHQ staging...")
+        self.update_progress(current_step / total_steps)
+        self.log("Installing WineHQ staging...", "info")
+        success, _, _ = self.run_command(["sudo", "apt", "install", "--install-recommends", "-y", "winehq-staging"])
+        if not success:
+            self.log("Failed to install WineHQ staging", "error")
+            return False
+        
+        # Install remaining dependencies
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing remaining dependencies...")
+        self.update_progress(current_step / total_steps)
+        self.log("Installing remaining dependencies...", "info")
+        success, _, _ = self.run_command([
+            "sudo", "apt", "install", "-y", "winetricks", "wget", "curl", "p7zip-full", "tar", "jq", "zstd"
+        ])
+        if not success:
+            self.log("Failed to install remaining dependencies", "error")
+            return False
+        
+        self.update_progress(1.0)
+        self.update_progress_text("Pop!_OS dependencies installed")
+        self.log("All dependencies installed for Pop!_OS", "success")
         return True
     
     def setup_wine(self):
@@ -2144,6 +2760,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
+        # Prevent winetricks from showing GUI dialogs
+        env["WINETRICKS_GUI"] = "0"
+        env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
         
         wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
         
@@ -2259,6 +2878,9 @@ class AffinityInstallerGUI(QMainWindow):
         """Install winetricks dependencies in thread"""
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
+        # Prevent winetricks from showing GUI dialogs
+        env["WINETRICKS_GUI"] = "0"
+        env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
         
         components = [
             ("dotnet35", ".NET Framework 3.5"),
