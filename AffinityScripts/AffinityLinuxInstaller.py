@@ -189,6 +189,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.waiting_for_response = False  # Whether we're waiting for user response
         self.question_dialog_response = None  # Response from question dialogs
         self.waiting_for_question_response = False  # Whether waiting for question dialog response
+        self.dark_mode = True  # Track current theme mode
         
         # Setup log file
         self.log_file_path = Path.home() / "AffinitySetup.log"
@@ -210,8 +211,8 @@ class AffinityInstallerGUI(QMainWindow):
         # Setup UI
         self.create_ui()
         
-        # Apply dark theme
-        self.apply_dark_theme()
+        # Apply dark theme (default)
+        self.apply_theme()
         
         # Setup zoom functionality
         self.setup_zoom()
@@ -485,7 +486,39 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception:
             pass
     
-    def apply_dark_theme(self):
+    def toggle_theme(self):
+        """Toggle between dark and light themes"""
+        self.dark_mode = not self.dark_mode
+        self.apply_theme()
+        
+        # Update theme button
+        if self.dark_mode:
+            self.theme_toggle_btn.setText("☀")
+            self.theme_toggle_btn.setToolTip("Switch to Light Mode")
+        else:
+            self.theme_toggle_btn.setText("🌙")
+            self.theme_toggle_btn.setToolTip("Switch to Dark Mode")
+        
+        # Update top bar
+        self._update_top_bar_style()
+        
+        # Update theme button style
+        self._update_theme_button_style()
+        
+        # Update scroll area
+        self._update_right_scroll_style()
+        
+        # Update progress label
+        self._update_progress_label_style()
+    
+    def apply_theme(self):
+        """Apply current theme (dark or light)"""
+        if self.dark_mode:
+            self._apply_dark_theme()
+        else:
+            self._apply_light_theme()
+    
+    def _apply_dark_theme(self):
         """Apply modern dark theme"""
         self.setStyleSheet("""
             QMainWindow {
@@ -574,7 +607,7 @@ class AffinityInstallerGUI(QMainWindow):
             }
             QProgressBar::chunk {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #007acc, stop:1 #008ae6);
+                    stop:0 #8ff361, stop:1 #9af471);
                 border-radius: 5px;
             }
             QLabel {
@@ -658,6 +691,313 @@ class AffinityInstallerGUI(QMainWindow):
             }
         """)
     
+    def _apply_light_theme(self):
+        """Apply modern light theme"""
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            QWidget {
+                background-color: #f5f5f5;
+                color: #2d2d2d;
+                font-family: 'Segoe UI', sans-serif;
+            }
+            QGroupBox {
+                border: 1px solid #d0d0d0;
+                background-color: #ffffff;
+                margin-top: 8px;
+                padding-top: 12px;
+                border-radius: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 2px 8px;
+                background-color: #e0e0e0;
+                color: #2d2d2d;
+                font-weight: bold;
+                font-size: 10px;
+                border-radius: 4px;
+                margin-left: 10px;
+            }
+            QFrame {
+                background-color: #ffffff;
+                border: none;
+                border-radius: 0px;
+            }
+            QPushButton {
+                background-color: #e0e0e0;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                padding: 8px 12px;
+                min-height: 28px;
+                font-size: 11px;
+                font-weight: 500;
+                text-align: left;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #d0d0d0;
+                border-color: #a0a0a0;
+                color: #1a1a1a;
+            }
+            QPushButton:disabled {
+                background-color: #fafafa;
+                color: #c0c0c0;
+                border-color: #e8e8e8;
+            }
+            QPushButton:pressed {
+                background-color: #c0c0c0;
+                border-color: #909090;
+            }
+            QPushButton[class="primary"] {
+                background-color: #4caf50;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #45a049;
+            }
+            QPushButton[class="primary"]:hover {
+                background-color: #5fbf63;
+                border-color: #4caf50;
+            }
+            QTextEdit {
+                background-color: #ffffff;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 11px;
+                border-radius: 8px;
+                selection-background-color: #b3d9ff;
+                padding: 8px;
+            }
+            QProgressBar {
+                border: none;
+                background-color: #e0e0e0;
+                height: 10px;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4caf50, stop:1 #66bb6a);
+                border-radius: 5px;
+            }
+            QLabel {
+                color: #2d2d2d;
+            }
+            QToolTip {
+                background-color: #ffffff;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                padding: 6px;
+                border-radius: 4px;
+                font-size: 10px;
+            }
+            QDialog {
+                background-color: #ffffff;
+                border-radius: 12px;
+            }
+            QMessageBox {
+                background-color: #ffffff;
+                border-radius: 12px;
+            }
+            QRadioButton {
+                color: #2d2d2d;
+                spacing: 8px;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                border: 2px solid #c0c0c0;
+                background-color: #f5f5f5;
+            }
+            QRadioButton::indicator:hover {
+                border-color: #a0a0a0;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #4caf50;
+                border-color: #4caf50;
+            }
+            QDialogButtonBox QPushButton {
+                border-radius: 8px;
+                min-width: 80px;
+                padding: 8px 16px;
+            }
+            QPushButton[zoomButton="true"] {
+                background-color: #e0e0e0;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                padding: 4px 8px;
+                min-height: 24px;
+                max-width: 35px;
+                font-size: 14px;
+                border-radius: 6px;
+            }
+            QPushButton[zoomButton="true"]:hover {
+                background-color: #d0d0d0;
+                border-color: #a0a0a0;
+            }
+            QPushButton[zoomButton="true"]:disabled {
+                background-color: #fafafa;
+                color: #c0c0c0;
+                border-color: #e8e8e8;
+            }
+            QPushButton[cancelButton="true"] {
+                background-color: #f44336;
+                color: #ffffff;
+                border: 1px solid #d32f2f;
+                padding: 4px 8px;
+                min-height: 24px;
+                max-width: 30px;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QPushButton[cancelButton="true"]:hover {
+                background-color: #e57373;
+                border-color: #ef5350;
+            }
+            QPushButton[cancelButton="true"]:pressed {
+                background-color: #d32f2f;
+            }
+        """)
+    
+    def _update_theme_button_style(self):
+        """Update theme toggle button styling based on current theme"""
+        if hasattr(self, 'theme_toggle_btn'):
+            if self.dark_mode:
+                self.theme_toggle_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #3c3c3c;
+                        color: #f0f0f0;
+                        border: 1px solid #555555;
+                        padding: 0px;
+                        min-height: 32px;
+                        max-height: 32px;
+                        min-width: 40px;
+                        max-width: 40px;
+                        font-size: 18px;
+                        border-radius: 6px;
+                        text-align: center;
+                    }
+                    QPushButton:hover {
+                        background-color: #4a4a4a;
+                        border-color: #6a6a6a;
+                    }
+                """)
+            else:
+                self.theme_toggle_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        color: #2d2d2d;
+                        border: 1px solid #c0c0c0;
+                        padding: 0px;
+                        min-height: 32px;
+                        max-height: 32px;
+                        min-width: 40px;
+                        max-width: 40px;
+                        font-size: 18px;
+                        border-radius: 6px;
+                        text-align: center;
+                    }
+                    QPushButton:hover {
+                        background-color: #d0d0d0;
+                        border-color: #a0a0a0;
+                    }
+                """)
+    
+    def _update_top_bar_style(self):
+        """Update top bar styling based on current theme"""
+        if hasattr(self, 'top_bar'):
+            if self.dark_mode:
+                self.top_bar.setStyleSheet(
+                    "background-color: #2d2d2d; padding: 10px 15px; "
+                    "border-top-left-radius: 8px; border-top-right-radius: 8px;"
+                )
+            else:
+                self.top_bar.setStyleSheet(
+                    "background-color: #e8e8e8; padding: 10px 15px; "
+                    "border-top-left-radius: 8px; border-top-right-radius: 8px;"
+                )
+        
+        if hasattr(self, 'title_label'):
+            if self.dark_mode:
+                self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+            else:
+                self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #1a1a1a;")
+    
+    def _update_right_scroll_style(self):
+        """Update right scroll area styling based on current theme"""
+        if hasattr(self, 'right_scroll'):
+            if self.dark_mode:
+                self.right_scroll.setStyleSheet("""
+                    QScrollArea {
+                        background-color: #1c1c1c;
+                        border: none;
+                    }
+                    QScrollBar:vertical {
+                        background-color: #1c1c1c;
+                        width: 12px;
+                        border-radius: 6px;
+                    }
+                    QScrollBar::handle:vertical {
+                        background-color: #3c3c3c;
+                        border-radius: 6px;
+                        min-height: 30px;
+                    }
+                    QScrollBar::handle:vertical:hover {
+                        background-color: #4a4a4a;
+                    }
+                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                        height: 0px;
+                    }
+                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                        background: none;
+                    }
+                """)
+            else:
+                self.right_scroll.setStyleSheet("""
+                    QScrollArea {
+                        background-color: #f5f5f5;
+                        border: none;
+                    }
+                    QScrollBar:vertical {
+                        background-color: #f5f5f5;
+                        width: 12px;
+                        border-radius: 6px;
+                    }
+                    QScrollBar::handle:vertical {
+                        background-color: #c0c0c0;
+                        border-radius: 6px;
+                        min-height: 30px;
+                    }
+                    QScrollBar::handle:vertical:hover {
+                        background-color: #a0a0a0;
+                    }
+                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                        height: 0px;
+                    }
+                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                        background: none;
+                    }
+                """)
+    
+    def _update_progress_label_style(self):
+        """Update progress label styling based on current theme"""
+        if hasattr(self, 'progress_label'):
+            if self.dark_mode:
+                self.progress_label.setStyleSheet(
+                    "font-size: 11px; font-weight: 500; color: #dcdcdc; "
+                    "padding: 5px 10px; background-color: #2d2d2d; border-radius: 4px;"
+                )
+            else:
+                self.progress_label.setStyleSheet(
+                    "font-size: 11px; font-weight: 500; color: #2d2d2d; "
+                    "padding: 5px 10px; background-color: #e0e0e0; border-radius: 4px;"
+                )
+    
     def create_ui(self):
         """Create the user interface"""
         # Central widget
@@ -670,9 +1010,9 @@ class AffinityInstallerGUI(QMainWindow):
         main_layout.setContentsMargins(1, 1, 1, 1)
         
         # Top bar
-        top_bar = QFrame()
-        top_bar.setStyleSheet("background-color: #2d2d2d; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px;")
-        top_bar_layout = QHBoxLayout(top_bar)
+        self.top_bar = QFrame()
+        self.top_bar.setStyleSheet("background-color: #2d2d2d; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px;")
+        top_bar_layout = QHBoxLayout(self.top_bar)
         top_bar_layout.setContentsMargins(15, 10, 15, 10)
         
         # Add Affinity icon if available
@@ -705,10 +1045,36 @@ class AffinityInstallerGUI(QMainWindow):
             except Exception as e:
                 pass  # If icon loading fails, continue without icon
         
-        title = QLabel("Affinity on Linux Installer")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
-        top_bar_layout.addWidget(title)
+        self.title_label = QLabel("Affinity on Linux Installer")
+        self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        top_bar_layout.addWidget(self.title_label)
         top_bar_layout.addStretch()
+        
+        # Add theme toggle button
+        self.theme_toggle_btn = QPushButton("☀")
+        self.theme_toggle_btn.setToolTip("Switch to Light Mode")
+        self.theme_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c;
+                color: #f0f0f0;
+                border: 1px solid #555555;
+                padding: 0px;
+                min-height: 32px;
+                max-height: 32px;
+                min-width: 40px;
+                max-width: 40px;
+                font-size: 18px;
+                border-radius: 6px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border-color: #6a6a6a;
+            }
+        """)
+        self.theme_toggle_btn.clicked.connect(self.toggle_theme)
+        top_bar_layout.addWidget(self.theme_toggle_btn)
+        top_bar_layout.addSpacing(12)
         
         # Add system status indicator in top bar
         self.system_status_label = QLabel("●")
@@ -718,7 +1084,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.system_status_label.setToolTip("System Status: Initializing...")
         top_bar_layout.addWidget(self.system_status_label)
         
-        main_layout.addWidget(top_bar)
+        main_layout.addWidget(self.top_bar)
         
         # Content area with scroll support
         content_widget = QWidget()
@@ -736,31 +1102,8 @@ class AffinityInstallerGUI(QMainWindow):
         right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         right_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        right_scroll.setStyleSheet("""
-            QScrollArea {
-                background-color: #1c1c1c;
-                border: none;
-            }
-            QScrollBar:vertical {
-                background-color: #1c1c1c;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #3c3c3c;
-                border-radius: 6px;
-                min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #4a4a4a;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        """)
+        self.right_scroll = right_scroll  # Store reference for theme updates
+        self._update_right_scroll_style()
         
         right_panel = self.create_button_sections()
         right_scroll.setWidget(right_panel)
