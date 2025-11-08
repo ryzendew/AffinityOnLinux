@@ -160,9 +160,11 @@ class AffinityInstallerGUI(QMainWindow):
     progress_signal = pyqtSignal(float)  # value (0.0-1.0)
     progress_text_signal = pyqtSignal(str)  # progress text
     show_message_signal = pyqtSignal(str, str, str)  # title, message, type (info/error/warning)
-    sudo_password_signal = pyqtSignal()  # Signal to request sudo password
+    sudo_password_dialog_signal = pyqtSignal()  # Signal to request sudo password
     interactive_prompt_signal = pyqtSignal(str, str)  # prompt_text, default_response
     question_dialog_signal = pyqtSignal(str, str, list)  # title, message, buttons
+    prompt_affinity_install_signal = pyqtSignal()  # Signal to prompt for Affinity installation
+    install_application_signal = pyqtSignal(str)  # Signal to install an application
     
     def __init__(self):
         super().__init__()
@@ -201,9 +203,11 @@ class AffinityInstallerGUI(QMainWindow):
         self.progress_signal.connect(self._update_progress_safe)
         self.progress_text_signal.connect(self._update_progress_text_safe)
         self.show_message_signal.connect(self._show_message_safe)
-        self.sudo_password_signal.connect(self._request_sudo_password_safe)
+        self.sudo_password_dialog_signal.connect(self._request_sudo_password_safe)
         self.interactive_prompt_signal.connect(self._request_interactive_response_safe)
         self.question_dialog_signal.connect(self._show_question_dialog_safe)
+        self.prompt_affinity_install_signal.connect(self._prompt_affinity_install)
+        self.install_application_signal.connect(self.install_application)
         
         # Load Affinity icon
         self.load_affinity_icon()
@@ -1601,7 +1605,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Request password from main thread
         self.sudo_password = None
-        self.sudo_password_signal.emit()
+        self.sudo_password_dialog_signal.emit()
         
         # Wait for password to be entered (with timeout)
         max_wait = 300  # 30 seconds timeout
@@ -2230,7 +2234,7 @@ class AffinityInstallerGUI(QMainWindow):
         QTimer.singleShot(100, self.check_installation_status)
         
         # Ask if user wants to install an Affinity app
-        QTimer.singleShot(200, self._prompt_affinity_install)
+        self.prompt_affinity_install_signal.emit()
     
     def _prompt_affinity_install(self):
         """Prompt user to install an Affinity application"""
@@ -2277,7 +2281,7 @@ class AffinityInstallerGUI(QMainWindow):
                 checked_id = button_group.checkedId()
                 if checked_id >= 0 and checked_id in radio_buttons:
                     app_code = radio_buttons[checked_id]
-                    self.install_application(app_code)
+                    self.install_application_signal.emit(app_code)
     
     def install_application(self, app_code):
         """Install an Affinity application - asks user if they want to download or provide their own exe"""
