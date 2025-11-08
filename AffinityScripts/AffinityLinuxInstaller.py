@@ -165,7 +165,9 @@ class AffinityInstallerGUI(QMainWindow):
         super().__init__()
         
         self.setWindowTitle("Affinity Linux Installer")
-        self.setGeometry(100, 100, 1200, 700)
+        # Use a more reasonable initial size that fits smaller screens
+        self.setMinimumSize(800, 600)
+        self.resize(1000, 700)
         
         # Variables
         self.distro = None
@@ -175,6 +177,9 @@ class AffinityInstallerGUI(QMainWindow):
         self.installer_file = None
         self.update_buttons = {}  # Store references to update buttons
         self.log_font_size = 11  # Initial font size for log area
+        self.operation_cancelled = False  # Flag to track if operation was cancelled
+        self.current_operation = None  # Track current operation name
+        self.operation_in_progress = False  # Track if an operation is running
         
         # Setup log file
         self.log_file_path = Path.home() / "AffinitySetup.log"
@@ -226,6 +231,15 @@ class AffinityInstallerGUI(QMainWindow):
         wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
         wine_exists = wine.exists()
         
+        # Update system status indicator
+        if hasattr(self, 'system_status_label'):
+            if wine_exists:
+                self.system_status_label.setStyleSheet("font-size: 14px; color: #4ec9b0; padding: 0 5px;")
+                self.system_status_label.setToolTip("System Status: Ready - Wine is installed")
+            else:
+                self.system_status_label.setStyleSheet("font-size: 14px; color: #f48771; padding: 0 5px;")
+                self.system_status_label.setToolTip("System Status: Not Ready - Wine needs to be installed")
+        
         # Log Wine status
         if wine_exists:
             self.log("Wine: ✓ Installed (ElementalWarriorWine)", "success")
@@ -258,6 +272,16 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  {display_name}: ✓ Installed", "success")
             else:
                 self.log(f"  {display_name}: ✗ Not installed", "error")
+            
+            # Update button text to show installation status
+            if app_name in self.update_buttons:
+                btn = self.update_buttons[app_name]
+                if is_installed:
+                    # Add checkmark to button text if installed
+                    current_text = btn.text()
+                    if "✓" not in current_text:
+                        btn.setText(current_text.split("✓")[0].strip() + " ✓")
+                    btn.setEnabled(True)
         
         # Check dependencies
         self.log("System Dependencies:", "info")
@@ -463,19 +487,19 @@ class AffinityInstallerGUI(QMainWindow):
             QGroupBox {
                 border: none;
                 background-color: #252526;
-                margin-top: 10px;
-                padding-top: 10px;
-                border-radius: 12px;
+                margin-top: 8px;
+                padding-top: 8px;
+                border-radius: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 8px;
+                padding: 0 6px;
                 background-color: #2d2d30;
                 color: #cccccc;
                 font-weight: bold;
-                font-size: 11px;
-                border-radius: 6px;
+                font-size: 10px;
+                border-radius: 4px;
             }
             QFrame {
                 background-color: #252526;
@@ -486,42 +510,60 @@ class AffinityInstallerGUI(QMainWindow):
                 background-color: #3c3c3c;
                 color: #e0e0e0;
                 border: 1px solid #4a4a4a;
-                padding: 6px 12px;
-                min-height: 28px;
-                font-size: 11px;
+                padding: 5px 10px;
+                min-height: 26px;
+                font-size: 10px;
                 font-weight: 500;
                 text-align: left;
-                border-radius: 8px;
+                border-radius: 6px;
             }
             QPushButton:hover {
                 background-color: #464647;
                 border-color: #5a5a5a;
                 color: #ffffff;
             }
+            QPushButton:disabled {
+                background-color: #2d2d2d;
+                color: #666666;
+                border-color: #333333;
+            }
             QPushButton:pressed {
                 background-color: #2d2d2d;
                 border-color: #3a3a3a;
             }
             QTextEdit {
-                background-color: #1e1e1e;
+                background-color: #1a1a1a;
                 color: #d4d4d4;
                 border: 1px solid #3c3c3c;
-                font-family: 'Consolas', monospace;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                 font-size: 11px;
                 border-radius: 8px;
+                selection-background-color: #264f78;
+                padding: 8px;
+                line-height: 1.5;
             }
             QProgressBar {
                 border: none;
-                background-color: #3c3c3c;
-                height: 6px;
-                border-radius: 3px;
+                background-color: #2d2d30;
+                height: 8px;
+                border-radius: 4px;
+                text-align: center;
             }
             QProgressBar::chunk {
-                background-color: #0e639c;
-                border-radius: 3px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #0e639c, stop:1 #1177bb);
+                border-radius: 4px;
             }
             QLabel {
-                color: #ffffff;
+                color: #cccccc;
+            }
+            QToolTip {
+                background-color: #2d2d30;
+                color: #cccccc;
+                border: 1px solid #4a4a4a;
+                padding: 6px;
+                border-radius: 4px;
+                font-size: 10px;
             }
             QDialog {
                 background-color: #252526;
@@ -572,6 +614,24 @@ class AffinityInstallerGUI(QMainWindow):
                 color: #666666;
                 border-color: #2d2d2d;
             }
+            QPushButton[cancelButton="true"] {
+                background-color: #d32f2f;
+                color: #ffffff;
+                border: 1px solid #b71c1c;
+                padding: 4px 8px;
+                min-height: 24px;
+                max-width: 30px;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QPushButton[cancelButton="true"]:hover {
+                background-color: #f44336;
+                border-color: #d32f2f;
+            }
+            QPushButton[cancelButton="true"]:pressed {
+                background-color: #b71c1c;
+            }
         """)
     
     def create_ui(self):
@@ -587,9 +647,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Top bar
         top_bar = QFrame()
-        top_bar.setStyleSheet("background-color: #252526; padding: 15px 20px; border-top-left-radius: 0px; border-top-right-radius: 0px;")
+        top_bar.setStyleSheet("background-color: #252526; padding: 10px 15px; border-top-left-radius: 0px; border-top-right-radius: 0px;")
         top_bar_layout = QHBoxLayout(top_bar)
-        top_bar_layout.setContentsMargins(20, 15, 20, 15)
+        top_bar_layout.setContentsMargins(15, 10, 15, 10)
         
         # Add Affinity icon if available
         if hasattr(self, 'affinity_icon_path') and self.affinity_icon_path:
@@ -600,48 +660,91 @@ class AffinityInstallerGUI(QMainWindow):
                     icon = QIcon(self.affinity_icon_path)
                     self.setWindowIcon(icon)
                     
-                    # Use QSvgWidget for proper SVG display
+                    # Use QSvgWidget for proper SVG display (smaller for compact UI)
                     svg_widget = QSvgWidget(self.affinity_icon_path)
-                    svg_widget.setFixedSize(40, 40)  # Larger size to prevent cutoff
+                    svg_widget.setFixedSize(32, 32)
                     svg_widget.setStyleSheet("background: transparent;")
                     top_bar_layout.addWidget(svg_widget)
-                    top_bar_layout.addSpacing(10)
+                    top_bar_layout.addSpacing(8)
                 except:
                     # Fallback to QIcon if QSvgWidget fails
                     icon = QIcon(self.affinity_icon_path)
                     self.setWindowIcon(icon)
                     
                     icon_label = QLabel()
-                    # Use larger size with proper scaling
-                    pixmap = icon.pixmap(40, 40)
+                    # Use smaller size for compact UI
+                    pixmap = icon.pixmap(32, 32)
                     if not pixmap.isNull():
-                        icon_label.setPixmap(pixmap.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                        icon_label.setFixedSize(40, 40)
+                        icon_label.setPixmap(pixmap.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                        icon_label.setFixedSize(32, 32)
                         top_bar_layout.addWidget(icon_label)
-                        top_bar_layout.addSpacing(10)
+                        top_bar_layout.addSpacing(8)
             except Exception as e:
                 pass  # If icon loading fails, continue without icon
         
         title = QLabel("Affinity Linux Installer")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
         top_bar_layout.addWidget(title)
         top_bar_layout.addStretch()
         
+        # Add system status indicator in top bar
+        self.system_status_label = QLabel("●")
+        self.system_status_label.setStyleSheet(
+            "font-size: 14px; color: #666666; padding: 0 5px;"
+        )
+        self.system_status_label.setToolTip("System Status: Initializing...")
+        top_bar_layout.addWidget(self.system_status_label)
+        
         main_layout.addWidget(top_bar)
         
-        # Content area
+        # Content area with scroll support
         content_widget = QWidget()
         content_layout = QHBoxLayout(content_widget)
-        content_layout.setSpacing(20)
-        content_layout.setContentsMargins(20, 20, 20, 20)
+        content_layout.setSpacing(15)
+        content_layout.setContentsMargins(15, 15, 15, 15)
         
         # Left panel - Status/Log
         left_panel = self.create_status_section()
         content_layout.addWidget(left_panel, stretch=2)
         
-        # Right panel - Buttons
+        # Right panel - Buttons (wrapped in scroll area for small screens)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        right_scroll.setStyleSheet("""
+            QScrollArea {
+                background-color: #1e1e1e;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background-color: #1e1e1e;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #3c3c3c;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #4a4a4a;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """)
+        
         right_panel = self.create_button_sections()
-        content_layout.addWidget(right_panel, stretch=0)
+        right_scroll.setWidget(right_panel)
+        right_scroll.setMinimumWidth(280)
+        right_scroll.setMaximumWidth(350)
+        
+        content_layout.addWidget(right_scroll, stretch=0)
         
         main_layout.addWidget(content_widget, stretch=1)
     
@@ -649,21 +752,41 @@ class AffinityInstallerGUI(QMainWindow):
         """Create the status/log output section"""
         group = QGroupBox("Status & Log Output")
         group_layout = QVBoxLayout(group)
-        group_layout.setSpacing(10)
-        group_layout.setContentsMargins(12, 25, 12, 12)
+        group_layout.setSpacing(8)
+        group_layout.setContentsMargins(12, 22, 12, 12)
         
         # Progress status label (above progress bar)
         self.progress_label = QLabel("Ready")
-        self.progress_label.setStyleSheet("font-size: 12px; font-weight: 500; color: #cccccc; padding: 5px 0px;")
+        self.progress_label.setStyleSheet(
+            "font-size: 11px; font-weight: 500; color: #cccccc; "
+            "padding: 5px 10px; background-color: #2d2d30; border-radius: 4px;"
+        )
         self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         group_layout.addWidget(self.progress_label)
         
-        # Progress bar
+        # Progress bar and cancel button container
+        progress_container = QWidget()
+        progress_container_layout = QHBoxLayout(progress_container)
+        progress_container_layout.setContentsMargins(0, 0, 0, 0)
+        progress_container_layout.setSpacing(8)
+        
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
-        group_layout.addWidget(self.progress)
+        progress_container_layout.addWidget(self.progress, stretch=1)
+        
+        # Cancel button (hidden by default)
+        self.cancel_btn = QPushButton("✕")
+        self.cancel_btn.setToolTip("Cancel current operation")
+        self.cancel_btn.setProperty("cancelButton", True)
+        self.cancel_btn.setMaximumWidth(30)
+        self.cancel_btn.setMinimumWidth(30)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.clicked.connect(self.cancel_operation)
+        progress_container_layout.addWidget(self.cancel_btn)
+        
+        group_layout.addWidget(progress_container)
         
         # Zoom controls
         zoom_container = QWidget()
@@ -672,30 +795,42 @@ class AffinityInstallerGUI(QMainWindow):
         zoom_layout.setSpacing(5)
         zoom_layout.addStretch()
         
+        # Get icon path
+        icons_dir = Path(__file__).parent / "icons"
+        
         # Zoom out button
-        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn = QPushButton()
         self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+-)")
         self.zoom_out_btn.setProperty("zoomButton", True)
         self.zoom_out_btn.setMaximumWidth(35)
         self.zoom_out_btn.setMinimumWidth(35)
+        zoom_out_icon = QIcon(str(icons_dir / "zoom-out.svg"))
+        self.zoom_out_btn.setIcon(zoom_out_icon)
+        self.zoom_out_btn.setIconSize(QSize(16, 16))
         self.zoom_out_btn.clicked.connect(self.zoom_out)
         zoom_layout.addWidget(self.zoom_out_btn)
         
         # Zoom reset button
-        self.zoom_reset_btn = QPushButton("🔍")
+        self.zoom_reset_btn = QPushButton()
         self.zoom_reset_btn.setToolTip("Reset Zoom (Ctrl+0)")
         self.zoom_reset_btn.setProperty("zoomButton", True)
         self.zoom_reset_btn.setMaximumWidth(35)
         self.zoom_reset_btn.setMinimumWidth(35)
+        zoom_original_icon = QIcon(str(icons_dir / "zoom-original.svg"))
+        self.zoom_reset_btn.setIcon(zoom_original_icon)
+        self.zoom_reset_btn.setIconSize(QSize(16, 16))
         self.zoom_reset_btn.clicked.connect(self.zoom_reset)
         zoom_layout.addWidget(self.zoom_reset_btn)
         
         # Zoom in button
-        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn = QPushButton()
         self.zoom_in_btn.setToolTip("Zoom In (Ctrl++)")
         self.zoom_in_btn.setProperty("zoomButton", True)
         self.zoom_in_btn.setMaximumWidth(35)
         self.zoom_in_btn.setMinimumWidth(35)
+        zoom_in_icon = QIcon(str(icons_dir / "zoom-in.svg"))
+        self.zoom_in_btn.setIcon(zoom_in_icon)
+        self.zoom_in_btn.setIconSize(QSize(16, 16))
         self.zoom_in_btn.clicked.connect(self.zoom_in)
         zoom_layout.addWidget(self.zoom_in_btn)
         
@@ -717,14 +852,20 @@ class AffinityInstallerGUI(QMainWindow):
         """Create organized button sections"""
         container = QWidget()
         container_layout = QVBoxLayout(container)
-        container_layout.setSpacing(10)
+        container_layout.setSpacing(8)
         container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Get icon path helper
+        icons_dir = Path(__file__).parent / "icons"
         
         # Quick Start section - One-click install
         quick_group = self.create_button_group(
             "Quick Start",
             [
-                ("One-Click Full Setup", self.one_click_setup),
+                ("One-Click Full Setup", self.one_click_setup, "Setup Wine, dependencies, and prepare for Affinity installation", icons_dir / "rocket.svg"),
+                ("Setup Wine Environment", self.setup_wine_environment, "Download and configure Wine environment only", icons_dir / "cog.svg"),
+                ("Install System Dependencies", self.install_system_dependencies, "Install required Linux packages", icons_dir / "cog.svg"),
+                ("Install Winetricks Dependencies", self.install_winetricks_deps, "Install Windows components (.NET, fonts, etc.)", icons_dir / "cog.svg"),
             ]
         )
         container_layout.addWidget(quick_group)
@@ -733,24 +874,24 @@ class AffinityInstallerGUI(QMainWindow):
         sys_group = self.create_button_group(
             "System Setup",
             [
-                ("Download Affinity Installer", self.download_affinity_installer),
-                ("Install from File Manager", self.install_from_file),
+                ("Download Affinity Installer", self.download_affinity_installer, "Download the latest Affinity installer from official source", icons_dir / "download.svg"),
+                ("Install from File Manager", self.install_from_file, "Install Affinity or any Windows app from a local .exe file", icons_dir / "folderopen.svg"),
             ]
         )
         container_layout.addWidget(sys_group)
         
         # Update Affinity Applications section
         app_buttons = [
-            ("Affinity (Unified)", "Add"),
-            ("Affinity Photo", "Photo"),
-            ("Affinity Designer", "Designer"),
-            ("Affinity Publisher", "Publisher"),
+            ("Affinity (Unified)", "Add", "Update or install Affinity V3 unified application", icons_dir / "palette.svg"),
+            ("Affinity Photo", "Photo", "Update or install Affinity Photo for image editing", icons_dir / "camera.svg"),
+            ("Affinity Designer", "Designer", "Update or install Affinity Designer for vector graphics", icons_dir / "pen.svg"),
+            ("Affinity Publisher", "Publisher", "Update or install Affinity Publisher for page layout", icons_dir / "book.svg"),
         ]
         app_group = self.create_button_group(
             "Update Affinity Applications",
-            [(text, lambda name=app_name: self.update_application(name)) for text, app_name in app_buttons],
+            [(text, lambda name=app_name: self.update_application(name), tooltip, icon) for text, app_name, tooltip, icon in app_buttons],
             button_refs=self.update_buttons,
-            button_keys=[app_name for _, app_name in app_buttons]
+            button_keys=[app_name for _, app_name, _, _ in app_buttons]
         )
         container_layout.addWidget(app_group)
         
@@ -758,22 +899,22 @@ class AffinityInstallerGUI(QMainWindow):
         troubleshoot_group = self.create_button_group(
             "Troubleshooting",
             [
-                ("Open Wine Configuration", self.open_winecfg),
-                ("Open Winetricks", self.open_winetricks),
-                ("Set Windows 11 + Renderer", self.set_windows11_renderer),
-                ("Reinstall WinMetadata", self.reinstall_winmetadata),
-                ("Install WebView2 Runtime (v3)", self.install_webview2_runtime),
-                ("Set DPI Scaling", self.set_dpi_scaling),
-                ("Uninstall", self.uninstall_affinity_linux),
+                ("Wine Configuration", self.open_winecfg, "Open Wine settings to configure Windows version and libraries", icons_dir / "cog.svg"),
+                ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", icons_dir / "wrench.svg"),
+                ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", icons_dir / "display.svg"),
+                ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", icons_dir / "loop.svg"),
+                ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", icons_dir / "chrome.svg"),
+                ("Set DPI Scaling", self.set_dpi_scaling, "Adjust interface size for better readability", icons_dir / "scale.svg"),
+                ("Uninstall", self.uninstall_affinity_linux, "Completely remove Affinity Linux installation", icons_dir / "trash.svg"),
             ]
         )
         container_layout.addWidget(troubleshoot_group)
         
         # Launch section
         launch_group = self.create_button_group(
-            "Launch Affinity",
+            "Launch",
             [
-                ("Launch Affinity v3", self.launch_affinity_v3),
+                ("Launch Affinity v3", self.launch_affinity_v3, "Start Affinity V3 unified application", icons_dir / "play.svg"),
             ]
         )
         container_layout.addWidget(launch_group)
@@ -782,7 +923,7 @@ class AffinityInstallerGUI(QMainWindow):
         other_group = self.create_button_group(
             "Other",
             [
-                ("Exit", self.close),
+                ("Exit", self.close, "Close the installer", icons_dir / "exit.svg"),
             ]
         )
         container_layout.addWidget(other_group)
@@ -796,18 +937,34 @@ class AffinityInstallerGUI(QMainWindow):
         group = QGroupBox(title)
         group_layout = QVBoxLayout(group)
         group_layout.setSpacing(2)
-        group_layout.setContentsMargins(8, 20, 8, 8)
+        group_layout.setContentsMargins(8, 18, 8, 8)
         
         for idx, button_data in enumerate(buttons):
-            # Handle both (text, command) and (text, command, color) formats for backward compatibility
+            # Handle (text, command), (text, command, tooltip), (text, command, tooltip, icon) formats
+            tooltip = None
+            icon_path = None
             if len(button_data) == 2:
                 text, command = button_data
+            elif len(button_data) == 3:
+                text, command, tooltip = button_data
+            elif len(button_data) == 4:
+                text, command, tooltip, icon_path = button_data
             else:
-                text, command, _ = button_data
+                text, command = button_data[0], button_data[1]
             
             btn = QPushButton(text)
-            # All buttons now use neutral colors for better readability
             btn.clicked.connect(command)
+            
+            # Add icon if provided
+            if icon_path and Path(icon_path).exists():
+                icon = QIcon(str(icon_path))
+                btn.setIcon(icon)
+                btn.setIconSize(QSize(16, 16))
+            
+            # Add tooltip if provided
+            if tooltip:
+                btn.setToolTip(tooltip)
+            
             group_layout.addWidget(btn)
             
             # Store button reference if requested
@@ -904,22 +1061,39 @@ class AffinityInstallerGUI(QMainWindow):
     def _log_safe(self, message, level="info"):
         """Thread-safe log handler (called from main thread)"""
         timestamp = time.strftime("%H:%M:%S")
-        prefix = f"[{timestamp}] "
         
+        # Determine icon, color, and styling based on level
         if level == "error":
-            prefix += "✗ "
+            icon = "✗"
             color = "#f48771"
+            bg_color = "#2d1f1f"
+            icon_color = "#ff6b6b"
         elif level == "success":
-            prefix += "✓ "
+            icon = "✓"
             color = "#4ec9b0"
+            bg_color = "#1f2d26"
+            icon_color = "#50fa7b"
         elif level == "warning":
-            prefix += "⚠ "
+            icon = "⚠"
             color = "#ce9178"
+            bg_color = "#2d271f"
+            icon_color = "#f1fa8c"
         else:
-            prefix += "→ "
+            icon = "•"
             color = "#d4d4d4"
+            bg_color = "transparent"
+            icon_color = "#6272a4"
         
-        full_message = f'<span style="color: {color};">{prefix}{message}</span>'
+        # Format message with better styling
+        timestamp_html = f'<span style="color: #6272a4; font-weight: 500;">[{timestamp}]</span>'
+        icon_html = f'<span style="color: {icon_color}; font-weight: bold; font-size: 12px;">{icon}</span>'
+        
+        # Add subtle background for important messages
+        if level in ["error", "success", "warning"]:
+            full_message = f'<div style="background-color: {bg_color}; padding: 4px 8px; margin: 2px 0; border-radius: 4px; border-left: 3px solid {icon_color};">{timestamp_html} {icon_html} <span style="color: {color};">{message}</span></div>'
+        else:
+            full_message = f'<div style="padding: 2px 4px; margin: 1px 0;">{timestamp_html} {icon_html} <span style="color: {color};">{message}</span></div>'
+        
         self.log_text.append(full_message)
         self.log_text.verticalScrollBar().setValue(
             self.log_text.verticalScrollBar().maximum()
@@ -953,6 +1127,55 @@ class AffinityInstallerGUI(QMainWindow):
     def update_progress_text(self, text):
         """Update progress label text (thread-safe via signal)"""
         self.progress_text_signal.emit(text)
+    
+    def cancel_operation(self):
+        """Cancel the current operation with confirmation"""
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            self,
+            "Cancel Operation",
+            f"Are you sure you want to cancel the current operation?\n\n"
+            f"Operation: {self.current_operation or 'Unknown'}\n\n"
+            f"Note: This may leave the installation in an incomplete state.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.operation_cancelled = True
+            self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "warning")
+            self.log("⚠ Operation cancelled by user", "warning")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", "warning")
+            self.update_progress_text("Operation cancelled")
+            self.update_progress(0.0)  # Reset progress bar
+            self.cancel_btn.setVisible(False)
+            self.operation_in_progress = False
+    
+    def start_operation(self, operation_name):
+        """Mark the start of an operation and show cancel button"""
+        self.operation_cancelled = False
+        self.current_operation = operation_name
+        self.operation_in_progress = True
+        if hasattr(self, 'cancel_btn'):
+            self.cancel_btn.setVisible(True)
+    
+    def end_operation(self):
+        """Mark the end of an operation and hide cancel button"""
+        self.operation_in_progress = False
+        self.current_operation = None
+        if hasattr(self, 'cancel_btn'):
+            self.cancel_btn.setVisible(False)
+        # Reset progress bar if operation was cancelled
+        if self.operation_cancelled:
+            self.update_progress(0.0)
+            self.update_progress_text("Ready")
+    
+    def check_cancelled(self):
+        """Check if operation was cancelled"""
+        if self.operation_cancelled:
+            self.end_operation()
+            return True
+        return False
     
     def show_message(self, title, message, msg_type="info"):
         """Show message box (thread-safe via signal)"""
@@ -1072,6 +1295,10 @@ class AffinityInstallerGUI(QMainWindow):
     def download_file(self, url, output_path, description=""):
         """Download file with progress tracking"""
         try:
+            # Check if cancelled before starting
+            if self.check_cancelled():
+                return False
+            
             self.log(f"Downloading {description}...", "info")
             
             # Create request with proper headers
@@ -1087,6 +1314,11 @@ class AffinityInstallerGUI(QMainWindow):
                 
                 with open(output_path, 'wb') as out_file:
                     while True:
+                        # Check for cancellation during download
+                        if self.check_cancelled():
+                            self.log(f"Download of {description} cancelled", "warning")
+                            return False
+                        
                         chunk = response.read(block_size)
                         if not chunk:
                             break
@@ -1154,22 +1386,37 @@ class AffinityInstallerGUI(QMainWindow):
     
     def _one_click_setup_thread(self):
         """One-click setup in background thread"""
+        self.start_operation("One-Click Full Setup")
+        
         # Step 1: Detect distribution
         self.update_progress_text("Step 1/4: Detecting Linux distribution...")
         self.update_progress(0.05)
+        
+        if self.check_cancelled():
+            return
+        
         if not self.detect_distro():
             self.log("Failed to detect distribution. Cannot continue.", "error")
             self.update_progress_text("Ready")
+            self.end_operation()
             return
         
         self.log(f"Detected distribution: {self.distro} {self.distro_version or ''}", "success")
         
+        if self.check_cancelled():
+            return
+        
         # Step 2: Check and install dependencies
         self.update_progress_text("Step 2/4: Checking and installing system dependencies...")
         self.update_progress(0.15)
+        
+        if self.check_cancelled():
+            return
+        
         if not self.check_dependencies():
             self.log("Dependency check failed. Please resolve issues and try again.", "error")
             self.update_progress_text("Ready")
+            self.end_operation()
             
             # Show retry dialog
             from PyQt6.QtWidgets import QMessageBox
@@ -1185,24 +1432,45 @@ class AffinityInstallerGUI(QMainWindow):
                 # Retry dependency check
                 return self._one_click_setup_thread()
             else:
+                self.end_operation()
                 return
+        
+        if self.check_cancelled():
+            return
         
         # Step 3: Setup Wine environment (this includes winetricks dependencies via configure_wine)
         self.update_progress_text("Step 3/4: Setting up Wine environment...")
         self.update_progress(0.40)
+        
+        if self.check_cancelled():
+            return
+        
         self.setup_wine()
+        
+        if self.check_cancelled():
+            return
         
         # Step 4: Install Affinity v3 settings to enable settings saving
         self.update_progress_text("Step 4/4: Installing Affinity v3 settings...")
         self.update_progress(0.90)
+        
+        if self.check_cancelled():
+            return
+        
         self.log("Installing Affinity v3 settings files...", "info")
         self._install_affinity_settings_thread()
+        
+        if self.check_cancelled():
+            return
         
         # Complete!
         self.update_progress(1.0)
         self.update_progress_text("Setup Complete!")
         self.log("\n✓ Full setup completed!", "success")
         self.log("You can now install Affinity applications using the buttons above.", "info")
+        
+        # End operation
+        self.end_operation()
         
         # Refresh installation status to update button states
         QTimer.singleShot(100, self.check_installation_status)
@@ -1577,6 +1845,10 @@ class AffinityInstallerGUI(QMainWindow):
     
     def setup_wine(self):
         """Setup Wine environment"""
+        # Check if cancelled at start
+        if self.check_cancelled():
+            return False
+        
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Wine Binary Setup", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -1587,11 +1859,17 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Stopping Wine processes...", "info")
         self.run_command(["wineserver", "-k"], check=False)
         
+        if self.check_cancelled():
+            return False
+        
         # Create directory
         self.update_progress_text("Creating installation directory...")
         self.update_progress(0.05)
         Path(self.directory).mkdir(parents=True, exist_ok=True)
         self.log("Installation directory created", "success")
+        
+        if self.check_cancelled():
+            return False
         
         # Download Wine binary
         wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
@@ -1603,6 +1881,9 @@ class AffinityInstallerGUI(QMainWindow):
         if not self.download_file(wine_url, str(wine_file), "Wine binaries"):
             self.log("Failed to download Wine binary", "error")
             self.update_progress_text("Ready")
+            return False
+        
+        if self.check_cancelled():
             return False
         
         # Extract Wine
@@ -1617,6 +1898,9 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception as e:
             self.log(f"Failed to extract Wine: {e}", "error")
             self.update_progress_text("Ready")
+            return False
+        
+        if self.check_cancelled():
             return False
         
         # Find and link Wine directory
@@ -1639,6 +1923,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("Wine binary verified", "success")
         
+        if self.check_cancelled():
+            return False
+        
         # Download icons
         self.update_progress_text("Downloading application icons...")
         self.update_progress(0.65)
@@ -1659,25 +1946,39 @@ class AffinityInstallerGUI(QMainWindow):
         
         total_icons = len(icons)
         for idx, (url, path, desc) in enumerate(icons):
+            if self.check_cancelled():
+                return False
             icon_progress = 0.65 + (idx / total_icons) * 0.05
             self.update_progress(icon_progress)
             if not self.download_file(url, str(path), desc):
                 self.log(f"Warning: {desc} download failed, but continuing...", "warning")
+        
+        if self.check_cancelled():
+            return False
         
         # Setup WinMetadata
         self.update_progress_text("Setting up Windows Metadata...")
         self.update_progress(0.70)
         self.setup_winmetadata()
         
+        if self.check_cancelled():
+            return False
+        
         # Setup vkd3d-proton
         self.update_progress_text("Setting up vkd3d-proton...")
         self.update_progress(0.80)
         self.setup_vkd3d()
         
+        if self.check_cancelled():
+            return False
+        
         # Configure Wine
         self.update_progress_text("Configuring Wine with winetricks...")
         self.update_progress(0.90)
         self.configure_wine()
+        
+        if self.check_cancelled():
+            return False
         
         self.setup_complete = True
         self.update_progress(1.0)
@@ -1904,6 +2205,17 @@ class AffinityInstallerGUI(QMainWindow):
         """Display main application menu"""
         self.log("\n✓ Setup complete! Select an application to install:", "success")
         self.update_progress(1.0)
+    
+    def setup_wine_environment(self):
+        """Setup Wine environment only"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Setup Wine Environment", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        threading.Thread(target=self.setup_wine, daemon=True).start()
+    
+    def install_winetricks_deps(self):
+        """Install winetricks dependencies - wrapper for button"""
+        self.install_winetricks_dependencies()
     
     def install_system_dependencies(self):
         """Install system dependencies"""
