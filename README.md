@@ -6,7 +6,7 @@ A comprehensive solution for running [Affinity software](https://www.affinity.st
 
 - **Full OpenCL Support** - Hardware acceleration enabled out of the box
 - **Automated Installation** - Streamlined setup process with dependency management
-- **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
+- Cross-Distribution Support - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE, Pop!_OS)
 - **Desktop Integration** - Automatic desktop entry and shortcut creation
 - **Wine Configuration** - Pre-configured Wine environment optimized for Affinity applications
 
@@ -15,6 +15,8 @@ A comprehensive solution for running [Affinity software](https://www.affinity.st
 OpenCL support is fully functional, enabling GPU acceleration for improved performance in Affinity applications.
 
 <img width="2559" height="1441" alt="OpenCL Hardware Acceleration" src="https://github.com/user-attachments/assets/b5350cbf-09a3-4ba2-9e98-aec86a73986b" />
+
+<img alt="Affinity on Linux Screenshot" src="./aol-screenshot.png" />
 
 ## Supported Applications
 
@@ -225,6 +227,7 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 - XeroLinux
 - Fedora
 - openSUSE (Tumbleweed/Leap)
+- Pop!_OS
 
 **Note:** Ubuntu, Linux Mint, Pop!_OS, and Zorin OS are not officially supported due to outdated package management systems. Users on these distributions must manually install dependencies.
 
