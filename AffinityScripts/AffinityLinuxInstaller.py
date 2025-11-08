@@ -192,6 +192,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.question_dialog_response = None  # Response from question dialogs
         self.waiting_for_question_response = False  # Whether waiting for question dialog response
         self.dark_mode = True  # Track current theme mode
+        self.icon_buttons = []  # Store buttons with icons for theme updates
         
         # Setup log file
         self.log_file_path = Path.home() / "AffinitySetup.log"
@@ -475,6 +476,34 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception:
             pass
     
+    def get_icon_path(self, icon_name):
+        """Get the path to a light or dark icon based on theme"""
+        if not icon_name:
+            return None
+        
+        icons_dir = Path(__file__).parent / "icons"
+        theme_suffix = "light" if self.dark_mode else "dark"
+        
+        # Check for theme-specific icon first
+        themed_icon_path = icons_dir / f"{icon_name}-{theme_suffix}.svg"
+        if themed_icon_path.exists():
+            return themed_icon_path
+        
+        # Fallback to base icon name if theme-specific one doesn't exist
+        base_icon_path = icons_dir / f"{icon_name}.svg"
+        if base_icon_path.exists():
+            return base_icon_path
+        
+        return None
+
+    def _update_button_icons(self):
+        """Update all button icons to match the current theme"""
+        for btn, icon_name in self.icon_buttons:
+            icon_path = self.get_icon_path(icon_name)
+            if icon_path:
+                icon = QIcon(str(icon_path))
+                btn.setIcon(icon)
+
     def toggle_theme(self):
         """Toggle between dark and light themes"""
         self.dark_mode = not self.dark_mode
@@ -487,6 +516,9 @@ class AffinityInstallerGUI(QMainWindow):
         else:
             self.theme_toggle_btn.setText("🌙")
             self.theme_toggle_btn.setToolTip("Switch to Dark Mode")
+        
+        # Update button icons
+        self._update_button_icons()
         
         # Update top bar
         self._update_top_bar_style()
@@ -567,15 +599,15 @@ class AffinityInstallerGUI(QMainWindow):
                 border-color: #4a4a4a;
             }
             QPushButton[class="primary"] {
-                background-color: #8ff361;
-                color: #1c1c1c;
+                background-color: #4caf50;
+                color: #ffffff;
                 font-weight: bold;
                 font-size: 12px;
-                border: 1px solid #7acb52;
+                border: 1px solid #45a049;
             }
             QPushButton[class="primary"]:hover {
-                background-color: #a0f579;
-                border-color: #8ff361;
+                background-color: #5fbf63;
+                border-color: #4caf50;
             }
             QTextEdit {
                 background-color: #1a1a1a;
@@ -735,20 +767,16 @@ class AffinityInstallerGUI(QMainWindow):
                 color: #a0a0a0;
                 border: 1px solid #c5c5c5;
             }
-            QPushButton:pressed {
-                background-color: #c0c0c0;
-                border-color: #909090;
-            }
             QPushButton[class="primary"] {
-                background-color: #4caf50;
-                color: #ffffff;
+                background-color: #8ff361;
+                color: #1c1c1c;
                 font-weight: bold;
                 font-size: 12px;
-                border: 1px solid #45a049;
+                border: 1px solid #7acb52;
             }
             QPushButton[class="primary"]:hover {
-                background-color: #5fbf63;
-                border-color: #4caf50;
+                background-color: #a0f579;
+                border-color: #8ff361;
             }
             QTextEdit {
                 background-color: #ffffff;
@@ -1165,35 +1193,44 @@ class AffinityInstallerGUI(QMainWindow):
         self.zoom_out_btn.setProperty("zoomButton", True)
         self.zoom_out_btn.setMaximumWidth(35)
         self.zoom_out_btn.setMinimumWidth(35)
-        zoom_out_icon = QIcon(str(icons_dir / "zoom-out.svg"))
-        self.zoom_out_btn.setIcon(zoom_out_icon)
+        icon_name_zoom_out = "zoom-out"
+        icon_path_zoom_out = self.get_icon_path(icon_name_zoom_out)
+        if icon_path_zoom_out:
+            self.zoom_out_btn.setIcon(QIcon(str(icon_path_zoom_out)))
         self.zoom_out_btn.setIconSize(QSize(16, 16))
         self.zoom_out_btn.clicked.connect(self.zoom_out)
         zoom_layout.addWidget(self.zoom_out_btn)
-        
+        self.icon_buttons.append((self.zoom_out_btn, icon_name_zoom_out))
+
         # Zoom reset button
         self.zoom_reset_btn = QPushButton()
         self.zoom_reset_btn.setToolTip("Reset Zoom (Ctrl+0)")
         self.zoom_reset_btn.setProperty("zoomButton", True)
         self.zoom_reset_btn.setMaximumWidth(35)
         self.zoom_reset_btn.setMinimumWidth(35)
-        zoom_original_icon = QIcon(str(icons_dir / "zoom-original.svg"))
-        self.zoom_reset_btn.setIcon(zoom_original_icon)
+        icon_name_zoom_reset = "zoom-original"
+        icon_path_zoom_reset = self.get_icon_path(icon_name_zoom_reset)
+        if icon_path_zoom_reset:
+            self.zoom_reset_btn.setIcon(QIcon(str(icon_path_zoom_reset)))
         self.zoom_reset_btn.setIconSize(QSize(16, 16))
         self.zoom_reset_btn.clicked.connect(self.zoom_reset)
         zoom_layout.addWidget(self.zoom_reset_btn)
-        
+        self.icon_buttons.append((self.zoom_reset_btn, icon_name_zoom_reset))
+
         # Zoom in button
         self.zoom_in_btn = QPushButton()
         self.zoom_in_btn.setToolTip("Zoom In (Ctrl++)")
         self.zoom_in_btn.setProperty("zoomButton", True)
         self.zoom_in_btn.setMaximumWidth(35)
         self.zoom_in_btn.setMinimumWidth(35)
-        zoom_in_icon = QIcon(str(icons_dir / "zoom-in.svg"))
-        self.zoom_in_btn.setIcon(zoom_in_icon)
+        icon_name_zoom_in = "zoom-in"
+        icon_path_zoom_in = self.get_icon_path(icon_name_zoom_in)
+        if icon_path_zoom_in:
+            self.zoom_in_btn.setIcon(QIcon(str(icon_path_zoom_in)))
         self.zoom_in_btn.setIconSize(QSize(16, 16))
         self.zoom_in_btn.clicked.connect(self.zoom_in)
         zoom_layout.addWidget(self.zoom_in_btn)
+        self.icon_buttons.append((self.zoom_in_btn, icon_name_zoom_in))
         
         log_layout.addWidget(zoom_container)
         
@@ -1225,10 +1262,10 @@ class AffinityInstallerGUI(QMainWindow):
         quick_group = self.create_button_group(
             "Quick Start",
             [
-                ("One-Click Full Setup", self.one_click_setup, "Setup Wine, dependencies, and prepare for Affinity installation", icons_dir / "rocket.svg"),
-                ("Setup Wine Environment", self.setup_wine_environment, "Download and configure Wine environment only", icons_dir / "cog.svg"),
-                ("Install System Dependencies", self.install_system_dependencies, "Install required Linux packages", icons_dir / "cog.svg"),
-                ("Install Winetricks Dependencies", self.install_winetricks_deps, "Install Windows components (.NET, fonts, etc.)", icons_dir / "cog.svg"),
+                ("One-Click Full Setup", self.one_click_setup, "Setup Wine, dependencies, and prepare for Affinity installation", "rocket"),
+                ("Setup Wine Environment", self.setup_wine_environment, "Download and configure Wine environment only", "wine"),
+                ("Install System Dependencies", self.install_system_dependencies, "Install required Linux packages", "dependencies"),
+                ("Install Winetricks Dependencies", self.install_winetricks_deps, "Install Windows components (.NET, fonts, etc.)", "wand"),
             ]
         )
         container_layout.addWidget(quick_group)
@@ -1237,18 +1274,18 @@ class AffinityInstallerGUI(QMainWindow):
         sys_group = self.create_button_group(
             "System Setup",
             [
-                ("Download Affinity Installer", self.download_affinity_installer, "Download the latest Affinity installer from official source", icons_dir / "download.svg"),
-                ("Install from File Manager", self.install_from_file, "Install Affinity or any Windows app from a local .exe file", icons_dir / "folderopen.svg"),
+                ("Download Affinity Installer", self.download_affinity_installer, "Download the latest Affinity installer from official source", "download"),
+                ("Install from File Manager", self.install_from_file, "Install Affinity or any Windows app from a local .exe file", "folderopen"),
             ]
         )
         container_layout.addWidget(sys_group)
         
         # Update Affinity Applications section
         app_buttons = [
-            ("Affinity (Unified)", "Add", "Update or install Affinity V3 unified application", icons_dir / "palette.svg"),
-            ("Affinity Photo", "Photo", "Update or install Affinity Photo for image editing", icons_dir / "camera.svg"),
-            ("Affinity Designer", "Designer", "Update or install Affinity Designer for vector graphics", icons_dir / "pen.svg"),
-            ("Affinity Publisher", "Publisher", "Update or install Affinity Publisher for page layout", icons_dir / "book.svg"),
+            ("Affinity (Unified)", "Add", "Update or install Affinity V3 unified application", "affinity-unified"),
+            ("Affinity Photo", "Photo", "Update or install Affinity Photo for image editing", "camera"),
+            ("Affinity Designer", "Designer", "Update or install Affinity Designer for vector graphics", "pen"),
+            ("Affinity Publisher", "Publisher", "Update or install Affinity Publisher for page layout", "book"),
         ]
         app_group = self.create_button_group(
             "Update Affinity Applications",
@@ -1262,13 +1299,13 @@ class AffinityInstallerGUI(QMainWindow):
         troubleshoot_group = self.create_button_group(
             "Troubleshooting",
             [
-                ("Wine Configuration", self.open_winecfg, "Open Wine settings to configure Windows version and libraries", icons_dir / "cog.svg"),
-                ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", icons_dir / "wrench.svg"),
-                ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", icons_dir / "display.svg"),
-                ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", icons_dir / "loop.svg"),
-                ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", icons_dir / "chrome.svg"),
-                ("Set DPI Scaling", self.set_dpi_scaling, "Adjust interface size for better readability", icons_dir / "scale.svg"),
-                ("Uninstall", self.uninstall_affinity_linux, "Completely remove Affinity Linux installation", icons_dir / "trash.svg"),
+                ("Wine Configuration", self.open_winecfg, "Open Wine settings to configure Windows version and libraries", "wine"),
+                ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", "wand"),
+                ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", "windows"),
+                ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", "loop"),
+                ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", "chrome"),
+                ("Set DPI Scaling", self.set_dpi_scaling, "Adjust interface size for better readability", "scale"),
+                ("Uninstall", self.uninstall_affinity_linux, "Completely remove Affinity Linux installation", "trash"),
             ]
         )
         container_layout.addWidget(troubleshoot_group)
@@ -1277,7 +1314,7 @@ class AffinityInstallerGUI(QMainWindow):
         launch_group = self.create_button_group(
             "Launch",
             [
-                ("Launch Affinity v3", self.launch_affinity_v3, "Start Affinity V3 unified application", icons_dir / "play.svg"),
+                ("Launch Affinity v3", self.launch_affinity_v3, "Start Affinity V3 unified application", "play"),
             ]
         )
         container_layout.addWidget(launch_group)
@@ -1286,7 +1323,7 @@ class AffinityInstallerGUI(QMainWindow):
         other_group = self.create_button_group(
             "Other",
             [
-                ("Exit", self.close, "Close the installer", icons_dir / "exit.svg"),
+                ("Exit", self.close, "Close the installer", "exit"),
             ]
         )
         container_layout.addWidget(other_group)
@@ -1305,13 +1342,13 @@ class AffinityInstallerGUI(QMainWindow):
         for idx, button_data in enumerate(buttons):
             # Handle (text, command), (text, command, tooltip), (text, command, tooltip, icon) formats
             tooltip = None
-            icon_path = None
+            icon_name = None
             if len(button_data) == 2:
                 text, command = button_data
             elif len(button_data) == 3:
                 text, command, tooltip = button_data
             elif len(button_data) == 4:
-                text, command, tooltip, icon_path = button_data
+                text, command, tooltip, icon_name = button_data
             else:
                 text, command = button_data[0], button_data[1]
             
@@ -1319,10 +1356,13 @@ class AffinityInstallerGUI(QMainWindow):
             btn.clicked.connect(command)
             
             # Add icon if provided
-            if icon_path and Path(icon_path).exists():
-                icon = QIcon(str(icon_path))
-                btn.setIcon(icon)
-                btn.setIconSize(QSize(16, 16))
+            if icon_name:
+                icon_path = self.get_icon_path(icon_name)
+                if icon_path:
+                    icon = QIcon(str(icon_path))
+                    btn.setIcon(icon)
+                    btn.setIconSize(QSize(16, 16))
+                    self.icon_buttons.append((btn, icon_name))  # Store button and icon name
             
             # Add tooltip if provided
             if tooltip:
