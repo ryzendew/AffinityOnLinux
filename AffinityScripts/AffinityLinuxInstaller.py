@@ -1035,6 +1035,15 @@ class AffinityInstallerGUI(QMainWindow):
         top_bar_layout.addWidget(self.title_label)
         top_bar_layout.addStretch()
         
+        # Add system status indicator in top bar
+        self.system_status_label = QLabel("●")
+        self.system_status_label.setStyleSheet(
+            "font-size: 14px; color: #666666; padding: 0 5px;"
+        )
+        self.system_status_label.setToolTip("System Status: Initializing...")
+        top_bar_layout.addWidget(self.system_status_label)
+        top_bar_layout.addSpacing(12)
+        
         # Add theme toggle button
         self.theme_toggle_btn = QPushButton("☀")
         self.theme_toggle_btn.setToolTip("Switch to Light Mode")
@@ -1059,15 +1068,6 @@ class AffinityInstallerGUI(QMainWindow):
         """)
         self.theme_toggle_btn.clicked.connect(self.toggle_theme)
         top_bar_layout.addWidget(self.theme_toggle_btn)
-        top_bar_layout.addSpacing(12)
-        
-        # Add system status indicator in top bar
-        self.system_status_label = QLabel("●")
-        self.system_status_label.setStyleSheet(
-            "font-size: 14px; color: #666666; padding: 0 5px;"
-        )
-        self.system_status_label.setToolTip("System Status: Initializing...")
-        top_bar_layout.addWidget(self.system_status_label)
         
         main_layout.addWidget(self.top_bar)
         
