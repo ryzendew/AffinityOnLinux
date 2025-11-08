@@ -1013,6 +1013,7 @@ class AffinityInstallerGUI(QMainWindow):
                     svg_widget = QSvgWidget(self.affinity_icon_path)
                     svg_widget.setFixedSize(32, 32)
                     svg_widget.setStyleSheet("background: transparent;")
+                    top_bar_layout.addWidget(svg_widget)
                     top_bar_layout.addSpacing(5)
                 except:
                     # Fallback to QIcon if QSvgWidget fails
