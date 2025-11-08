@@ -1013,8 +1013,7 @@ class AffinityInstallerGUI(QMainWindow):
                     svg_widget = QSvgWidget(self.affinity_icon_path)
                     svg_widget.setFixedSize(32, 32)
                     svg_widget.setStyleSheet("background: transparent;")
-                    top_bar_layout.addWidget(svg_widget)
-                    top_bar_layout.addSpacing(12)
+                    top_bar_layout.addSpacing(5)
                 except:
                     # Fallback to QIcon if QSvgWidget fails
                     icon = QIcon(self.affinity_icon_path)
@@ -1026,7 +1025,7 @@ class AffinityInstallerGUI(QMainWindow):
                         icon_label.setPixmap(pixmap.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
                         icon_label.setFixedSize(32, 32)
                         top_bar_layout.addWidget(icon_label)
-                        top_bar_layout.addSpacing(12)
+                        top_bar_layout.addSpacing(5)
             except Exception as e:
                 pass  # If icon loading fails, continue without icon
         
