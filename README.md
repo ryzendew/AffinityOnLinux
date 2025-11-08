@@ -229,7 +229,7 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 - Fedora
 - openSUSE (Tumbleweed/Leap)
 
-**Note:** Ubuntu, Linux Mint, and Zorin OS are not officially supported due to outdated package management systems. Users on these distributions must manually install dependencies.
+**Note:** Ubuntu, Linux Mint, Pop!_OS, and Zorin OS are not officially supported due to outdated package management systems. Users on these distributions must manually install dependencies.
 
 <details>
 
