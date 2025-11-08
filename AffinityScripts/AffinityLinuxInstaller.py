@@ -388,22 +388,7 @@ class AffinityInstallerGUI(QMainWindow):
             enabled = wine_exists and is_installed
             
             button.setEnabled(enabled)
-            if not enabled:
-                # Make it visually disabled (grayed out)
-                button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #2d2d2d;
-                        color: #666666;
-                        border: 1px solid #3a3a3a;
-                        padding: 6px 12px;
-                        min-height: 28px;
-                        font-size: 11px;
-                        font-weight: 500;
-                        text-align: left;
-                        border-radius: 8px;
-                    }
-                """)
-            else:
+            if enabled:
                 # Reset to default style
                 button.setStyleSheet("")
     
@@ -741,10 +726,10 @@ class AffinityInstallerGUI(QMainWindow):
                 border-color: #a0a0a0;
                 color: #1a1a1a;
             }
-            QPushButton:disabled {
-                background-color: #fafafa;
-                color: #c0c0c0;
-                border-color: #e8e8e8;
+            QPushButton:disabled, QPushButton[class="primary"]:disabled {
+                background-color: #e0e0e0;
+                color: #a0a0a0;
+                border: 1px solid #c5c5c5;
             }
             QPushButton:pressed {
                 background-color: #c0c0c0;
@@ -840,9 +825,9 @@ class AffinityInstallerGUI(QMainWindow):
                 border-color: #a0a0a0;
             }
             QPushButton[zoomButton="true"]:disabled {
-                background-color: #fafafa;
-                color: #c0c0c0;
-                border-color: #e8e8e8;
+                background-color: #e0e0e0;
+                color: #a0a0a0;
+                border-color: #c5c5c5;
             }
             QPushButton[cancelButton="true"] {
                 background-color: #f44336;
