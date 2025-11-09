@@ -8,7 +8,7 @@ A comprehensive solution for running [Affinity software](https://www.affinity.st
 
 - **Full OpenCL Support** - Hardware acceleration enabled out of the box
 - **Automated Installation** - Streamlined setup process with dependency management
-- Cross-Distribution Support - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
+- **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
 - **Desktop Integration** - Automatic desktop entry and shortcut creation
 - **Wine Configuration** - Pre-configured Wine environment optimized for Affinity applications
 
