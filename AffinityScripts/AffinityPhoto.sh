@@ -87,7 +87,7 @@ detect_distro
 
 # Check for unsupported distributions
 case $DISTRO in
-    "ubuntu"|"linuxmint"|"pop"|"zorin")
+    "ubuntu"|"linuxmint"|"zorin")
         print_header ""
         echo ""
         echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -180,7 +180,7 @@ if [ -n "$missing_deps" ]; then
     print_error "Missing required dependencies: ${missing_deps}"
     echo ""
     case $DISTRO in
-        "ubuntu"|"linuxmint"|"pop"|"zorin")
+        "ubuntu"|"linuxmint"|"zorin")
             echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo -e "${RED}${BOLD}                    ⚠️   WARNING: UNSUPPORTED DISTRIBUTION   ⚠️${NC}"
             echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -224,7 +224,7 @@ fi
 
 print_success "All required dependencies are installed!"
 case $DISTRO in
-    "ubuntu"|"linuxmint"|"pop"|"zorin")
+    "ubuntu"|"linuxmint"|"zorin")
         echo ""
         echo -e "${YELLOW}${BOLD}Continuing despite unsupported distribution. No support will be provided if issues arise.${NC}"
         ;;

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="100%"
+   height="100%"
+   viewBox="0 0 1167 1167"
+   version="1.1"
+   xml:space="preserve"
+   style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;"
+   id="svg4"
+   sodipodi:docname="Affinity-Canva.svg"
+   inkscape:version="1.4.2 (1:1.4.2+202505120738+ebf0e940d0)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs4" /><sodipodi:namedview
+   id="namedview4"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:zoom="0.19451585"
+   inkscape:cx="580.92952"
+   inkscape:cy="632.33921"
+   inkscape:window-width="1314"
+   inkscape:window-height="699"
+   inkscape:window-x="0"
+   inkscape:window-y="32"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="g3" />
+    <g
+   id="Square"
+   transform="matrix(4.6668,0,0,4.6668,0,0)">
+        <rect
+   x="0"
+   y="0"
+   width="250"
+   height="250"
+   style="fill:none;"
+   id="rect1" />
+        <g
+   transform="matrix(0.214286,0,0,0.21428,125,125)"
+   id="g3">
+            
+        </g>
+        <g
+   transform="matrix(1.357982,0,0,1.357982,36.534487,-51.129534)"
+   id="g4">
+            <path
+   d="M122.986,88.249C122.986,68.283 99.859,59.678 70.336,59.678C52.378,59.678 32.072,63.002 13.214,68.95L13.214,107.993C41.005,87.752 71.882,79.087 91.771,79.087C104.277,79.087 112.763,82.577 112.763,88.828C112.763,114.587 0.992,110.505 0.992,166.164C0.992,187.498 15.662,199.721 36.301,199.721C67.519,199.721 91.132,169.383 108.797,132.402L112.376,133.688C103.072,156.287 83.819,181.066 80.069,196.995L120.26,196.995L120.26,114.586L110.977,114.586C97.503,143.864 77.759,170.843 57.258,170.843C47.899,170.843 41.945,165.165 41.945,157.964C41.945,127.147 122.986,120.977 122.986,88.249Z"
+   style="fill:#E0E0E0;fill-rule:nonzero;"
+   id="path3" />
+        </g>
+    </g>
+</svg>

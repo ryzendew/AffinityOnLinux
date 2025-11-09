@@ -17,7 +17,8 @@ import urllib.error
 import re
 from pathlib import Path
 import time
-
+import signal
+import shlex
 # Function to detect Linux distribution
 def detect_distro_for_install():
     """Detect distribution for package installation"""
@@ -31,7 +32,7 @@ def detect_distro_for_install():
                 if distro == "pika":
                     distro = "pikaos"
                 return distro
-    except:
+    except (IOError, FileNotFoundError):
         pass
     return None
 
@@ -83,10 +84,10 @@ try:
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
         QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-        QButtonGroup, QRadioButton, QInputDialog, QSlider
+        QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
-    from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
+    from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent, QPainter, QPen
     from PyQt6.QtSvgWidgets import QSvgWidget
     PYQT6_AVAILABLE = True
 except ImportError:
@@ -97,7 +98,7 @@ except ImportError:
                 QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                 QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
                 QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-                QButtonGroup, QRadioButton, QInputDialog, QSlider
+                QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit
             )
             from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
             from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -154,18 +155,66 @@ class ZoomableTextEdit(QTextEdit):
             super().wheelEvent(event)
 
 
+class ProgressSpinner(QWidget):
+    """A simple rotating spinner widget (indeterminate progress)."""
+    def __init__(self, size=22, line_width=3, color=QColor('#8ff361'), parent=None):
+        super().__init__(parent)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(50)
+        self._timer.timeout.connect(self._on_timeout)
+        self._size = size
+        self._line_width = line_width
+        self._color = color
+        self.setFixedSize(self._size, self._size)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def start(self):
+        self._timer.start()
+        self.update()
+
+    def stop(self):
+        self._timer.stop()
+        self.update()
+
+    def _on_timeout(self):
+        self._angle = (self._angle - 30) % 360
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 - Qt override
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect().adjusted(self._line_width, self._line_width, -self._line_width, -self._line_width)
+        pen = QPen(self._color)
+        pen.setWidth(self._line_width)
+        painter.setPen(pen)
+        # Draw an arc (270 degrees) rotating around
+        start_angle = int(self._angle * 16)
+        span_angle = int(270 * 16)
+        painter.drawArc(rect, start_angle, span_angle)
+        painter.end()
+
 class AffinityInstallerGUI(QMainWindow):
     # Signals for thread-safe GUI updates
     log_signal = pyqtSignal(str, str)  # message, level
     progress_signal = pyqtSignal(float)  # value (0.0-1.0)
     progress_text_signal = pyqtSignal(str)  # progress text
     show_message_signal = pyqtSignal(str, str, str)  # title, message, type (info/error/warning)
+    sudo_password_dialog_signal = pyqtSignal()  # Signal to request sudo password
+    interactive_prompt_signal = pyqtSignal(str, str)  # prompt_text, default_response
+    question_dialog_signal = pyqtSignal(str, str, list)  # title, message, buttons
+    prompt_affinity_install_signal = pyqtSignal()  # Signal to prompt for Affinity installation
+    install_application_signal = pyqtSignal(str)  # Signal to install an application
+    show_spinner_signal = pyqtSignal(object)  # button -> show spinner
+    hide_spinner_signal = pyqtSignal(object)  # button -> hide spinner
     
     def __init__(self):
         super().__init__()
         
         self.setWindowTitle("Affinity Linux Installer")
-        self.setGeometry(100, 100, 1200, 700)
+        # Use a more reasonable initial size that fits smaller screens
+        self.setMinimumSize(800, 600)
+        self.resize(1000, 700)
         
         # Variables
         self.distro = None
@@ -175,6 +224,25 @@ class AffinityInstallerGUI(QMainWindow):
         self.installer_file = None
         self.update_buttons = {}  # Store references to update buttons
         self.log_font_size = 11  # Initial font size for log area
+        self.operation_cancelled = False  # Flag to track if operation was cancelled
+        self.current_operation = None  # Track current operation name
+        self.operation_in_progress = False  # Track if an operation is running
+        self.sudo_password = None  # Cached sudo password
+        self.sudo_password_validated = False  # Whether password has been validated
+        self.interactive_response = None  # Response to interactive prompts
+        self.waiting_for_response = False  # Whether we're waiting for user response
+        self.question_dialog_response = None  # Response from question dialogs
+        self.waiting_for_question_response = False  # Whether waiting for question dialog response
+        self.dark_mode = True  # Track current theme mode
+        self.icon_buttons = []  # Store buttons with icons for theme updates
+        # Cancellation helpers
+        self.cancel_event = threading.Event()
+        self._process_lock = threading.Lock()
+        self._active_processes = set()
+        # Spinner helpers
+        self._button_spinner_map = {}
+        self._last_clicked_button = None
+        self._operation_button = None
         
         # Setup log file
         self.log_file_path = Path.home() / "AffinitySetup.log"
@@ -186,6 +254,13 @@ class AffinityInstallerGUI(QMainWindow):
         self.progress_signal.connect(self._update_progress_safe)
         self.progress_text_signal.connect(self._update_progress_text_safe)
         self.show_message_signal.connect(self._show_message_safe)
+        self.sudo_password_dialog_signal.connect(self._request_sudo_password_safe)
+        self.interactive_prompt_signal.connect(self._request_interactive_response_safe)
+        self.question_dialog_signal.connect(self._show_question_dialog_safe)
+        self.prompt_affinity_install_signal.connect(self._prompt_affinity_install)
+        self.install_application_signal.connect(self.install_application)
+        self.show_spinner_signal.connect(self._show_spinner_safe)
+        self.hide_spinner_signal.connect(self._hide_spinner_safe)
         
         # Load Affinity icon
         self.load_affinity_icon()
@@ -193,8 +268,8 @@ class AffinityInstallerGUI(QMainWindow):
         # Setup UI
         self.create_ui()
         
-        # Apply dark theme
-        self.apply_dark_theme()
+        # Apply dark theme (default)
+        self.apply_theme()
         
         # Setup zoom functionality
         self.setup_zoom()
@@ -225,6 +300,15 @@ class AffinityInstallerGUI(QMainWindow):
         # Check if Wine is set up
         wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
         wine_exists = wine.exists()
+        
+        # Update system status indicator
+        if hasattr(self, 'system_status_label'):
+            if wine_exists:
+                self.system_status_label.setStyleSheet("font-size: 14px; color: #4ec9b0; padding: 0 5px;")
+                self.system_status_label.setToolTip("System Status: Ready - Wine is installed")
+            else:
+                self.system_status_label.setStyleSheet("font-size: 14px; color: #f48771; padding: 0 5px;")
+                self.system_status_label.setToolTip("System Status: Not Ready - Wine needs to be installed")
         
         # Log Wine status
         if wine_exists:
@@ -258,6 +342,16 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  {display_name}: ✓ Installed", "success")
             else:
                 self.log(f"  {display_name}: ✗ Not installed", "error")
+            
+            # Update button text to show installation status
+            if app_name in self.update_buttons:
+                btn = self.update_buttons[app_name]
+                if is_installed:
+                    # Add checkmark to button text if installed
+                    current_text = btn.text()
+                    if "✓" not in current_text:
+                        btn.setText(current_text.split("✓")[0].strip() + " ✓")
+                    btn.setEnabled(True)
         
         # Check dependencies
         self.log("System Dependencies:", "info")
@@ -320,7 +414,7 @@ class AffinityInstallerGUI(QMainWindow):
                         )
                         if renderer_success and "vulkan" in renderer_stdout.lower():
                             vulkan_set = True
-                    except:
+                    except Exception:
                         pass
                     
                     if vulkan_set:
@@ -329,7 +423,7 @@ class AffinityInstallerGUI(QMainWindow):
                         self.log(f"  Vulkan Renderer: ⚠ Not configured", "warning")
                 else:
                     self.log(f"  Vulkan Renderer: ✗ Not configured", "error")
-            except:
+            except Exception:
                 self.log(f"  Vulkan Renderer: ✗ Not configured", "error")
             
             # Check WebView2 Runtime
@@ -351,22 +445,7 @@ class AffinityInstallerGUI(QMainWindow):
             enabled = wine_exists and is_installed
             
             button.setEnabled(enabled)
-            if not enabled:
-                # Make it visually disabled (grayed out)
-                button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #2d2d2d;
-                        color: #666666;
-                        border: 1px solid #3a3a3a;
-                        padding: 6px 12px;
-                        min-height: 28px;
-                        font-size: 11px;
-                        font-weight: 500;
-                        text-align: left;
-                        border-radius: 8px;
-                    }
-                """)
-            else:
+            if enabled:
                 # Reset to default style
                 button.setStyleSheet("")
     
@@ -449,33 +528,97 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception:
             pass
     
-    def apply_dark_theme(self):
+    def get_icon_path(self, icon_name):
+        """Get the path to a light or dark icon based on theme"""
+        if not icon_name:
+            return None
+        
+        icons_dir = Path(__file__).parent / "icons"
+        theme_suffix = "light" if self.dark_mode else "dark"
+        
+        # Check for theme-specific icon first
+        themed_icon_path = icons_dir / f"{icon_name}-{theme_suffix}.svg"
+        if themed_icon_path.exists():
+            return themed_icon_path
+        
+        # Fallback to base icon name if theme-specific one doesn't exist
+        base_icon_path = icons_dir / f"{icon_name}.svg"
+        if base_icon_path.exists():
+            return base_icon_path
+        
+        return None
+
+    def _update_button_icons(self):
+        """Update all button icons to match the current theme"""
+        for btn, icon_name in self.icon_buttons:
+            icon_path = self.get_icon_path(icon_name)
+            if icon_path:
+                icon = QIcon(str(icon_path))
+                btn.setIcon(icon)
+
+    def toggle_theme(self):
+        """Toggle between dark and light themes"""
+        self.dark_mode = not self.dark_mode
+        self.apply_theme()
+        
+        # Update theme button
+        if self.dark_mode:
+            self.theme_toggle_btn.setText("☀")
+            self.theme_toggle_btn.setToolTip("Switch to Light Mode")
+        else:
+            self.theme_toggle_btn.setText("🌙")
+            self.theme_toggle_btn.setToolTip("Switch to Dark Mode")
+        
+        # Update button icons
+        self._update_button_icons()
+        
+        # Update top bar
+        self._update_top_bar_style()
+        
+        # Update theme button style
+        self._update_theme_button_style()
+        
+        # Update scroll area
+        self._update_right_scroll_style()
+        
+        # Update progress label
+        self._update_progress_label_style()
+    
+    def apply_theme(self):
+        """Apply current theme (dark or light)"""
+        if self.dark_mode:
+            self._apply_dark_theme()
+        else:
+            self._apply_light_theme()
+    
+    def _apply_dark_theme(self):
         """Apply modern dark theme"""
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #1e1e1e;
+                background-color: #1c1c1c;
             }
             QWidget {
-                background-color: #1e1e1e;
-                color: #cccccc;
+                background-color: #1c1c1c;
+                color: #dcdcdc;
                 font-family: 'Segoe UI', sans-serif;
             }
             QGroupBox {
-                border: none;
+                border: 1px solid #2d2d2d;
                 background-color: #252526;
-                margin-top: 10px;
-                padding-top: 10px;
-                border-radius: 12px;
+                margin-top: 8px;
+                padding-top: 12px;
+                border-radius: 8px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 0 8px;
-                background-color: #2d2d30;
-                color: #cccccc;
+                padding: 2px 8px;
+                background-color: #3c3c3c;
+                color: #dcdcdc;
                 font-weight: bold;
-                font-size: 11px;
-                border-radius: 6px;
+                font-size: 10px;
+                border-radius: 4px;
+                margin-left: 10px;
             }
             QFrame {
                 background-color: #252526;
@@ -484,44 +627,72 @@ class AffinityInstallerGUI(QMainWindow):
             }
             QPushButton {
                 background-color: #3c3c3c;
-                color: #e0e0e0;
-                border: 1px solid #4a4a4a;
-                padding: 6px 12px;
+                color: #f0f0f0;
+                border: 1px solid #555555;
+                padding: 8px 12px;
                 min-height: 28px;
                 font-size: 11px;
                 font-weight: 500;
                 text-align: left;
-                border-radius: 8px;
+                border-radius: 6px;
             }
             QPushButton:hover {
-                background-color: #464647;
-                border-color: #5a5a5a;
+                background-color: #4a4a4a;
+                border-color: #6a6a6a;
                 color: #ffffff;
+            }
+            QPushButton:disabled {
+                background-color: #2a2a2a;
+                color: #555555;
+                border-color: #3a3a3a;
             }
             QPushButton:pressed {
                 background-color: #2d2d2d;
-                border-color: #3a3a3a;
+                border-color: #4a4a4a;
+            }
+            QPushButton[class="primary"] {
+                background-color: #4caf50;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #45a049;
+            }
+            QPushButton[class="primary"]:hover {
+                background-color: #5fbf63;
+                border-color: #4caf50;
             }
             QTextEdit {
-                background-color: #1e1e1e;
+                background-color: #1a1a1a;
                 color: #d4d4d4;
-                border: 1px solid #3c3c3c;
-                font-family: 'Consolas', monospace;
+                border: 1px solid #333333;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                 font-size: 11px;
                 border-radius: 8px;
+                selection-background-color: #007acc;
+                padding: 8px;
             }
             QProgressBar {
                 border: none;
-                background-color: #3c3c3c;
-                height: 6px;
-                border-radius: 3px;
+                background-color: #2d2d30;
+                height: 10px;
+                border-radius: 5px;
+                text-align: center;
             }
             QProgressBar::chunk {
-                background-color: #0e639c;
-                border-radius: 3px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #8ff361, stop:1 #9af471);
+                border-radius: 5px;
             }
             QLabel {
-                color: #ffffff;
+                color: #dcdcdc;
+            }
+            QToolTip {
+                background-color: #2d2d30;
+                color: #dcdcdc;
+                border: 1px solid #4a4a4a;
+                padding: 6px;
+                border-radius: 4px;
+                font-size: 10px;
             }
             QDialog {
                 background-color: #252526;
@@ -532,31 +703,32 @@ class AffinityInstallerGUI(QMainWindow):
                 border-radius: 12px;
             }
             QRadioButton {
-                color: #cccccc;
+                color: #dcdcdc;
                 spacing: 8px;
             }
             QRadioButton::indicator {
                 width: 16px;
                 height: 16px;
                 border-radius: 8px;
-                border: 2px solid #4a4a4a;
+                border: 2px solid #555555;
                 background-color: #3c3c3c;
             }
             QRadioButton::indicator:hover {
-                border-color: #5a5a5a;
+                border-color: #6a6a6a;
             }
             QRadioButton::indicator:checked {
-                background-color: #0e639c;
-                border-color: #0e639c;
+                background-color: #007acc;
+                border-color: #007acc;
             }
             QDialogButtonBox QPushButton {
                 border-radius: 8px;
                 min-width: 80px;
+                padding: 8px 16px;
             }
             QPushButton[zoomButton="true"] {
                 background-color: #2d2d2d;
-                color: #cccccc;
-                border: 1px solid #3a3a3a;
+                color: #dcdcdc;
+                border: 1px solid #4a4a4a;
                 padding: 4px 8px;
                 min-height: 24px;
                 max-width: 35px;
@@ -565,14 +737,335 @@ class AffinityInstallerGUI(QMainWindow):
             }
             QPushButton[zoomButton="true"]:hover {
                 background-color: #3c3c3c;
-                border-color: #4a4a4a;
+                border-color: #5a5a5a;
             }
             QPushButton[zoomButton="true"]:disabled {
                 background-color: #252526;
-                color: #666666;
+                color: #555555;
                 border-color: #2d2d2d;
             }
+            QPushButton[cancelButton="true"] {
+                background-color: #c74e4e;
+                color: #ffffff;
+                border: 1px solid #a33a3a;
+                padding: 4px 8px;
+                min-height: 24px;
+                max-width: 30px;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QPushButton[cancelButton="true"]:hover {
+                background-color: #d95f5f;
+                border-color: #b74a4a;
+            }
+            QPushButton[cancelButton="true"]:pressed {
+                background-color: #a33a3a;
+            }
         """)
+    
+    def _apply_light_theme(self):
+        """Apply modern light theme"""
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            QWidget {
+                background-color: #f5f5f5;
+                color: #2d2d2d;
+                font-family: 'Segoe UI', sans-serif;
+            }
+            QGroupBox {
+                border: 1px solid #d0d0d0;
+                background-color: #ffffff;
+                margin-top: 8px;
+                padding-top: 12px;
+                border-radius: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 2px 8px;
+                background-color: #e0e0e0;
+                color: #2d2d2d;
+                font-weight: bold;
+                font-size: 10px;
+                border-radius: 4px;
+                margin-left: 10px;
+            }
+            QFrame {
+                background-color: #ffffff;
+                border: none;
+                border-radius: 0px;
+            }
+            QPushButton {
+                background-color: #e0e0e0;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                padding: 8px 12px;
+                min-height: 28px;
+                font-size: 11px;
+                font-weight: 500;
+                text-align: left;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #d0d0d0;
+                border-color: #a0a0a0;
+                color: #1a1a1a;
+            }
+            QPushButton:disabled, QPushButton[class="primary"]:disabled {
+                background-color: #e0e0e0;
+                color: #a0a0a0;
+                border: 1px solid #c5c5c5;
+            }
+            QPushButton[class="primary"] {
+                background-color: #8ff361;
+                color: #1c1c1c;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #7acb52;
+            }
+            QPushButton[class="primary"]:hover {
+                background-color: #a0f579;
+                border-color: #8ff361;
+            }
+            QTextEdit {
+                background-color: #ffffff;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 11px;
+                border-radius: 8px;
+                selection-background-color: #b3d9ff;
+                padding: 8px;
+            }
+            QProgressBar {
+                border: none;
+                background-color: #e0e0e0;
+                height: 10px;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4caf50, stop:1 #66bb6a);
+                border-radius: 5px;
+            }
+            QLabel {
+                color: #2d2d2d;
+            }
+            QToolTip {
+                background-color: #ffffff;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                padding: 6px;
+                border-radius: 4px;
+                font-size: 10px;
+            }
+            QDialog {
+                background-color: #ffffff;
+                border-radius: 12px;
+            }
+            QMessageBox {
+                background-color: #ffffff;
+                border-radius: 12px;
+            }
+            QRadioButton {
+                color: #2d2d2d;
+                spacing: 8px;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                border: 2px solid #c0c0c0;
+                background-color: #f5f5f5;
+            }
+            QRadioButton::indicator:hover {
+                border-color: #a0a0a0;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #4caf50;
+                border-color: #4caf50;
+            }
+            QDialogButtonBox QPushButton {
+                border-radius: 8px;
+                min-width: 80px;
+                padding: 8px 16px;
+            }
+            QPushButton[zoomButton="true"] {
+                background-color: #e0e0e0;
+                color: #2d2d2d;
+                border: 1px solid #c0c0c0;
+                padding: 4px 8px;
+                min-height: 24px;
+                max-width: 35px;
+                font-size: 14px;
+                border-radius: 6px;
+            }
+            QPushButton[zoomButton="true"]:hover {
+                background-color: #d0d0d0;
+                border-color: #a0a0a0;
+            }
+            QPushButton[zoomButton="true"]:disabled {
+                background-color: #e0e0e0;
+                color: #a0a0a0;
+                border-color: #c5c5c5;
+            }
+            QPushButton[cancelButton="true"] {
+                background-color: #f44336;
+                color: #ffffff;
+                border: 1px solid #d32f2f;
+                padding: 4px 8px;
+                min-height: 24px;
+                max-width: 30px;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QPushButton[cancelButton="true"]:hover {
+                background-color: #e57373;
+                border-color: #ef5350;
+            }
+            QPushButton[cancelButton="true"]:pressed {
+                background-color: #d32f2f;
+            }
+        """)
+    
+    def _update_theme_button_style(self):
+        """Update theme toggle button styling based on current theme"""
+        if hasattr(self, 'theme_toggle_btn'):
+            if self.dark_mode:
+                self.theme_toggle_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #3c3c3c;
+                        color: #f0f0f0;
+                        border: 1px solid #555555;
+                        padding: 0px;
+                        min-height: 32px;
+                        max-height: 32px;
+                        min-width: 40px;
+                        max-width: 40px;
+                        font-size: 18px;
+                        border-radius: 6px;
+                        text-align: center;
+                    }
+                    QPushButton:hover {
+                        background-color: #4a4a4a;
+                        border-color: #6a6a6a;
+                    }
+                """)
+            else:
+                self.theme_toggle_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        color: #2d2d2d;
+                        border: 1px solid #c0c0c0;
+                        padding: 0px;
+                        min-height: 32px;
+                        max-height: 32px;
+                        min-width: 40px;
+                        max-width: 40px;
+                        font-size: 18px;
+                        border-radius: 6px;
+                        text-align: center;
+                    }
+                    QPushButton:hover {
+                        background-color: #d0d0d0;
+                        border-color: #a0a0a0;
+                    }
+                """)
+    
+    def _update_top_bar_style(self):
+        """Update top bar styling based on current theme"""
+        if hasattr(self, 'top_bar'):
+            if self.dark_mode:
+                self.top_bar.setStyleSheet(
+                    "background-color: #2d2d2d; padding: 10px 15px; "
+                    "border-top-left-radius: 8px; border-top-right-radius: 8px;"
+                )
+            else:
+                self.top_bar.setStyleSheet(
+                    "background-color: #e8e8e8; padding: 10px 15px; "
+                    "border-top-left-radius: 8px; border-top-right-radius: 8px;"
+                )
+        
+        if hasattr(self, 'title_label'):
+            if self.dark_mode:
+                self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+            else:
+                self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #1a1a1a;")
+    
+    def _update_right_scroll_style(self):
+        """Update right scroll area styling based on current theme"""
+        if hasattr(self, 'right_scroll'):
+            if self.dark_mode:
+                self.right_scroll.setStyleSheet("""
+                    QScrollArea {
+                        background-color: #1c1c1c;
+                        border: none;
+                    }
+                    QScrollBar:vertical {
+                        background-color: #1c1c1c;
+                        width: 12px;
+                        border-radius: 6px;
+                    }
+                    QScrollBar::handle:vertical {
+                        background-color: #3c3c3c;
+                        border-radius: 6px;
+                        min-height: 30px;
+                    }
+                    QScrollBar::handle:vertical:hover {
+                        background-color: #4a4a4a;
+                    }
+                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                        height: 0px;
+                    }
+                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                        background: none;
+                    }
+                """)
+            else:
+                self.right_scroll.setStyleSheet("""
+                    QScrollArea {
+                        background-color: #f5f5f5;
+                        border: none;
+                    }
+                    QScrollBar:vertical {
+                        background-color: #f5f5f5;
+                        width: 12px;
+                        border-radius: 6px;
+                    }
+                    QScrollBar::handle:vertical {
+                        background-color: #c0c0c0;
+                        border-radius: 6px;
+                        min-height: 30px;
+                    }
+                    QScrollBar::handle:vertical:hover {
+                        background-color: #a0a0a0;
+                    }
+                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                        height: 0px;
+                    }
+                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                        background: none;
+                    }
+                """)
+    
+    def _update_progress_label_style(self):
+        """Update progress label styling based on current theme"""
+        if hasattr(self, 'progress_label'):
+            if self.dark_mode:
+                self.progress_label.setStyleSheet(
+                    "font-size: 11px; font-weight: 500; color: #dcdcdc; "
+                    "padding: 5px 10px; background-color: #2d2d2d; border-radius: 4px;"
+                )
+            else:
+                self.progress_label.setStyleSheet(
+                    "font-size: 11px; font-weight: 500; color: #2d2d2d; "
+                    "padding: 5px 10px; background-color: #e0e0e0; border-radius: 4px;"
+                )
     
     def create_ui(self):
         """Create the user interface"""
@@ -583,13 +1076,13 @@ class AffinityInstallerGUI(QMainWindow):
         # Main layout
         main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(1, 1, 1, 1)
         
         # Top bar
-        top_bar = QFrame()
-        top_bar.setStyleSheet("background-color: #252526; padding: 15px 20px; border-top-left-radius: 0px; border-top-right-radius: 0px;")
-        top_bar_layout = QHBoxLayout(top_bar)
-        top_bar_layout.setContentsMargins(20, 15, 20, 15)
+        self.top_bar = QFrame()
+        self.top_bar.setStyleSheet("background-color: #2d2d2d; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px;")
+        top_bar_layout = QHBoxLayout(self.top_bar)
+        top_bar_layout.setContentsMargins(15, 10, 15, 10)
         
         # Add Affinity icon if available
         if hasattr(self, 'affinity_icon_path') and self.affinity_icon_path:
@@ -602,46 +1095,91 @@ class AffinityInstallerGUI(QMainWindow):
                     
                     # Use QSvgWidget for proper SVG display
                     svg_widget = QSvgWidget(self.affinity_icon_path)
-                    svg_widget.setFixedSize(40, 40)  # Larger size to prevent cutoff
+                    svg_widget.setFixedSize(32, 32)
                     svg_widget.setStyleSheet("background: transparent;")
                     top_bar_layout.addWidget(svg_widget)
-                    top_bar_layout.addSpacing(10)
-                except:
+                    top_bar_layout.addSpacing(5)
+                except Exception:
                     # Fallback to QIcon if QSvgWidget fails
                     icon = QIcon(self.affinity_icon_path)
                     self.setWindowIcon(icon)
                     
                     icon_label = QLabel()
-                    # Use larger size with proper scaling
-                    pixmap = icon.pixmap(40, 40)
+                    pixmap = icon.pixmap(32, 32)
                     if not pixmap.isNull():
-                        icon_label.setPixmap(pixmap.scaled(40, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                        icon_label.setFixedSize(40, 40)
+                        icon_label.setPixmap(pixmap.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                        icon_label.setFixedSize(32, 32)
                         top_bar_layout.addWidget(icon_label)
-                        top_bar_layout.addSpacing(10)
+                        top_bar_layout.addSpacing(5)
             except Exception as e:
                 pass  # If icon loading fails, continue without icon
         
-        title = QLabel("Affinity Linux Installer")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
-        top_bar_layout.addWidget(title)
+        self.title_label = QLabel("Affinity on Linux Installer")
+        self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        top_bar_layout.addWidget(self.title_label)
         top_bar_layout.addStretch()
         
-        main_layout.addWidget(top_bar)
+        # Add system status indicator in top bar
+        self.system_status_label = QLabel("●")
+        self.system_status_label.setStyleSheet(
+            "font-size: 14px; color: #666666; padding: 0 5px;"
+        )
+        self.system_status_label.setToolTip("System Status: Initializing...")
+        top_bar_layout.addWidget(self.system_status_label)
+        top_bar_layout.addSpacing(12)
         
-        # Content area
+        # Add theme toggle button
+        self.theme_toggle_btn = QPushButton("☀")
+        self.theme_toggle_btn.setToolTip("Switch to Light Mode")
+        self.theme_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3c3c3c;
+                color: #f0f0f0;
+                border: 1px solid #555555;
+                padding: 0px;
+                min-height: 32px;
+                max-height: 32px;
+                min-width: 40px;
+                max-width: 40px;
+                font-size: 18px;
+                border-radius: 6px;
+                text-align: center;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border-color: #6a6a6a;
+            }
+        """)
+        self.theme_toggle_btn.clicked.connect(self.toggle_theme)
+        top_bar_layout.addWidget(self.theme_toggle_btn)
+        
+        main_layout.addWidget(self.top_bar)
+        
+        # Content area with scroll support
         content_widget = QWidget()
         content_layout = QHBoxLayout(content_widget)
-        content_layout.setSpacing(20)
-        content_layout.setContentsMargins(20, 20, 20, 20)
+        content_layout.setSpacing(10)
+        content_layout.setContentsMargins(10, 10, 10, 10)
         
         # Left panel - Status/Log
         left_panel = self.create_status_section()
-        content_layout.addWidget(left_panel, stretch=2)
+        content_layout.addWidget(left_panel, stretch=3)
         
-        # Right panel - Buttons
+        # Right panel - Buttons (wrapped in scroll area for small screens)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.right_scroll = right_scroll  # Store reference for theme updates
+        self._update_right_scroll_style()
+        
         right_panel = self.create_button_sections()
-        content_layout.addWidget(right_panel, stretch=0)
+        right_scroll.setWidget(right_panel)
+        right_scroll.setMinimumWidth(320)
+        right_scroll.setMaximumWidth(400)
+        
+        content_layout.addWidget(right_scroll, stretch=1)
         
         main_layout.addWidget(content_widget, stretch=1)
     
@@ -649,22 +1187,48 @@ class AffinityInstallerGUI(QMainWindow):
         """Create the status/log output section"""
         group = QGroupBox("Status & Log Output")
         group_layout = QVBoxLayout(group)
-        group_layout.setSpacing(10)
-        group_layout.setContentsMargins(12, 25, 12, 12)
+        group_layout.setSpacing(8)
+        group_layout.setContentsMargins(12, 22, 12, 12)
         
         # Progress status label (above progress bar)
         self.progress_label = QLabel("Ready")
-        self.progress_label.setStyleSheet("font-size: 12px; font-weight: 500; color: #cccccc; padding: 5px 0px;")
+        self.progress_label.setStyleSheet(
+            "font-size: 11px; font-weight: 500; color: #dcdcdc; "
+            "padding: 5px 10px; background-color: #2d2d2d; border-radius: 4px;"
+        )
         self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         group_layout.addWidget(self.progress_label)
         
-        # Progress bar
+        # Progress bar and cancel button container
+        progress_container = QWidget()
+        progress_container_layout = QHBoxLayout(progress_container)
+        progress_container_layout.setContentsMargins(0, 0, 0, 0)
+        progress_container_layout.setSpacing(8)
+        
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
-        group_layout.addWidget(self.progress)
+        progress_container_layout.addWidget(self.progress, stretch=1)
         
+        # Cancel button (hidden by default)
+        self.cancel_btn = QPushButton("✕")
+        self.cancel_btn.setToolTip("Cancel current operation")
+        self.cancel_btn.setProperty("cancelButton", True)
+        self.cancel_btn.setMaximumWidth(30)
+        self.cancel_btn.setMinimumWidth(30)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.clicked.connect(self.cancel_operation)
+        progress_container_layout.addWidget(self.cancel_btn)
+        
+        group_layout.addWidget(progress_container)
+        
+        # Log and zoom controls container
+        log_container = QWidget()
+        log_layout = QVBoxLayout(log_container)
+        log_layout.setContentsMargins(0, 5, 0, 0)
+        log_layout.setSpacing(5)
+
         # Zoom controls
         zoom_container = QWidget()
         zoom_layout = QHBoxLayout(zoom_container)
@@ -672,41 +1236,64 @@ class AffinityInstallerGUI(QMainWindow):
         zoom_layout.setSpacing(5)
         zoom_layout.addStretch()
         
+        # Get icon path
+        icons_dir = Path(__file__).parent / "icons"
+        
         # Zoom out button
-        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn = QPushButton()
         self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+-)")
         self.zoom_out_btn.setProperty("zoomButton", True)
         self.zoom_out_btn.setMaximumWidth(35)
         self.zoom_out_btn.setMinimumWidth(35)
+        icon_name_zoom_out = "zoom-out"
+        icon_path_zoom_out = self.get_icon_path(icon_name_zoom_out)
+        if icon_path_zoom_out:
+            self.zoom_out_btn.setIcon(QIcon(str(icon_path_zoom_out)))
+        self.zoom_out_btn.setIconSize(QSize(16, 16))
         self.zoom_out_btn.clicked.connect(self.zoom_out)
         zoom_layout.addWidget(self.zoom_out_btn)
-        
+        self.icon_buttons.append((self.zoom_out_btn, icon_name_zoom_out))
+
         # Zoom reset button
-        self.zoom_reset_btn = QPushButton("🔍")
+        self.zoom_reset_btn = QPushButton()
         self.zoom_reset_btn.setToolTip("Reset Zoom (Ctrl+0)")
         self.zoom_reset_btn.setProperty("zoomButton", True)
         self.zoom_reset_btn.setMaximumWidth(35)
         self.zoom_reset_btn.setMinimumWidth(35)
+        icon_name_zoom_reset = "zoom-original"
+        icon_path_zoom_reset = self.get_icon_path(icon_name_zoom_reset)
+        if icon_path_zoom_reset:
+            self.zoom_reset_btn.setIcon(QIcon(str(icon_path_zoom_reset)))
+        self.zoom_reset_btn.setIconSize(QSize(16, 16))
         self.zoom_reset_btn.clicked.connect(self.zoom_reset)
         zoom_layout.addWidget(self.zoom_reset_btn)
-        
+        self.icon_buttons.append((self.zoom_reset_btn, icon_name_zoom_reset))
+
         # Zoom in button
-        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn = QPushButton()
         self.zoom_in_btn.setToolTip("Zoom In (Ctrl++)")
         self.zoom_in_btn.setProperty("zoomButton", True)
         self.zoom_in_btn.setMaximumWidth(35)
         self.zoom_in_btn.setMinimumWidth(35)
+        icon_name_zoom_in = "zoom-in"
+        icon_path_zoom_in = self.get_icon_path(icon_name_zoom_in)
+        if icon_path_zoom_in:
+            self.zoom_in_btn.setIcon(QIcon(str(icon_path_zoom_in)))
+        self.zoom_in_btn.setIconSize(QSize(16, 16))
         self.zoom_in_btn.clicked.connect(self.zoom_in)
         zoom_layout.addWidget(self.zoom_in_btn)
+        self.icon_buttons.append((self.zoom_in_btn, icon_name_zoom_in))
         
-        group_layout.addWidget(zoom_container)
+        log_layout.addWidget(zoom_container)
         
         # Log output with zoom support
         self.log_text = ZoomableTextEdit(self)
         self.log_text.setReadOnly(True)
         self.log_text.setFont(QFont("Consolas", self.log_font_size))
         self.log_text.set_zoom_callbacks(self.zoom_in, self.zoom_out)
-        group_layout.addWidget(self.log_text)
+        log_layout.addWidget(self.log_text)
+        
+        group_layout.addWidget(log_container)
         
         # Initialize zoom button states
         self.update_zoom_buttons()
@@ -717,14 +1304,20 @@ class AffinityInstallerGUI(QMainWindow):
         """Create organized button sections"""
         container = QWidget()
         container_layout = QVBoxLayout(container)
-        container_layout.setSpacing(10)
+        container_layout.setSpacing(8)
         container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Get icon path helper
+        icons_dir = Path(__file__).parent / "icons"
         
         # Quick Start section - One-click install
         quick_group = self.create_button_group(
             "Quick Start",
             [
-                ("One-Click Full Setup", self.one_click_setup),
+                ("One-Click Full Setup", self.one_click_setup, "Setup Wine, dependencies, and prepare for Affinity installation", "rocket"),
+                ("Setup Wine Environment", self.setup_wine_environment, "Download and configure Wine environment only", "wine"),
+                ("Install System Dependencies", self.install_system_dependencies, "Install required Linux packages", "dependencies"),
+                ("Install Winetricks Dependencies", self.install_winetricks_deps, "Install Windows components (.NET, fonts, etc.)", "wand"),
             ]
         )
         container_layout.addWidget(quick_group)
@@ -733,24 +1326,24 @@ class AffinityInstallerGUI(QMainWindow):
         sys_group = self.create_button_group(
             "System Setup",
             [
-                ("Download Affinity Installer", self.download_affinity_installer),
-                ("Install from File Manager", self.install_from_file),
+                ("Download Affinity Installer", self.download_affinity_installer, "Download the latest Affinity installer from official source", "download"),
+                ("Install from File Manager", self.install_from_file, "Install Affinity or any Windows app from a local .exe file", "folderopen"),
             ]
         )
         container_layout.addWidget(sys_group)
         
         # Update Affinity Applications section
         app_buttons = [
-            ("Affinity (Unified)", "Add"),
-            ("Affinity Photo", "Photo"),
-            ("Affinity Designer", "Designer"),
-            ("Affinity Publisher", "Publisher"),
+            ("Affinity (Unified)", "Add", "Update or install Affinity V3 unified application", "affinity-unified"),
+            ("Affinity Photo", "Photo", "Update or install Affinity Photo for image editing", "camera"),
+            ("Affinity Designer", "Designer", "Update or install Affinity Designer for vector graphics", "pen"),
+            ("Affinity Publisher", "Publisher", "Update or install Affinity Publisher for page layout", "book"),
         ]
         app_group = self.create_button_group(
             "Update Affinity Applications",
-            [(text, lambda name=app_name: self.update_application(name)) for text, app_name in app_buttons],
+            [(text, lambda name=app_name: self.update_application(name), tooltip, icon) for text, app_name, tooltip, icon in app_buttons],
             button_refs=self.update_buttons,
-            button_keys=[app_name for _, app_name in app_buttons]
+            button_keys=[app_name for _, app_name, _, _ in app_buttons]
         )
         container_layout.addWidget(app_group)
         
@@ -758,22 +1351,22 @@ class AffinityInstallerGUI(QMainWindow):
         troubleshoot_group = self.create_button_group(
             "Troubleshooting",
             [
-                ("Open Wine Configuration", self.open_winecfg),
-                ("Open Winetricks", self.open_winetricks),
-                ("Set Windows 11 + Renderer", self.set_windows11_renderer),
-                ("Reinstall WinMetadata", self.reinstall_winmetadata),
-                ("Install WebView2 Runtime (v3)", self.install_webview2_runtime),
-                ("Set DPI Scaling", self.set_dpi_scaling),
-                ("Uninstall", self.uninstall_affinity_linux),
+                ("Wine Configuration", self.open_winecfg, "Open Wine settings to configure Windows version and libraries", "wine"),
+                ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", "wand"),
+                ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", "windows"),
+                ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", "loop"),
+                ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", "chrome"),
+                ("Set DPI Scaling", self.set_dpi_scaling, "Adjust interface size for better readability", "scale"),
+                ("Uninstall", self.uninstall_affinity_linux, "Completely remove Affinity Linux installation", "trash"),
             ]
         )
         container_layout.addWidget(troubleshoot_group)
         
         # Launch section
         launch_group = self.create_button_group(
-            "Launch Affinity",
+            "Launch",
             [
-                ("Launch Affinity v3", self.launch_affinity_v3),
+                ("Launch Affinity v3", self.launch_affinity_v3, "Start Affinity V3 unified application", "play"),
             ]
         )
         container_layout.addWidget(launch_group)
@@ -782,7 +1375,7 @@ class AffinityInstallerGUI(QMainWindow):
         other_group = self.create_button_group(
             "Other",
             [
-                ("Exit", self.close),
+                ("Exit", self.close, "Close the installer", "exit"),
             ]
         )
         container_layout.addWidget(other_group)
@@ -795,19 +1388,43 @@ class AffinityInstallerGUI(QMainWindow):
         """Create a grouped button section"""
         group = QGroupBox(title)
         group_layout = QVBoxLayout(group)
-        group_layout.setSpacing(2)
-        group_layout.setContentsMargins(8, 20, 8, 8)
+        group_layout.setSpacing(4)
+        group_layout.setContentsMargins(10, 20, 10, 10)
         
         for idx, button_data in enumerate(buttons):
-            # Handle both (text, command) and (text, command, color) formats for backward compatibility
+            # Handle (text, command), (text, command, tooltip), (text, command, tooltip, icon) formats
+            tooltip = None
+            icon_name = None
             if len(button_data) == 2:
                 text, command = button_data
+            elif len(button_data) == 3:
+                text, command, tooltip = button_data
+            elif len(button_data) == 4:
+                text, command, tooltip, icon_name = button_data
             else:
-                text, command, _ = button_data
+                text, command = button_data[0], button_data[1]
             
             btn = QPushButton(text)
-            # All buttons now use neutral colors for better readability
-            btn.clicked.connect(command)
+            # Wrap click to track the button and delegate to original command
+            btn.clicked.connect(lambda checked=False, b=btn, cmd=command: self._handle_button_click(b, cmd))
+            
+            # Add icon if provided
+            if icon_name:
+                icon_path = self.get_icon_path(icon_name)
+                if icon_path:
+                    icon = QIcon(str(icon_path))
+                    btn.setIcon(icon)
+                    btn.setIconSize(QSize(16, 16))
+                    self.icon_buttons.append((btn, icon_name))  # Store button and icon name
+            
+            # Add tooltip if provided
+            if tooltip:
+                btn.setToolTip(tooltip)
+            
+            # Set primary class for the main call-to-action button
+            if text == "One-Click Full Setup":
+                btn.setProperty("class", "primary")
+            
             group_layout.addWidget(btn)
             
             # Store button reference if requested
@@ -815,6 +1432,87 @@ class AffinityInstallerGUI(QMainWindow):
                 button_refs[button_keys[idx]] = btn
         
         return group
+    
+    def _handle_button_click(self, button, command):
+        """Record last clicked button and invoke the original command."""
+        try:
+            self._last_clicked_button = button
+            command()
+        except Exception as e:
+            # If command failed immediately, do not leave spinner state queued
+            self._last_clicked_button = None
+            self.log(f"Error executing command: {e}", "error")
+    
+    def _show_spinner_safe(self, button):
+        """Replace the given button's icon with a rotating spinner (UI thread)."""
+        try:
+            if button is None or not isinstance(button, QPushButton):
+                return
+            # If already spinning, do nothing
+            if button in self._button_spinner_map:
+                return
+            # Determine size from existing icon size or button height
+            current_size = button.iconSize()
+            size = max(16, max(current_size.width(), current_size.height())) if current_size.isValid() else max(20, button.sizeHint().height() - 6)
+            color = QColor('#8ff361') if self.dark_mode else QColor('#4caf50')
+            # Prepare state
+            state = {
+                'angle': 0,
+                'timer': QTimer(self),
+                'orig_icon': button.icon(),
+                'orig_size': current_size if current_size.isValid() else QSize(size, size),
+                'size': size,
+                'color': color,
+            }
+            def tick():
+                state['angle'] = (state['angle'] - 30) % 360
+                # Draw spinner pixmap
+                pm = QPixmap(state['size'], state['size'])
+                pm.fill(Qt.GlobalColor.transparent)
+                painter = QPainter(pm)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                lw = max(2, int(state['size'] * 0.12))
+                rect = pm.rect().adjusted(lw, lw, -lw, -lw)
+                pen = QPen(state['color'])
+                pen.setWidth(lw)
+                painter.setPen(pen)
+                start_angle = int(state['angle'] * 16)
+                span_angle = int(270 * 16)
+                painter.drawArc(rect, start_angle, span_angle)
+                painter.end()
+                button.setIcon(QIcon(pm))
+                button.setIconSize(QSize(state['size'], state['size']))
+            t = state['timer']
+            t.setInterval(50)
+            t.timeout.connect(tick)
+            t.start()
+            # Draw initial frame immediately
+            tick()
+            self._button_spinner_map[button] = state
+        except Exception:
+            pass
+    
+    def _hide_spinner_safe(self, button):
+        """Restore the button's original icon (UI thread)."""
+        try:
+            state = self._button_spinner_map.pop(button, None)
+            if state is None:
+                return
+            timer = state.get('timer')
+            if timer:
+                try:
+                    timer.stop()
+                except Exception:
+                    pass
+            orig_icon = state.get('orig_icon')
+            orig_size = state.get('orig_size')
+            if isinstance(button, QPushButton):
+                if orig_icon is not None:
+                    button.setIcon(orig_icon)
+                if orig_size is not None and orig_size.isValid():
+                    button.setIconSize(orig_size)
+        except Exception:
+            pass
     
     def load_affinity_icon(self):
         """Download and load Affinity V3 icon"""
@@ -836,11 +1534,11 @@ class AffinityInstallerGUI(QMainWindow):
                         else:
                             # File is corrupted (likely HTML), delete it
                             icon_path.unlink()
-                except:
+                except Exception:
                     # If we can't read it, delete and re-download
                     try:
                         icon_path.unlink()
-                    except:
+                    except Exception:
                         pass
             
             # Download if needed
@@ -904,22 +1602,42 @@ class AffinityInstallerGUI(QMainWindow):
     def _log_safe(self, message, level="info"):
         """Thread-safe log handler (called from main thread)"""
         timestamp = time.strftime("%H:%M:%S")
-        prefix = f"[{timestamp}] "
         
+        # Determine icon, color, and styling based on level
         if level == "error":
-            prefix += "✗ "
-            color = "#f48771"
+            icon = "❌"
+            color = "#ff7b72"
+            bg_color = "rgba(255, 123, 114, 0.1)"
+            icon_color = "#ff7b72"
         elif level == "success":
-            prefix += "✓ "
-            color = "#4ec9b0"
+            icon = "✔"
+            color = "#6a9955"
+            bg_color = "rgba(106, 153, 85, 0.1)"
+            icon_color = "#6a9955"
         elif level == "warning":
-            prefix += "⚠ "
-            color = "#ce9178"
+            icon = "⚠️"
+            color = "#cd9731"
+            bg_color = "rgba(205, 151, 49, 0.1)"
+            icon_color = "#cd9731"
         else:
-            prefix += "→ "
-            color = "#d4d4d4"
+            icon = "•"
+            color = "#9cdcfe"
+            bg_color = "transparent"
+            icon_color = "#569cd6"
+
+        # Sanitize message to prevent HTML injection issues
+        message = message.replace("<", "&lt;").replace(">", "&gt;")
+
+        # Format message with better styling
+        timestamp_html = f'<span style="color: #6c7886; font-weight: 500;">[{timestamp}]</span>'
+        icon_html = f'<span style="color: {icon_color}; font-weight: bold; font-size: 12px;">{icon}</span>'
         
-        full_message = f'<span style="color: {color};">{prefix}{message}</span>'
+        # Add subtle background for important messages
+        if level in ["error", "success", "warning"]:
+            full_message = f'<div style="background-color: {bg_color}; padding: 4px 8px; margin: 2px 0; border-radius: 4px; border-left: 3px solid {icon_color};">{timestamp_html} {icon_html} <span style="color: {color};">{message}</span></div>'
+        else:
+            full_message = f'<div style="padding: 2px 4px; margin: 1px 0;">{timestamp_html} {icon_html} <span style="color: {color};">{message}</span></div>'
+        
         self.log_text.append(full_message)
         self.log_text.verticalScrollBar().setValue(
             self.log_text.verticalScrollBar().maximum()
@@ -928,11 +1646,9 @@ class AffinityInstallerGUI(QMainWindow):
         # Write to log file (plain text, no HTML)
         if self.log_file:
             try:
-                # Remove HTML tags and convert to plain text for file
-                plain_message = message
-                # Write with timestamp and level
-                log_entry = f"{prefix}{plain_message}\n"
-                self.log_file.write(log_entry)
+                # Create a plain text version for the log file
+                plain_message = f"[{timestamp}] [{level.upper()}] {message}"
+                self.log_file.write(plain_message + "\n")
                 self.log_file.flush()  # Ensure it's written immediately
             except Exception:
                 # If file write fails, continue without file logging
@@ -954,6 +1670,79 @@ class AffinityInstallerGUI(QMainWindow):
         """Update progress label text (thread-safe via signal)"""
         self.progress_text_signal.emit(text)
     
+    def cancel_operation(self):
+        """Cancel the current operation with confirmation"""
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            self,
+            "Cancel Operation",
+            f"Are you sure you want to cancel the current operation?\n\n"
+            f"Operation: {self.current_operation or 'Unknown'}\n\n"
+            f"Note: This may leave the installation in an incomplete state.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.operation_cancelled = True
+            # Signal cancellation early so running commands can stop
+            self.cancel_event.set()
+            self.update_progress_text("Cancelling...")
+            # Terminate any active subprocesses
+            try:
+                self.terminate_active_processes()
+            except Exception:
+                pass
+            self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "warning")
+            self.log("⚠ Operation cancelled by user", "warning")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", "warning")
+            self.update_progress_text("Operation cancelled")
+            self.update_progress(0.0)  # Reset progress bar
+            self.cancel_btn.setVisible(False)
+            self.operation_in_progress = False
+            # Ensure spinner is restored on cancel
+            try:
+                if self._operation_button is not None:
+                    self.hide_spinner_signal.emit(self._operation_button)
+            except Exception:
+                pass
+    
+    def start_operation(self, operation_name):
+        """Mark the start of an operation and show cancel button"""
+        self.operation_cancelled = False
+        self.cancel_event.clear()
+        self.current_operation = operation_name
+        self.operation_in_progress = True
+        # Replace last clicked button with spinner (on UI thread)
+        if self._last_clicked_button is not None:
+            self._operation_button = self._last_clicked_button
+            self.show_spinner_signal.emit(self._operation_button)
+        if hasattr(self, 'cancel_btn'):
+            self.cancel_btn.setVisible(True)
+    
+    def end_operation(self):
+        """Mark the end of an operation: restore UI, reset progress, toggle cancel."""
+        self.operation_in_progress = False
+        self.current_operation = None
+        # Toggle cancel button off
+        if hasattr(self, 'cancel_btn'):
+            self.cancel_btn.setVisible(False)
+        # Restore button icon (stop spinner)
+        if self._operation_button is not None:
+            self.hide_spinner_signal.emit(self._operation_button)
+            self._operation_button = None
+            self._last_clicked_button = None
+        # Always restore progress bar/text to idle state
+        self.update_progress(0.0)
+        self.update_progress_text("Ready")
+    
+    def check_cancelled(self):
+        """Check if operation was cancelled"""
+        if self.operation_cancelled:
+            self.end_operation()
+            return True
+        return False
+    
     def show_message(self, title, message, msg_type="info"):
         """Show message box (thread-safe via signal)"""
         self.show_message_signal.emit(title, message, msg_type)
@@ -967,32 +1756,393 @@ class AffinityInstallerGUI(QMainWindow):
         else:
             QMessageBox.information(self, title, message)
     
+    def _request_sudo_password_safe(self):
+        """Request sudo password from user (called from main thread)"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Administrator Authentication Required")
+        dialog.setMinimumWidth(400)
+        layout = QVBoxLayout(dialog)
+        
+        # Add explanation label
+        label = QLabel(
+            "This operation requires administrator privileges.\n\n"
+            "Please enter your password to continue:"
+        )
+        layout.addWidget(label)
+        
+        # Add password input
+        password_input = QLineEdit()
+        password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        password_input.setPlaceholderText("Enter your password")
+        layout.addWidget(password_input)
+        
+        # Add buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        # Allow Enter key to submit
+        password_input.returnPressed.connect(dialog.accept)
+        
+        # Focus the password input
+        password_input.setFocus()
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.sudo_password = password_input.text()
+        else:
+            self.sudo_password = None
+    
+    def get_sudo_password(self):
+        """Get sudo password from user (thread-safe)"""
+        # If we already have a validated password, return it
+        if self.sudo_password_validated and self.sudo_password:
+            return self.sudo_password
+        
+        # Request password from main thread
+        self.sudo_password = None
+        self.sudo_password_dialog_signal.emit()
+        
+        # Wait for password to be entered (with timeout)
+        max_wait = 300  # 30 seconds timeout
+        waited = 0
+        while self.sudo_password is None and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.sudo_password
+    
+    def validate_sudo_password(self, password):
+        """Validate sudo password by running a test command"""
+        try:
+            # Test the password with a harmless sudo command
+            process = subprocess.Popen(
+                ["sudo", "-S", "true"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            stdout, stderr = process.communicate(input=f"{password}\n", timeout=5)
+            
+            if process.returncode == 0:
+                self.sudo_password_validated = True
+                return True
+            else:
+                self.sudo_password_validated = False
+                return False
+        except Exception as e:
+            self.log(f"Error validating sudo password: {e}", "error")
+            self.sudo_password_validated = False
+            return False
+    
+    def _request_interactive_response_safe(self, prompt_text, default_response):
+        """Request user response to interactive prompt (called from main thread)"""
+        # Parse the prompt to determine type
+        prompt_lower = prompt_text.lower()
+        
+        # Detect yes/no questions
+        if any(pattern in prompt_lower for pattern in ["(y/n)", "[y/n]", "yes/no", "overwrite?"]):
+            # Extract default from prompt
+            default_yes = "y" in default_response.lower() if default_response else False
+            
+            reply = QMessageBox.question(
+                self,
+                "User Input Required",
+                prompt_text,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes if default_yes else QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.interactive_response = "y\n"
+            else:
+                self.interactive_response = "n\n"
+        else:
+            # For other prompts, use input dialog
+            response, ok = QInputDialog.getText(
+                self,
+                "User Input Required",
+                prompt_text,
+                QLineEdit.EchoMode.Normal,
+                default_response or ""
+            )
+            
+            if ok:
+                self.interactive_response = response + "\n"
+            else:
+                self.interactive_response = "\n"  # Empty response (just Enter)
+        
+        self.waiting_for_response = False
+    
+    def get_interactive_response(self, prompt_text, default_response=""):
+        """Get user response to interactive prompt (thread-safe)"""
+        self.interactive_response = None
+        self.waiting_for_response = True
+        self.interactive_prompt_signal.emit(prompt_text, default_response)
+        
+        # Wait for response with timeout
+        max_wait = 300  # 30 seconds
+        waited = 0
+        while self.waiting_for_response and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.interactive_response or "\n"
+    
+    def _show_question_dialog_safe(self, title, message, buttons):
+        """Show question dialog (called from main thread)"""
+        # Convert button list to QMessageBox buttons
+        qbuttons = QMessageBox.StandardButton.NoButton
+        for btn in buttons:
+            if btn == "Yes":
+                qbuttons |= QMessageBox.StandardButton.Yes
+            elif btn == "No":
+                qbuttons |= QMessageBox.StandardButton.No
+            elif btn == "Retry":
+                qbuttons |= QMessageBox.StandardButton.Retry
+            elif btn == "Cancel":
+                qbuttons |= QMessageBox.StandardButton.Cancel
+        
+        reply = QMessageBox.question(self, title, message, qbuttons)
+        
+        # Store response
+        if reply == QMessageBox.StandardButton.Yes:
+            self.question_dialog_response = "Yes"
+        elif reply == QMessageBox.StandardButton.No:
+            self.question_dialog_response = "No"
+        elif reply == QMessageBox.StandardButton.Retry:
+            self.question_dialog_response = "Retry"
+        elif reply == QMessageBox.StandardButton.Cancel:
+            self.question_dialog_response = "Cancel"
+        else:
+            self.question_dialog_response = "Cancel"
+        
+        self.waiting_for_question_response = False
+    
+    def show_question_dialog(self, title, message, buttons=["Yes", "No"]):
+        """Show question dialog (thread-safe)"""
+        self.question_dialog_response = None
+        self.waiting_for_question_response = True
+        self.question_dialog_signal.emit(title, message, buttons)
+        
+        # Wait for response with timeout
+        max_wait = 300  # 30 seconds
+        waited = 0
+        while self.waiting_for_question_response and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.question_dialog_response or "Cancel"
+    
+    def _register_process(self, proc):
+        """Track a running subprocess for potential cancellation."""
+        try:
+            with self._process_lock:
+                self._active_processes.add(proc)
+        except Exception:
+            pass
+    
+    def _unregister_process(self, proc):
+        """Stop tracking a subprocess."""
+        try:
+            with self._process_lock:
+                self._active_processes.discard(proc)
+        except Exception:
+            pass
+    
+    def _terminate_process(self, proc):
+        """Terminate a subprocess and its process group safely."""
+        try:
+            # Try to terminate the whole process group first
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except Exception:
+                proc.terminate()
+            # Wait briefly, then force kill if still alive
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except Exception:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+        finally:
+            self._unregister_process(proc)
+    
+    def terminate_active_processes(self):
+        """Terminate all active subprocesses started by this installer."""
+        try:
+            with self._process_lock:
+                procs = list(self._active_processes)
+            for p in procs:
+                self._terminate_process(p)
+        except Exception:
+            pass
+    
     def run_command(self, command, check=True, shell=False, capture=True, env=None):
-        """Execute shell command"""
+        """Execute shell command with GUI sudo password support and cancellation."""
         try:
             if isinstance(command, str) and not shell:
                 command = command.split()
-            result = subprocess.run(
-                command,
-                shell=shell,
-                capture_output=capture,
-                text=capture,
-                check=check,
-                env=env if env else os.environ.copy()
-            )
-            if capture:
-                return result.returncode == 0, result.stdout, result.stderr
-            return result.returncode == 0, "", ""
-        except subprocess.CalledProcessError as e:
-            return False, e.stdout if hasattr(e, 'stdout') else "", e.stderr if hasattr(e, 'stderr') else ""
+            
+            # Set up environment for non-interactive operation
+            if env is None:
+                env = os.environ.copy()
+            
+            # Force non-interactive mode for various tools
+            env['DEBIAN_FRONTEND'] = 'noninteractive'
+            env['NEEDRESTART_MODE'] = 'a'  # Auto-restart services without asking
+            env['DEBIAN_PRIORITY'] = 'critical'
+            env['APT_LISTCHANGES_FRONTEND'] = 'none'
+            env['LANG'] = 'C'  # Use C locale to avoid encoding issues
+            env['LC_ALL'] = 'C'
+            
+            # Check if this is a sudo command
+            is_sudo = isinstance(command, list) and len(command) > 0 and command[0] == "sudo"
+            
+            if is_sudo:
+                # Get password if needed
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    if self.cancel_event.is_set():
+                        return False, "", "Cancelled"
+                    password = self.get_sudo_password()
+                    if password is None:
+                        self.log("Authentication cancelled by user", "warning")
+                        return False, "", "Authentication cancelled"
+                    # Validate password first
+                    if not self.sudo_password_validated:
+                        if self.validate_sudo_password(password):
+                            self.log("Authentication successful", "success")
+                            break
+                        else:
+                            self.log("Authentication failed. Please try again.", "error")
+                            self.sudo_password = None
+                            self.sudo_password_validated = False
+                            if attempt == max_attempts - 1:
+                                return False, "", "Authentication failed after multiple attempts"
+                    else:
+                        break
+                
+                # Run command with password via stdin
+                # Add -S flag to read password from stdin if not present
+                if "-S" not in command:
+                    command.insert(1, "-S")
+                
+                proc = subprocess.Popen(
+                    command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE if capture else None,
+                    stderr=subprocess.PIPE if capture else None,
+                    text=True,
+                    env=env if env else os.environ.copy(),
+                    preexec_fn=os.setsid
+                )
+                self._register_process(proc)
+                try:
+                    # Send password
+                    try:
+                        if proc.stdin:
+                            proc.stdin.write(f"{self.sudo_password}\n")
+                            proc.stdin.flush()
+                    except Exception:
+                        pass
+                    if capture:
+                        stdout_acc = ""
+                        stderr_acc = ""
+                        while True:
+                            try:
+                                out, err = proc.communicate(timeout=0.1)
+                                stdout_acc += out or ""
+                                stderr_acc += err or ""
+                                break
+                            except subprocess.TimeoutExpired:
+                                if self.cancel_event.is_set():
+                                    self._terminate_process(proc)
+                                    return False, stdout_acc, "Cancelled"
+                                continue
+                        success = proc.returncode == 0
+                        return success, stdout_acc, stderr_acc
+                    else:
+                        # No capture: poll until completion or cancellation
+                        while True:
+                            if self.cancel_event.is_set():
+                                self._terminate_process(proc)
+                                return False, "", "Cancelled"
+                            if proc.poll() is not None:
+                                break
+                            time.sleep(0.1)
+                        return proc.returncode == 0, "", ""
+                finally:
+                    self._unregister_process(proc)
+            else:
+                # Non-sudo command, run normally with cancellation support
+                proc = subprocess.Popen(
+                    command if not shell else (command if isinstance(command, str) else " ".join(command)),
+                    shell=shell,
+                    stdout=subprocess.PIPE if capture else None,
+                    stderr=subprocess.PIPE if capture else None,
+                    text=capture,
+                    env=env if env else os.environ.copy(),
+                    preexec_fn=os.setsid
+                )
+                self._register_process(proc)
+                try:
+                    if capture:
+                        stdout_acc = ""
+                        stderr_acc = ""
+                        while True:
+                            try:
+                                out, err = proc.communicate(timeout=0.1)
+                                stdout_acc += out or ""
+                                stderr_acc += err or ""
+                                break
+                            except subprocess.TimeoutExpired:
+                                if self.cancel_event.is_set():
+                                    self._terminate_process(proc)
+                                    return False, stdout_acc, "Cancelled"
+                                continue
+                        success = proc.returncode == 0
+                        return success, stdout_acc, stderr_acc
+                    else:
+                        while True:
+                            if self.cancel_event.is_set():
+                                self._terminate_process(proc)
+                                return False, "", "Cancelled"
+                            if proc.poll() is not None:
+                                break
+                            time.sleep(0.1)
+                        return proc.returncode == 0, "", ""
+                finally:
+                    self._unregister_process(proc)
         except Exception as e:
             return False, "", str(e)
     
     def run_command_streaming(self, command, env=None, progress_callback=None):
-        """Execute command and stream output to log in real-time"""
+        """Execute command and stream output to log in real-time, cancellable.
+        Also stores the full streamed text in self._last_stream_output_text for post-run heuristics."""
+        self._last_stream_output_text = ""
         try:
             if isinstance(command, str):
                 command = command.split()
+            
+            # Set up environment for non-interactive operation
+            if env is None:
+                env = os.environ.copy()
+            
+            # Force non-interactive mode for various tools
+            env['DEBIAN_FRONTEND'] = 'noninteractive'
+            env['NEEDRESTART_MODE'] = 'a'  # Auto-restart services without asking
+            env['DEBIAN_PRIORITY'] = 'critical'
+            env['APT_LISTCHANGES_FRONTEND'] = 'none'
+            env['LANG'] = 'C'  # Use C locale to avoid encoding issues
+            env['LC_ALL'] = 'C'
             
             process = subprocess.Popen(
                 command,
@@ -1001,15 +2151,23 @@ class AffinityInstallerGUI(QMainWindow):
                 text=True,
                 bufsize=1,
                 universal_newlines=True,
-                env=env if env else os.environ.copy()
+                env=env,
+                preexec_fn=os.setsid
             )
+            self._register_process(process)
             
             # Stream output line by line
+            buffer = []
             for line in iter(process.stdout.readline, ''):
+                if self.cancel_event.is_set():
+                    self._terminate_process(process)
+                    self._last_stream_output_text = "".join(buffer)
+                    return False
                 if line:
                     # Clean up the line and log it
                     line = line.rstrip()
                     if line:
+                        buffer.append(line + "\n")
                         # Show important progress messages
                         line_lower = line.lower()
                         # Always show progress-related messages
@@ -1022,14 +2180,13 @@ class AffinityInstallerGUI(QMainWindow):
                             
                             # Try to extract progress percentage if callback provided
                             if progress_callback:
-                                # Look for percentage patterns like "50%", "50 %", "(50%)", etc.
                                 import re
                                 percent_match = re.search(r'(\d+)\s*%', line, re.IGNORECASE)
                                 if percent_match:
                                     try:
                                         percent = int(percent_match.group(1))
                                         progress_callback(percent / 100.0)
-                                    except:
+                                    except (ValueError, TypeError):
                                         pass
                         # Filter out very verbose Wine debug messages but keep important ones
                         elif not any(skip in line_lower for skip in [
@@ -1039,10 +2196,253 @@ class AffinityInstallerGUI(QMainWindow):
                             self.log(f"  {line}", "info")
             
             process.wait()
+            self._last_stream_output_text = "".join(buffer)
             return process.returncode == 0
         except Exception as e:
             self.log(f"Error running command: {e}", "error")
             return False
+        finally:
+            try:
+                self._unregister_process(process)
+            except Exception:
+                pass
+
+    def _to_windows_path(self, unix_path, env=None):
+        """Convert a UNIX path to a Windows path for Wine 'start' using winepath.
+        Falls back to Z: drive mapping if winepath is unavailable."""
+        try:
+            winepath_bin = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winepath"
+            if winepath_bin.exists():
+                success, stdout, _ = self.run_command([str(winepath_bin), "-w", str(unix_path)], check=False, env=env, capture=True)
+                if success and stdout:
+                    return stdout.strip().splitlines()[-1]
+        except Exception:
+            pass
+        # Fallback: Z: mapping
+        p = str(unix_path)
+        if p.startswith("/"):
+            win = "Z:" + p
+        else:
+            win = p
+        return win.replace("/", "\\")
+
+    def _has_installer_activity(self, installer_file: Path) -> bool:
+        """Heuristics to detect installer activity:
+        - Check for Wine processes referencing installer/common names
+        - If wmctrl is available, check for visible windows with class/name containing wine/setup/installer
+        """
+        try:
+            # Process-based heuristic
+            patterns = [installer_file.name.lower(), "setup", "msiexec", "install", ".msi", ".exe"]
+            success, stdout, _ = self.run_command(["ps", "-eo", "pid,command"], check=False, capture=True)
+            if success and stdout:
+                text = stdout.lower()
+                if ("wine" in text or "wineserver" in text) and any(pat in text for pat in patterns):
+                    return True
+            # Window-based heuristic (wmctrl)
+            wmctrl = shutil.which("wmctrl")
+            if wmctrl:
+                ok, wout, _ = self.run_command([wmctrl, "-lx"], check=False, capture=True)
+                if ok and wout:
+                    w = wout.lower()
+                    # Examples: 'wine.wine explorer.exe', 'setup.exe', 'affinity'
+                    if "wine" in w and any(pat in w for pat in patterns):
+                        return True
+        except Exception:
+            pass
+        return False
+
+    def _run_installer_and_capture(self, installer_file: Path, env: dict, label: str = "installer"):
+        """Run a Windows installer under Wine, stream logs, and wait robustly until it exits.
+        Strategy:
+        1) Try 'wine start /wait /unix <file>'
+        2) If it exits too quickly or returns non-zero with no activity, try 'wine <file>'
+        3) After launch, wait on 'wineserver -w' to ensure child processes finish (cancellable)
+        """
+        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        attempts = [
+            [str(wine), "start", "/wait", "/unix", str(installer_file)],
+            [str(wine), str(installer_file)],
+        ]
+        for idx, cmd in enumerate(attempts, start=1):
+            try:
+                cmd_str = " ".join(shlex.quote(c) for c in cmd)
+                self.log(f"Running ({label}) attempt {idx}: {cmd_str}", "info")
+                t0 = time.time()
+                ok = self.run_command_streaming(cmd, env=env)
+                dt = time.time() - t0
+                # If it "succeeded" unrealistically fast, poll briefly for activity or window
+                if ok and dt < 5.0:
+                    self.log(f"{label.capitalize()} attempt {idx} returned quickly ({dt:.2f}s). Polling for activity...", "warning")
+                    for _ in range(30):  # ~3s
+                        if self.check_cancelled():
+                            return False
+                        if self._has_installer_activity(installer_file):
+                            break
+                        time.sleep(0.1)
+                    else:
+                        ok = False
+                # Also verify there was some wine activity (best-effort heuristic)
+                if ok and not self._has_installer_activity(installer_file):
+                    # As a last signal, check stream output for obvious errors
+                    txt = (self._last_stream_output_text or "").lower()
+                    error_markers = ["err:", "cannot find", "bad exe", "failed", "error:", "no such file", "unable to load"]
+                    if any(m in txt for m in error_markers):
+                        ok = False
+                if ok:
+                    self.log("Waiting for Wine processes to finish (wineserver -w)...", "info")
+                    # Extended wait; cancellable via run_command loop
+                    env_wait = env.copy() if env else os.environ.copy()
+                    env_wait["WINEPREFIX"] = self.directory
+                    self.run_command(["wineserver", "-w"], check=False, capture=False, env=env_wait)
+                    return True
+                if self.check_cancelled():
+                    return False
+                self.log(f"{label.capitalize()} attempt {idx} did not run (ok={ok}, dt={dt:.2f}s). Trying fallback...", "warning")
+            except Exception as e:
+                self.log(f"Error launching {label} attempt {idx}: {e}", "error")
+        return False
+    
+    def run_command_interactive(self, command, env=None):
+        """Execute command and handle interactive prompts via GUI, cancellable."""
+        try:
+            if isinstance(command, str):
+                command = command.split()
+            
+            # Set up environment for non-interactive operation
+            if env is None:
+                env = os.environ.copy()
+            
+            # Force non-interactive mode for various tools
+            env['DEBIAN_FRONTEND'] = 'noninteractive'
+            env['NEEDRESTART_MODE'] = 'a'
+            env['DEBIAN_PRIORITY'] = 'critical'
+            env['APT_LISTCHANGES_FRONTEND'] = 'none'
+            env['LANG'] = 'C'
+            env['LC_ALL'] = 'C'
+            
+            # Check if this is a sudo command
+            is_sudo = isinstance(command, list) and len(command) > 0 and command[0] == "sudo"
+            
+            if is_sudo:
+                # Get password if needed
+                password = self.get_sudo_password()
+                if password is None:
+                    self.log("Authentication cancelled by user", "warning")
+                    return False, "", "Authentication cancelled"
+                
+                # Validate password if not already validated
+                if not self.sudo_password_validated:
+                    if not self.validate_sudo_password(password):
+                        self.log("Authentication failed", "error")
+                        return False, "", "Authentication failed"
+                
+                # Add -S flag if not present
+                if "-S" not in command:
+                    command.insert(1, "-S")
+            
+            # Start process
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+                preexec_fn=os.setsid
+            )
+            self._register_process(process)
+            
+            # If sudo, send password first
+            if is_sudo and self.sudo_password:
+                try:
+                    process.stdin.write(f"{self.sudo_password}\n")
+                    process.stdin.flush()
+                except Exception:
+                    pass
+            
+            # Read output and detect prompts
+            output_lines = []
+            error_lines = []
+            
+            import select
+            
+            while True:
+                if self.cancel_event.is_set():
+                    self._terminate_process(process)
+                    return False, "", "Cancelled"
+                # Check if process has finished
+                if process.poll() is not None:
+                    # Read any remaining output
+                    remaining_out = process.stdout.read()
+                    remaining_err = process.stderr.read()
+                    if remaining_out:
+                        output_lines.append(remaining_out)
+                    if remaining_err:
+                        error_lines.append(remaining_err)
+                    break
+                
+                # Try to read from stdout with timeout
+                try:
+                    # Use select to check if data is available (Unix-like systems)
+                    import sys
+                    if hasattr(select, 'select'):
+                        readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
+                        
+                        for stream in readable:
+                            line = stream.readline()
+                            if line:
+                                if stream == process.stdout:
+                                    output_lines.append(line)
+                                    self.log(f"  {line.rstrip()}", "info")
+                                else:
+                                    error_lines.append(line)
+                                
+                                # Detect interactive prompts
+                                line_lower = line.lower()
+                                if any(pattern in line_lower for pattern in [
+                                    "overwrite?", "(y/n)", "[y/n]", "yes/no",
+                                    "continue?", "proceed?", "replace?"
+                                ]):
+                                    # Interactive prompt detected!
+                                    self.log(f"Interactive prompt detected: {line.rstrip()}", "warning")
+                                    
+                                    # Extract default response if present
+                                    default = ""
+                                    if "(y/n)" in line_lower:
+                                        # Check which is capitalized
+                                        if "(Y/n)" in line:
+                                            default = "y"
+                                        elif "(y/N)" in line:
+                                            default = "n"
+                                    
+                                    # Get user response via GUI
+                                    response = self.get_interactive_response(line.rstrip(), default)
+                                    
+                                    # Send response to process
+                                    if process.stdin:
+                                        process.stdin.write(response)
+                                        process.stdin.flush()
+                except Exception as e:
+                    self.log(f"Error reading process output: {e}", "warning")
+                    time.sleep(0.1)
+            
+            # Get return code
+            return_code = process.wait()
+            
+            stdout_text = "".join(output_lines)
+            stderr_text = "".join(error_lines)
+            
+            return return_code == 0, stdout_text, stderr_text
+            
+        except Exception as e:
+            self.log(f"Error in interactive command: {e}", "error")
+            return False, "", str(e)
+        finally:
+            try:
+                self._unregister_process(process)
+            except Exception:
+                pass
     
     def check_command(self, cmd):
         """Check if command exists"""
@@ -1064,6 +2464,10 @@ class AffinityInstallerGUI(QMainWindow):
             if self.distro == "pika":
                 self.distro = "pikaos"
             
+            # Normalize "pop" to "pop" if detected
+            if self.distro == "pop":
+                self.distro = "pop"
+            
             return True
         except Exception as e:
             self.log(f"Error detecting distribution: {e}", "error")
@@ -1072,6 +2476,10 @@ class AffinityInstallerGUI(QMainWindow):
     def download_file(self, url, output_path, description=""):
         """Download file with progress tracking"""
         try:
+            # Check if cancelled before starting
+            if self.check_cancelled():
+                return False
+            
             self.log(f"Downloading {description}...", "info")
             
             # Create request with proper headers
@@ -1087,6 +2495,11 @@ class AffinityInstallerGUI(QMainWindow):
                 
                 with open(output_path, 'wb') as out_file:
                     while True:
+                        # Check for cancellation during download
+                        if self.check_cancelled():
+                            self.log(f"Download of {description} cancelled", "warning")
+                            return False
+                        
                         chunk = response.read(block_size)
                         if not chunk:
                             break
@@ -1154,49 +2567,80 @@ class AffinityInstallerGUI(QMainWindow):
     
     def _one_click_setup_thread(self):
         """One-click setup in background thread"""
+        self.start_operation("One-Click Full Setup")
+        
         # Step 1: Detect distribution
         self.update_progress_text("Step 1/4: Detecting Linux distribution...")
         self.update_progress(0.05)
+        
+        if self.check_cancelled():
+            return
+        
         if not self.detect_distro():
             self.log("Failed to detect distribution. Cannot continue.", "error")
             self.update_progress_text("Ready")
+            self.end_operation()
             return
         
         self.log(f"Detected distribution: {self.distro} {self.distro_version or ''}", "success")
         
+        if self.check_cancelled():
+            return
+        
         # Step 2: Check and install dependencies
         self.update_progress_text("Step 2/4: Checking and installing system dependencies...")
         self.update_progress(0.15)
+        
+        if self.check_cancelled():
+            return
+        
         if not self.check_dependencies():
             self.log("Dependency check failed. Please resolve issues and try again.", "error")
             self.update_progress_text("Ready")
+            self.end_operation()
             
             # Show retry dialog
-            from PyQt6.QtWidgets import QMessageBox
-            reply = QMessageBox.question(
-                self,
+            reply = self.show_question_dialog(
                 "Dependency Check Failed",
                 "Dependency check failed. Please resolve issues and try again.\n\n"
                 "Would you like to retry the dependency check?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                ["Yes", "No"]
             )
             
-            if reply == QMessageBox.StandardButton.Yes:
+            if reply == "Yes":
                 # Retry dependency check
                 return self._one_click_setup_thread()
             else:
+                self.end_operation()
                 return
+        
+        if self.check_cancelled():
+            return
         
         # Step 3: Setup Wine environment (this includes winetricks dependencies via configure_wine)
         self.update_progress_text("Step 3/4: Setting up Wine environment...")
         self.update_progress(0.40)
+        
+        if self.check_cancelled():
+            return
+        
         self.setup_wine()
+        
+        if self.check_cancelled():
+            return
         
         # Step 4: Install Affinity v3 settings to enable settings saving
         self.update_progress_text("Step 4/4: Installing Affinity v3 settings...")
         self.update_progress(0.90)
+        
+        if self.check_cancelled():
+            return
+        
         self.log("Installing Affinity v3 settings files...", "info")
         self._install_affinity_settings_thread()
+        
+        if self.check_cancelled():
+            return
         
         # Complete!
         self.update_progress(1.0)
@@ -1204,11 +2648,14 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("\n✓ Full setup completed!", "success")
         self.log("You can now install Affinity applications using the buttons above.", "info")
         
+        # End operation
+        self.end_operation()
+        
         # Refresh installation status to update button states
         QTimer.singleShot(100, self.check_installation_status)
         
         # Ask if user wants to install an Affinity app
-        QTimer.singleShot(200, self._prompt_affinity_install)
+        self.prompt_affinity_install_signal.emit()
     
     def _prompt_affinity_install(self):
         """Prompt user to install an Affinity application"""
@@ -1255,7 +2702,7 @@ class AffinityInstallerGUI(QMainWindow):
                 checked_id = button_group.checkedId()
                 if checked_id >= 0 and checked_id in radio_buttons:
                     app_code = radio_buttons[checked_id]
-                    self.install_application(app_code)
+                    self.install_application_signal.emit(app_code)
     
     def install_application(self, app_code):
         """Install an Affinity application - asks user if they want to download or provide their own exe"""
@@ -1305,7 +2752,7 @@ class AffinityInstallerGUI(QMainWindow):
             installer_path = None
             
             if checked_id == 0:  # Download
-                # Download the installer
+                # Download the installer in background, then install
                 self.log(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 self.log(f"Downloading {display_name} Installer", "info")
                 self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -1313,22 +2760,16 @@ class AffinityInstallerGUI(QMainWindow):
                 download_url = "https://downloads.affinity.studio/Affinity%20x64.exe"
                 download_dir = Path.home() / ".cache" / "affinity-installer"
                 download_dir.mkdir(parents=True, exist_ok=True)
-                # Use filename without spaces to avoid issues
                 installer_path = download_dir / "Affinity-x64.exe"
                 
-                self.log(f"Downloading from: {download_url}", "info")
-                if self.download_file(download_url, str(installer_path), f"{display_name} installer"):
-                    self.log(f"Download completed: {installer_path}", "success")
-                else:
-                    self.log("Download failed. Please try providing your own installer file.", "error")
-                    self.show_message("Download Failed", 
-                                     "Failed to download the installer.\n\n"
-                                     "You can download it manually from:\n"
-                                     "https://downloads.affinity.studio/Affinity%20x64.exe\n\n"
-                                     "Then use 'Provide my own installer file' option.",
-                                     "error")
-                    return
-                    
+                self.start_operation(f"Install {display_name}")
+                threading.Thread(
+                    target=self._download_then_install,
+                    args=(app_code, display_name, download_url, str(installer_path)),
+                    daemon=True
+                ).start()
+                return
+                
             else:  # Provide own file
                 # Open file dialog to select .exe
                 self.log(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -1355,27 +2796,57 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"Installer file not found: {installer_path_str}", "error")
                 return
             
-            # Start installation in background thread
+            # Start operation and installation in background thread
+            self.start_operation(f"Install {display_name}")
             threading.Thread(
-                target=self.run_installation,
+                target=self._run_installation_entry,
                 args=(app_code, installer_path_str),
                 daemon=True
             ).start()
     
+    def _download_then_install(self, app_code, display_name, download_url, installer_path_str):
+        """Download installer then run installation (runs in background)."""
+        try:
+            self.log(f"Downloading from: {download_url}", "info")
+            if not self.download_file(download_url, installer_path_str, f"{display_name} installer"):
+                self.log("Download failed. Please try providing your own installer file.", "error")
+                self.show_message(
+                    "Download Failed",
+                    "Failed to download the installer.\n\nYou can download it manually from:\nhttps://downloads.affinity.studio/Affinity%20x64.exe\n\nThen use 'Provide my own installer file' option.",
+                    "error"
+                )
+                # End the operation because run_installation won't be called
+                self.end_operation()
+                return
+            self.log(f"Download completed: {installer_path_str}", "success")
+            # Proceed to install (will end operation in wrapper)
+            self._run_installation_entry(app_code, installer_path_str)
+        except Exception as e:
+            self.log(f"Error during download+install: {e}", "error")
+            self.end_operation()
+
     def check_dependencies(self):
         """Check and install dependencies"""
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Dependency Verification", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
+        self.update_progress_text("Checking dependencies...")
+        self.update_progress(0.0)
+        
         # Show unsupported warning
-        if self.distro in ["ubuntu", "linuxmint", "pop", "zorin"]:
+        if self.distro in ["ubuntu", "linuxmint", "zorin"]:
             self.show_unsupported_warning()
         
         missing = []
         deps = ["wine", "winetricks", "wget", "curl", "tar", "jq"]
+        total_checks = len(deps) + 2  # +2 for archive tools and zstd
         
-        for dep in deps:
+        for idx, dep in enumerate(deps):
+            progress = (idx + 1) / total_checks * 0.5  # Use first 50% for checking
+            self.update_progress(progress)
+            self.update_progress_text(f"Checking {dep}...")
+            
             if self.check_command(dep):
                 self.log(f"{dep} is installed", "success")
             else:
@@ -1383,6 +2854,10 @@ class AffinityInstallerGUI(QMainWindow):
                 missing.append(dep)
         
         # Check for either 7z or unzip (both can extract archives)
+        progress = (len(deps) + 1) / total_checks * 0.5
+        self.update_progress(progress)
+        self.update_progress_text("Checking archive tools...")
+        
         if not self.check_command("7z") and not self.check_command("unzip"):
             self.log("Neither 7z nor unzip is installed (at least one is required)", "error")
             missing.append("7z or unzip")
@@ -1393,6 +2868,10 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("unzip is installed (will be used instead of 7z)", "success")
         
         # Check zstd
+        progress = (len(deps) + 2) / total_checks * 0.5
+        self.update_progress(progress)
+        self.update_progress_text("Checking zstd...")
+        
         if not (self.check_command("unzstd") or self.check_command("zstd")):
             self.log("zstd or unzstd is not installed", "error")
             missing.append("zstd")
@@ -1411,19 +2890,17 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"Missing: {', '.join(missing)}", "warning")
                 
                 # Show dialog asking user to install and retry
-                from PyQt6.QtWidgets import QMessageBox
-                reply = QMessageBox.question(
-                    self,
+                reply = self.show_question_dialog(
                     "Unsupported Distribution - Missing Dependencies",
                     f"⚠️  WARNING: UNSUPPORTED DISTRIBUTION\n\n"
                     f"Missing dependencies: {', '.join(missing)}\n\n"
                     f"This script will NOT auto-install for unsupported distributions.\n"
                     f"Please install the required dependencies manually.\n\n"
                     f"Click 'Retry' after installing dependencies, or 'Cancel' to exit.",
-                    QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Cancel
+                    ["Retry", "Cancel"]
                 )
                 
-                if reply == QMessageBox.StandardButton.Retry:
+                if reply == "Retry":
                     # Re-check dependencies
                     return self.check_dependencies()
                 else:
@@ -1435,9 +2912,15 @@ class AffinityInstallerGUI(QMainWindow):
         # Install missing dependencies (only for supported distributions)
         if missing and self.distro not in ["ubuntu", "linuxmint", "pop", "zorin"]:
             self.log(f"\nInstalling missing dependencies: {', '.join(missing)}", "info")
+            self.update_progress_text(f"Installing {len(missing)} missing packages...")
+            self.update_progress(0.5)  # Start second half of progress
+            
             if not self.install_dependencies():
+                self.update_progress_text("Dependency installation failed")
                 return False
         
+        self.update_progress(1.0)
+        self.update_progress_text("All dependencies installed")
         self.log("\n✓ All required dependencies are installed!", "success")
         return True
     
@@ -1459,6 +2942,8 @@ class AffinityInstallerGUI(QMainWindow):
         """Install dependencies based on distribution"""
         if self.distro == "pikaos":
             return self.install_pikaos_dependencies()
+        if self.distro == "pop":
+            return self.install_popos_dependencies()
         
         commands = {
             "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
@@ -1473,24 +2958,28 @@ class AffinityInstallerGUI(QMainWindow):
         
         if self.distro in commands:
             self.log(f"Installing dependencies for {self.distro}...", "info")
+            self.update_progress_text(f"Installing packages for {self.distro}...")
+            self.update_progress(0.6)
+            
             success, stdout, stderr = self.run_command(commands[self.distro])
+            
             if success:
+                self.update_progress(1.0)
+                self.update_progress_text("Dependencies installed")
                 self.log("Dependencies installed successfully", "success")
                 return True
             else:
                 self.log(f"Failed to install dependencies: {stderr}", "error")
                 
                 # Show retry dialog
-                from PyQt6.QtWidgets import QMessageBox
-                reply = QMessageBox.question(
-                    self,
+                reply = self.show_question_dialog(
                     "Dependency Installation Failed",
                     f"Failed to install dependencies:\n{stderr}\n\n"
                     "Would you like to retry the installation?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    ["Yes", "No"]
                 )
                 
-                if reply == QMessageBox.StandardButton.Yes:
+                if reply == "Yes":
                     # Retry installation
                     return self.install_dependencies()
                 else:
@@ -1507,7 +2996,14 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("PikaOS's built-in Wine has compatibility issues.", "warning")
         self.log("Setting up WineHQ staging from Debian...\n", "info")
         
+        # Total steps: keyrings, gpg key, i386, repo, apt update, wine install, deps install = 7 steps
+        total_steps = 7
+        current_step = 0
+        
         # Create keyrings directory
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Creating keyrings directory...")
+        self.update_progress(current_step / total_steps)
         self.log("Creating APT keyrings directory...", "info")
         success, _, _ = self.run_command(["sudo", "mkdir", "-pm755", "/etc/apt/keyrings"])
         if not success:
@@ -1515,24 +3011,49 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Add GPG key
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ GPG key...")
+        self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ GPG key...", "info")
         success, stdout, _ = self.run_command(["wget", "-O", "-", "https://dl.winehq.org/wine-builds/winehq.key"])
         if success:
+            # Get sudo password for GPG operation
+            password = self.get_sudo_password()
+            if password is None:
+                self.log("Authentication cancelled by user", "error")
+                return False
+            
+            # Validate password if not already validated
+            if not self.sudo_password_validated:
+                if not self.validate_sudo_password(password):
+                    self.log("Authentication failed", "error")
+                    return False
+            
+            # Run GPG command with sudo
             gpg_proc = subprocess.Popen(
-                ["sudo", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
-                stdin=subprocess.PIPE
+                ["sudo", "-S", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
             )
-            gpg_proc.communicate(input=stdout.encode())
+            # Send password first, then the key data
+            gpg_input = f"{self.sudo_password}\n" + stdout
+            gpg_stdout, gpg_stderr = gpg_proc.communicate(input=gpg_input)
+            
             if gpg_proc.returncode == 0:
                 self.log("WineHQ GPG key added", "success")
             else:
-                self.log("Failed to add GPG key", "error")
+                self.log(f"Failed to add GPG key: {gpg_stderr}", "error")
                 return False
         else:
             self.log("Failed to download GPG key", "error")
             return False
         
         # Add i386 architecture
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding i386 architecture...")
+        self.update_progress(current_step / total_steps)
         self.log("Adding i386 architecture...", "info")
         success, _, _ = self.run_command(["sudo", "dpkg", "--add-architecture", "i386"])
         if not success:
@@ -1540,9 +3061,17 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Add repository
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ repository...")
+        self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ repository...", "info")
+        # Remove existing file first to avoid overwrite prompt
+        repo_file = Path("/etc/apt/sources.list.d/winehq-forky.sources")
+        if repo_file.exists():
+            self.run_command(["sudo", "rm", "-f", str(repo_file)], check=False)
+        
         success, _, _ = self.run_command([
-            "sudo", "wget", "-NP", "/etc/apt/sources.list.d/",
+            "sudo", "wget", "-P", "/etc/apt/sources.list.d/",
             "https://dl.winehq.org/wine-builds/debian/dists/forky/winehq-forky.sources"
         ])
         if not success:
@@ -1550,6 +3079,9 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Update package lists
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Updating package lists...")
+        self.update_progress(current_step / total_steps)
         self.log("Updating package lists...", "info")
         success, _, _ = self.run_command(["sudo", "apt", "update"])
         if not success:
@@ -1557,6 +3089,9 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Install WineHQ staging
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing WineHQ staging...")
+        self.update_progress(current_step / total_steps)
         self.log("Installing WineHQ staging...", "info")
         success, _, _ = self.run_command(["sudo", "apt", "install", "--install-recommends", "-y", "winehq-staging"])
         if not success:
@@ -1564,6 +3099,9 @@ class AffinityInstallerGUI(QMainWindow):
             return False
         
         # Install remaining dependencies
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing remaining dependencies...")
+        self.update_progress(current_step / total_steps)
         self.log("Installing remaining dependencies...", "info")
         success, _, _ = self.run_command([
             "sudo", "apt", "install", "-y", "winetricks", "wget", "curl", "p7zip-full", "tar", "jq", "zstd"
@@ -1572,120 +3110,306 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Failed to install remaining dependencies", "error")
             return False
         
+        self.update_progress(1.0)
+        self.update_progress_text("PikaOS dependencies installed")
         self.log("All dependencies installed for PikaOS", "success")
+        return True
+    
+    def install_popos_dependencies(self):
+        """Install Pop!_OS dependencies with WineHQ staging"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Pop!_OS Special Configuration", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        self.log("Pop!_OS's built-in Wine has compatibility issues.", "warning")
+        self.log("Setting up WineHQ staging from Ubuntu...\n", "info")
+        
+        # Total steps: keyrings, gpg key, i386, repo, apt update, wine install, deps install = 7 steps
+        total_steps = 7
+        current_step = 0
+        
+        # Create keyrings directory
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Creating keyrings directory...")
+        self.update_progress(current_step / total_steps)
+        self.log("Creating APT keyrings directory...", "info")
+        success, _, _ = self.run_command(["sudo", "mkdir", "-pm755", "/etc/apt/keyrings"])
+        if not success:
+            self.log("Failed to create keyrings directory", "error")
+            return False
+        
+        # Add GPG key
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ GPG key...")
+        self.update_progress(current_step / total_steps)
+        self.log("Adding WineHQ GPG key...", "info")
+        success, stdout, _ = self.run_command(["wget", "-O", "-", "https://dl.winehq.org/wine-builds/winehq.key"])
+        if success:
+            # Get sudo password for GPG operation
+            password = self.get_sudo_password()
+            if password is None:
+                self.log("Authentication cancelled by user", "error")
+                return False
+            
+            # Validate password if not already validated
+            if not self.sudo_password_validated:
+                if not self.validate_sudo_password(password):
+                    self.log("Authentication failed", "error")
+                    return False
+            
+            # Run GPG command with sudo
+            gpg_proc = subprocess.Popen(
+                ["sudo", "-S", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            # Send password first, then the key data
+            gpg_input = f"{self.sudo_password}\n" + stdout
+            gpg_stdout, gpg_stderr = gpg_proc.communicate(input=gpg_input)
+            
+            if gpg_proc.returncode == 0:
+                self.log("WineHQ GPG key added", "success")
+            else:
+                self.log(f"Failed to add GPG key: {gpg_stderr}", "error")
+                return False
+        else:
+            self.log("Failed to download GPG key", "error")
+            return False
+        
+        # Add i386 architecture
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding i386 architecture...")
+        self.update_progress(current_step / total_steps)
+        self.log("Adding i386 architecture...", "info")
+        success, _, _ = self.run_command(["sudo", "dpkg", "--add-architecture", "i386"])
+        if not success:
+            self.log("Failed to add i386 architecture", "error")
+            return False
+        
+        # Add repository
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ repository...")
+        self.update_progress(current_step / total_steps)
+        self.log("Adding WineHQ repository...", "info")
+        # Get Ubuntu version codename
+        codename = "jammy"
+        try:
+            with open("/etc/os-release", "r") as f:
+                for line in f:
+                    if line.startswith("VERSION_CODENAME="):
+                        codename = line.split("=")[1].strip()
+        except (IOError, FileNotFoundError):
+            pass # Default to jammy
+            
+        # Remove existing file first to avoid overwrite prompt
+        repo_file = Path(f"/etc/apt/sources.list.d/winehq-{codename}.sources")
+        if repo_file.exists():
+            self.run_command(["sudo", "rm", "-f", str(repo_file)], check=False)
+        
+        success, _, _ = self.run_command([
+            "sudo", "wget", "-P", "/etc/apt/sources.list.d/",
+            f"https://dl.winehq.org/wine-builds/ubuntu/dists/{codename}/winehq-{codename}.sources"
+        ])
+        if not success:
+            self.log("Failed to add repository", "error")
+            return False
+        
+        # Update package lists
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Updating package lists...")
+        self.update_progress(current_step / total_steps)
+        self.log("Updating package lists...", "info")
+        success, _, _ = self.run_command(["sudo", "apt", "update"])
+        if not success:
+            self.log("Failed to update package lists", "error")
+            return False
+        
+        # Install WineHQ staging
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing WineHQ staging...")
+        self.update_progress(current_step / total_steps)
+        self.log("Installing WineHQ staging...", "info")
+        success, _, _ = self.run_command(["sudo", "apt", "install", "--install-recommends", "-y", "winehq-staging"])
+        if not success:
+            self.log("Failed to install WineHQ staging", "error")
+            return False
+        
+        # Install remaining dependencies
+        current_step += 1
+        self.update_progress_text(f"Step {current_step}/{total_steps}: Installing remaining dependencies...")
+        self.update_progress(current_step / total_steps)
+        self.log("Installing remaining dependencies...", "info")
+        success, _, _ = self.run_command([
+            "sudo", "apt", "install", "-y", "winetricks", "wget", "curl", "p7zip-full", "tar", "jq", "zstd"
+        ])
+        if not success:
+            self.log("Failed to install remaining dependencies", "error")
+            return False
+        
+        self.update_progress(1.0)
+        self.update_progress_text("Pop!_OS dependencies installed")
+        self.log("All dependencies installed for Pop!_OS", "success")
         return True
     
     def setup_wine(self):
         """Setup Wine environment"""
-        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        self.log("Wine Binary Setup", "info")
-        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        self.start_operation("Setting up Wine environment")
         
-        # Stop Wine processes
-        self.update_progress_text("Preparing Wine environment...")
-        self.update_progress(0.0)
-        self.log("Stopping Wine processes...", "info")
-        self.run_command(["wineserver", "-k"], check=False)
-        
-        # Create directory
-        self.update_progress_text("Creating installation directory...")
-        self.update_progress(0.05)
-        Path(self.directory).mkdir(parents=True, exist_ok=True)
-        self.log("Installation directory created", "success")
-        
-        # Download Wine binary
-        wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
-        wine_file = Path(self.directory) / "ElementalWarriorWine-x86_64.tar.gz"
-        
-        self.update_progress_text("Downloading Wine binary...")
-        self.update_progress(0.10)
-        self.log("Downloading Wine binary...", "info")
-        if not self.download_file(wine_url, str(wine_file), "Wine binaries"):
-            self.log("Failed to download Wine binary", "error")
-            self.update_progress_text("Ready")
-            return False
-        
-        # Extract Wine
-        self.update_progress_text("Extracting Wine binary...")
-        self.update_progress(0.50)
-        self.log("Extracting Wine binary...", "info")
         try:
-            with tarfile.open(wine_file, "r:gz") as tar:
-                tar.extractall(self.directory, filter='data')
-            wine_file.unlink()
-            self.log("Wine binary extracted", "success")
+            # Check if cancelled at start
+            if self.check_cancelled():
+                return False
+            
+            self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            self.log("Wine Binary Setup", "info")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+            # Stop Wine processes
+            self.update_progress_text("Preparing Wine environment...")
+            self.update_progress(0.0)
+            self.log("Stopping Wine processes...", "info")
+            self.run_command(["wineserver", "-k"], check=False)
+            
+            if self.check_cancelled():
+                return False
+            
+            # Create directory
+            self.update_progress_text("Creating installation directory...")
+            self.update_progress(0.05)
+            Path(self.directory).mkdir(parents=True, exist_ok=True)
+            self.log("Installation directory created", "success")
+            
+            if self.check_cancelled():
+                return False
+            
+            # Download Wine binary
+            wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
+            wine_file = Path(self.directory) / "ElementalWarriorWine-x86_64.tar.gz"
+            
+            self.update_progress_text("Downloading Wine binary...")
+            self.update_progress(0.10)
+            self.log("Downloading Wine binary...", "info")
+            if not self.download_file(wine_url, str(wine_file), "Wine binaries"):
+                self.log("Failed to download Wine binary", "error")
+                self.update_progress_text("Ready")
+                return False
+            
+            if self.check_cancelled():
+                return False
+            
+            # Extract Wine
+            self.update_progress_text("Extracting Wine binary...")
+            self.update_progress(0.50)
+            self.log("Extracting Wine binary...", "info")
+            try:
+                with tarfile.open(wine_file, "r:gz") as tar:
+                    tar.extractall(self.directory, filter='data')
+                wine_file.unlink()
+                self.log("Wine binary extracted", "success")
+            except Exception as e:
+                self.log(f"Failed to extract Wine: {e}", "error")
+                self.update_progress_text("Ready")
+                return False
+            
+            if self.check_cancelled():
+                return False
+            
+            # Find and link Wine directory
+            self.update_progress(0.55)
+            wine_dir = next(Path(self.directory).glob("ElementalWarriorWine*"), None)
+            if wine_dir and wine_dir != Path(self.directory) / "ElementalWarriorWine":
+                target = Path(self.directory) / "ElementalWarriorWine"
+                if target.exists() or target.is_symlink():
+                    target.unlink()
+                target.symlink_to(wine_dir)
+                self.log("Wine symlink created", "success")
+            
+            # Verify Wine binary
+            self.update_progress(0.60)
+            wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            if not wine_binary.exists():
+                self.log("Wine binary not found", "error")
+                self.update_progress_text("Ready")
+                return False
+            
+            self.log("Wine binary verified", "success")
+            
+            if self.check_cancelled():
+                return False
+            
+            # Download icons
+            self.update_progress_text("Downloading application icons...")
+            self.update_progress(0.65)
+            self.log("\nSetting up application icons...", "info")
+            icons_dir = Path.home() / ".local" / "share" / "icons"
+            icons_dir.mkdir(parents=True, exist_ok=True)
+            
+            icons = [
+                ("https://github.com/user-attachments/assets/c7b70ee5-58e3-46c6-b385-7c3d02749664",
+                 icons_dir / "AffinityPhoto.svg", "Photo icon"),
+                ("https://github.com/user-attachments/assets/8ea7f748-c455-4ee8-9a94-775de40dbbf3",
+                 icons_dir / "AffinityDesigner.svg", "Designer icon"),
+                ("https://github.com/user-attachments/assets/96ae06f8-470b-451f-ba29-835324b5b552",
+                 icons_dir / "AffinityPublisher.svg", "Publisher icon"),
+                ("https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/Assets/Icons/Affinity-Canva.svg",
+                 icons_dir / "Affinity.svg", "Affinity V3 icon")
+            ]
+            
+            total_icons = len(icons)
+            for idx, (url, path, desc) in enumerate(icons):
+                if self.check_cancelled():
+                    return False
+                icon_progress = 0.65 + (idx / total_icons) * 0.05
+                self.update_progress(icon_progress)
+                if not self.download_file(url, str(path), desc):
+                    self.log(f"Warning: {desc} download failed, but continuing...", "warning")
+            
+            if self.check_cancelled():
+                return False
+            
+            # Setup WinMetadata
+            self.update_progress_text("Setting up Windows Metadata...")
+            self.update_progress(0.70)
+            self.setup_winmetadata()
+            
+            if self.check_cancelled():
+                return False
+            
+            # Setup vkd3d-proton
+            self.update_progress_text("Setting up vkd3d-proton...")
+            self.update_progress(0.80)
+            self.setup_vkd3d()
+            
+            if self.check_cancelled():
+                return False
+            
+            # Configure Wine
+            self.update_progress_text("Configuring Wine with winetricks...")
+            self.update_progress(0.90)
+            self.configure_wine()
+
+            if self.check_cancelled():
+                return False
+                
+            self.setup_complete = True
+            self.update_progress(1.0)
+            self.update_progress_text("Wine setup complete!")
+            self.log("\n✓ Wine setup completed!", "success")
+            
+            # Refresh installation status to update button states
+            QTimer.singleShot(100, self.check_installation_status)
+            return True
+                    
         except Exception as e:
-            self.log(f"Failed to extract Wine: {e}", "error")
-            self.update_progress_text("Ready")
+            if not self.check_cancelled():
+                self.log(f"Error setting up Wine environment: {e}", "error")
             return False
-        
-        # Find and link Wine directory
-        self.update_progress(0.55)
-        wine_dir = next(Path(self.directory).glob("ElementalWarriorWine*"), None)
-        if wine_dir and wine_dir != Path(self.directory) / "ElementalWarriorWine":
-            target = Path(self.directory) / "ElementalWarriorWine"
-            if target.exists() or target.is_symlink():
-                target.unlink()
-            target.symlink_to(wine_dir)
-            self.log("Wine symlink created", "success")
-        
-        # Verify Wine binary
-        self.update_progress(0.60)
-        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
-        if not wine_binary.exists():
-            self.log("Wine binary not found", "error")
-            self.update_progress_text("Ready")
-            return False
-        
-        self.log("Wine binary verified", "success")
-        
-        # Download icons
-        self.update_progress_text("Downloading application icons...")
-        self.update_progress(0.65)
-        self.log("\nSetting up application icons...", "info")
-        icons_dir = Path.home() / ".local" / "share" / "icons"
-        icons_dir.mkdir(parents=True, exist_ok=True)
-        
-        icons = [
-            ("https://github.com/user-attachments/assets/c7b70ee5-58e3-46c6-b385-7c3d02749664",
-             icons_dir / "AffinityPhoto.svg", "Photo icon"),
-            ("https://github.com/user-attachments/assets/8ea7f748-c455-4ee8-9a94-775de40dbbf3",
-             icons_dir / "AffinityDesigner.svg", "Designer icon"),
-            ("https://github.com/user-attachments/assets/96ae06f8-470b-451f-ba29-835324b5b552",
-             icons_dir / "AffinityPublisher.svg", "Publisher icon"),
-            ("https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/Assets/Icons/Affinity-Canva.svg",
-             icons_dir / "Affinity.svg", "Affinity V3 icon")
-        ]
-        
-        total_icons = len(icons)
-        for idx, (url, path, desc) in enumerate(icons):
-            icon_progress = 0.65 + (idx / total_icons) * 0.05
-            self.update_progress(icon_progress)
-            if not self.download_file(url, str(path), desc):
-                self.log(f"Warning: {desc} download failed, but continuing...", "warning")
-        
-        # Setup WinMetadata
-        self.update_progress_text("Setting up Windows Metadata...")
-        self.update_progress(0.70)
-        self.setup_winmetadata()
-        
-        # Setup vkd3d-proton
-        self.update_progress_text("Setting up vkd3d-proton...")
-        self.update_progress(0.80)
-        self.setup_vkd3d()
-        
-        # Configure Wine
-        self.update_progress_text("Configuring Wine with winetricks...")
-        self.update_progress(0.90)
-        self.configure_wine()
-        
-        self.setup_complete = True
-        self.update_progress(1.0)
-        self.update_progress_text("Wine setup complete!")
-        self.log("\n✓ Wine setup completed!", "success")
-        
-        # Refresh installation status to update button states
-        QTimer.singleShot(100, self.check_installation_status)
+            
+        finally:
+            # Make sure to end the operation even if there was an error or cancellation
+            if hasattr(self, 'current_operation') and self.current_operation == "Setting up Wine environment":
+                self.end_operation()
     
     def setup_winmetadata(self):
         """Download and extract WinMetadata"""
@@ -1746,8 +3470,16 @@ class AffinityInstallerGUI(QMainWindow):
             )
             return
         
-        threading.Thread(target=self._reinstall_winmetadata_thread, daemon=True).start()
+        self.start_operation("Reinstall WinMetadata")
+        threading.Thread(target=self._reinstall_winmetadata_entry, daemon=True).start()
     
+    def _reinstall_winmetadata_entry(self):
+        """Wrapper: reinstall WinMetadata and end operation."""
+        try:
+            self._reinstall_winmetadata_thread()
+        finally:
+            self.end_operation()
+
     def _reinstall_winmetadata_thread(self):
         """Reinstall WinMetadata in background thread"""
         # Kill Wine processes
@@ -1843,6 +3575,9 @@ class AffinityInstallerGUI(QMainWindow):
         
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
+        # Prevent winetricks from showing GUI dialogs
+        env["WINETRICKS_GUI"] = "0"
+        env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
         
         wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
         
@@ -1905,10 +3640,26 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("\n✓ Setup complete! Select an application to install:", "success")
         self.update_progress(1.0)
     
+    def setup_wine_environment(self):
+        """Setup Wine environment only"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Setup Wine Environment", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        threading.Thread(target=self.setup_wine, daemon=True).start()
+    
+    def install_winetricks_deps(self):
+        """Install winetricks dependencies - wrapper for button"""
+        self.install_winetricks_dependencies()
+    
     def install_system_dependencies(self):
         """Install system dependencies"""
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Installing System Dependencies", "info")
+        
+        # Start operation and check for cancellation
+        self.start_operation("Installing System Dependencies")
+        if self.check_cancelled():
+            return
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
         threading.Thread(target=self._install_system_deps, daemon=True).start()
@@ -1919,6 +3670,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Using PikaOS dependency installation...", "info")
             success = self.install_pikaos_dependencies()
             self.log("System dependencies installation completed" if success else "System dependencies installation failed", "success" if success else "error")
+            self.end_operation()
             return
         
         if not self.distro:
@@ -1927,6 +3679,8 @@ class AffinityInstallerGUI(QMainWindow):
         self.log(f"Installing dependencies for {self.distro}...", "info")
         success = self.install_dependencies()
         self.log("System dependencies installation completed" if success else "System dependencies installation failed", "success" if success else "error")
+        self.end_operation()
+        return success
     
     def install_winetricks_dependencies(self):
         """Install winetricks dependencies"""
@@ -1934,30 +3688,48 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Installing Winetricks Dependencies", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
+        # Start operation and check for cancellation
+        self.start_operation("Installing Winetricks Dependencies")
+        if self.check_cancelled():
+            return
+        
         # Check if Wine is set up
         wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
         if not wine_binary.exists():
             self.log("Wine is not set up yet. Please wait for Wine setup to complete.", "error")
             QMessageBox.warning(self, "Wine Not Ready", "Wine setup must complete before installing winetricks dependencies.")
+            self.end_operation()
             return
         
         threading.Thread(target=self._install_winetricks_deps, daemon=True).start()
     
     def _install_winetricks_deps(self):
         """Install winetricks dependencies in thread"""
-        env = os.environ.copy()
-        env["WINEPREFIX"] = self.directory
-        
-        components = [
-            ("dotnet35", ".NET Framework 3.5"),
-            ("dotnet48", ".NET Framework 4.8"),
-            ("corefonts", "Windows Core Fonts"),
-            ("vcrun2022", "Visual C++ Redistributables 2022"),
-            ("msxml3", "MSXML 3.0"),
-            ("msxml6", "MSXML 6.0"),
-            ("tahoma", "Tahoma Font"),
-            ("renderer=vulkan", "Vulkan Renderer")
-        ]
+        try:
+            if self.check_cancelled():
+                return
+                
+            env = os.environ.copy()
+            env["WINEPREFIX"] = self.directory
+            # Prevent winetricks from showing GUI dialogs
+            env["WINETRICKS_GUI"] = "0"
+            env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
+            
+            components = [
+                ("dotnet35", ".NET Framework 3.5"),
+                ("dotnet48", ".NET Framework 4.8"),
+                ("corefonts", "Windows Core Fonts"),
+                ("vcrun2022", "Visual C++ Redistributables 2022"),
+                ("msxml3", "MSXML 3.0"),
+                ("msxml6", "MSXML 6.0"),
+                ("tahoma", "Tahoma Font"),
+                ("renderer=vulkan", "Vulkan Renderer")
+            ]
+        except Exception as e:
+            self.log(f"Error in winetricks dependencies installation: {str(e)}", "error")
+            self.log("Please check the logs and try again.", "error")
+            self.end_operation()
+            return
         
         self.log("Installing Wine components (this may take several minutes)...", "info")
         
@@ -1975,70 +3747,91 @@ class AffinityInstallerGUI(QMainWindow):
             
             # Progress callback that updates based on component progress
             def update_component_progress(percent):
-                # percent is 0.0-1.0 for this component
-                # Map it to overall progress
-                overall_progress = base_progress + (percent * component_progress_range)
-                self.update_progress(overall_progress)
-            
-            # Use streaming to show progress in real-time
-            # Keep --unattended to prevent dialogs, but remove it for verbose output
-            # We'll use verbose mode to see progress
-            success = self.run_command_streaming(
-                ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", component],
-                env=env,
-                progress_callback=update_component_progress
-            )
-            
-            # Mark this component as complete
-            self.update_progress(base_progress + component_progress_range)
-            
-            if success:
-                self.log(f"✓ {description} installed", "success")
-            else:
-                # If installation failed, try once more with force
-                self.log(f"⚠ {description} installation failed, retrying...", "warning")
-                time.sleep(2)  # Brief pause before retry
                 
-                self.log(f"Retrying {description} installation...", "info")
-                retry_success = self.run_command_streaming(
-                    ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", component],
-                    env=env,
-                    progress_callback=update_component_progress
-                )
+                # Update progress label to show current component
+                self.update_progress_text(f"Installing: {description} ({idx + 1}/{total_components})")
                 
-                # Mark component as complete after retry
-                self.update_progress(base_progress + component_progress_range)
+                self.log(f"Installing {description} ({component})... [{idx + 1}/{total_components}]", "info")
+                self.log("  (This may take several minutes - progress will be shown below)", "info")
                 
-                if retry_success:
-                    self.log(f"✓ {description} installed successfully on retry", "success")
-                else:
-                    # Check if it might already be installed by checking the component
-                    if self._check_winetricks_component(component.split('=')[0] if '=' in component else component, 
-                                                         Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine", env):
-                        self.log(f"✓ {description} appears to already be installed", "success")
-                    else:
-                        self.log(f"✗ {description} installation failed after retry. You may need to install manually.", "error")
+                # Progress callback that updates based on component progress
+                def update_component_progress(percent):
+                    # percent is 0.0-1.0 for this component
+                    # Map it to overall progress
+                    overall_progress = base_progress + (percent * component_progress_range)
+                    self.update_progress(overall_progress)
+                
+                # Check for cancellation before starting installation
+                if self.check_cancelled():
+                    return
+                
+                # Use streaming to show progress in real-time
+                # Keep --unattended to prevent dialogs, but remove it for verbose output
+                # We'll use verbose mode to see progress
+                try:
+                    success = self.run_command_streaming(
+                        ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", component],
+                        env=env,
+                        progress_callback=update_component_progress
+                    )
+                    
+                    if success and not self.check_cancelled():
+                        self.log(f"✓ {description} installed", "success")
+                    elif not success and not self.check_cancelled():
+                        # If installation failed, try once more with force
+                        self.log(f"⚠ {description} installation failed, retrying...", "warning")
+                        time.sleep(2)  # Brief pause before retry
+                        
+                        self.log(f"Retrying {description} installation...", "info")
+                        retry_success = self.run_command_streaming(
+                            ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", component],
+                            env=env,
+                            progress_callback=update_component_progress
+                        )
+                        
+                        # Mark component as complete after retry
+                        self.update_progress(base_progress + component_progress_range)
+                        
+                        if retry_success:
+                            self.log(f"✓ {description} installed successfully on retry", "success")
+                        else:
+                            # Check if it might already be installed by checking the component
+                            if self._check_winetricks_component(component.split('=')[0] if '=' in component else component, 
+                                                                 Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine", env):
+                                self.log(f"✓ {description} appears to already be installed", "success")
+                            else:
+                                self.log(f"✗ {description} installation failed after retry. You may need to install manually.", "error")
+                
+                except Exception as e:
+                    if not self.check_cancelled():
+                        self.log(f"Error during Winetricks installation: {e}", "error")
+                finally:
+                    # Make sure to end the operation even if there was an error or cancellation
+                    if hasattr(self, 'current_operation') and self.current_operation == "Installing Winetricks Dependencies":
+                        self.end_operation()
+                    # Windows 11 compatibility will be set below
         
-        # Set Windows version to 11
-        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
-        self.log("Setting Windows version to 11...", "info")
-        self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
-        
-        # Apply dark theme
-        self.log("Applying Wine dark theme...", "info")
-        theme_file = Path(self.directory) / "wine-dark-theme.reg"
-        if self.download_file(
-            "https://raw.githubusercontent.com/seapear/AffinityOnLinux/refs/heads/main/Auxiliary/Other/wine-dark-theme.reg",
-            str(theme_file),
-            "dark theme"
-        ):
-            regedit = Path(self.directory) / "ElementalWarriorWine" / "bin" / "regedit"
-            self.run_command([str(regedit), str(theme_file)], check=False, env=env)
-            theme_file.unlink()
-            self.log("Dark theme applied", "success")
-        
-        self.log("\n✓ Winetricks dependencies installation completed!", "success")
-        self.update_progress_text("Ready")
+            # Set Windows version to 11
+            wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+            self.log("Setting Windows version to 11...", "info")
+            self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
+            
+            # Apply dark theme
+            self.log("Applying Wine dark theme...", "info")
+            theme_file = Path(self.directory) / "wine-dark-theme.reg"
+            if self.download_file(
+                "https://raw.githubusercontent.com/seapear/AffinityOnLinux/refs/heads/main/Auxiliary/Other/wine-dark-theme.reg",
+                str(theme_file),
+                "dark theme"
+            ):
+                regedit = Path(self.directory) / "ElementalWarriorWine" / "bin" / "regedit"
+                self.run_command([str(regedit), str(theme_file)], check=False, env=env)
+                theme_file.unlink()
+                self.log("Dark theme applied", "success")
+            
+            self.log("\n✓ Winetricks dependencies installation completed!", "success")
+            self.update_progress_text("Ready")
+            self.end_operation()
     
     def install_affinity_settings(self):
         """Install Affinity v3 (Unified) settings files to enable settings saving"""
@@ -2059,7 +3852,9 @@ class AffinityInstallerGUI(QMainWindow):
             )
             return
         
-        threading.Thread(target=self._install_affinity_settings_thread, daemon=True).start()
+        # Start operation and wrapper thread
+        self.start_operation("Install Affinity v3 Settings")
+        threading.Thread(target=self._install_affinity_settings_entry, daemon=True).start()
     
     def _install_affinity_settings_thread(self):
         """Install Affinity v3 (Unified) settings in background thread - downloads repo and copies Settings"""
@@ -2104,7 +3899,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"  URL: {repo_url}", "error")
             try:
                 shutil.rmtree(temp_dir)
-            except:
+            except Exception:
                 pass
             return
         
@@ -2113,7 +3908,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Downloaded zip file is missing or empty", "error")
             try:
                 shutil.rmtree(temp_dir)
-            except:
+            except Exception:
                 pass
             return
         
@@ -2141,7 +3936,7 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("Please install 7z or unzip to extract the repository", "error")
                 try:
                     shutil.rmtree(temp_dir)
-                except:
+                except Exception:
                     pass
                 return
             
@@ -2155,7 +3950,7 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"Contents of temp_dir: {[d.name for d in temp_dir.iterdir()]}", "error")
                 try:
                     shutil.rmtree(temp_dir)
-                except:
+                except Exception:
                     pass
                 return
             
@@ -2168,7 +3963,7 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"Contents of extracted directory: {[d.name for d in extracted_dir.iterdir()]}", "error")
                 try:
                     shutil.rmtree(temp_dir)
-                except:
+                except Exception:
                     pass
                 return
             
@@ -2178,7 +3973,7 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"Contents of Auxiliary: {[d.name for d in auxiliary_dir.iterdir()]}", "error")
                 try:
                     shutil.rmtree(temp_dir)
-                except:
+                except Exception:
                     pass
                 return
             
@@ -2221,7 +4016,7 @@ class AffinityInstallerGUI(QMainWindow):
                 
                 try:
                     shutil.rmtree(temp_dir)
-                except:
+                except Exception:
                     pass
                 return
             
@@ -2389,7 +4184,7 @@ class AffinityInstallerGUI(QMainWindow):
                 msxml6_path = Path(self.directory) / "drive_c" / "windows" / "system32" / "msxml6.dll"
                 if msxml6_path.exists():
                     return True
-        except:
+        except Exception:
             pass
         
         return False
@@ -2426,7 +4221,7 @@ class AffinityInstallerGUI(QMainWindow):
             )
             if success:
                 return True
-        except:
+        except Exception:
             pass
         
         return False
@@ -2449,8 +4244,17 @@ class AffinityInstallerGUI(QMainWindow):
             )
             return
         
-        threading.Thread(target=self._install_webview2_runtime_thread, daemon=True).start()
+        # Start operation and wrapper thread
+        self.start_operation("Install WebView2 Runtime")
+        threading.Thread(target=self._install_webview2_runtime_entry, daemon=True).start()
     
+    def _install_webview2_runtime_entry(self):
+        """Wrapper to install WebView2 and end the operation when invoked from the button."""
+        try:
+            self._install_webview2_runtime_thread()
+        finally:
+            self.end_operation()
+
     def _install_webview2_runtime_thread(self):
         """Install Microsoft Edge WebView2 Runtime in background thread"""
         # Check if Wine is set up
@@ -2497,7 +4301,7 @@ class AffinityInstallerGUI(QMainWindow):
                 if success:
                     webview2_installed = True
                     self.log("WebView2 Runtime found in registry", "success")
-            except:
+            except Exception:
                 pass
         
         if webview2_installed:
@@ -2607,14 +4411,290 @@ class AffinityInstallerGUI(QMainWindow):
             return True
             
         except Exception as e:
-            self.log(f"Error installing WebView2 Runtime: {e}", "error")
+            if not self.check_cancelled():
+                self.log(f"Error installing WebView2 Runtime: {e}", "error")
             # Try to restore Windows 11 compatibility even if something failed
             try:
                 self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
             except:
                 pass
             return False
+    
+    def _install_affinity_settings_entry(self):
+        """Wrapper to install Affinity settings and end the operation when invoked from the button."""
+        try:
+            self._install_affinity_settings_thread()
+        finally:
+            self.end_operation()
+
+    def _install_affinity_settings_thread(self):
+        """Install Affinity v3 (Unified) settings in background thread - downloads repo and copies Settings"""
+        try:
+            # Determine Windows username
+            # Wine typically uses "Public" as the default username, but check for existing users
+            users_dir = Path(self.directory) / "drive_c" / "users"
+            username = "Public"  # Default Wine username
             
+            # Check if users directory exists and has other users
+            if users_dir.exists():
+                # Look for existing user directories (excluding Public, Default, etc.)
+                existing_users = [d.name for d in users_dir.iterdir() if d.is_dir() and d.name not in ["Public", "Default", "All Users", "Default User"]]
+                if existing_users:
+                    # Use the first existing user, or fall back to Public
+                    username = existing_users[0]
+                    self.log(f"Using existing Windows user: {username}", "info")
+                else:
+                    self.log(f"Using default Windows user: {username}", "info")
+            else:
+                self.log(f"Creating users directory structure for: {username}", "info")
+                users_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create temp directory for cloning/downloading
+            temp_dir = Path(self.directory) / ".temp_settings"
+            if temp_dir.exists():
+                self.log("Cleaning up existing temp directory...", "info")
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    self.log(f"Warning: Could not remove existing temp dir: {e}", "warning")
+            temp_dir.mkdir(exist_ok=True)
+            
+            # Download the repository as a zip file
+            self.update_progress_text("Downloading Settings from repository...")
+            self.update_progress(0.1)
+            self.log("Downloading Settings from GitHub repository...", "info")
+            repo_zip = temp_dir / "AffinityOnLinux.zip"
+            repo_url = "https://github.com/seapear/AffinityOnLinux/archive/refs/heads/main.zip"
+            
+            if not self.download_file(repo_url, str(repo_zip), "Settings repository"):
+                self.log("Failed to download Settings repository", "error")
+                self.log(f"  URL: {repo_url}", "error")
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception:
+                    pass
+                return
+            
+            # Verify the zip file was downloaded
+            if not repo_zip.exists() or repo_zip.stat().st_size == 0:
+                self.log("Downloaded zip file is missing or empty", "error")
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception:
+                    pass
+                return
+            
+            self.log(f"Downloaded zip file size: {repo_zip.stat().st_size / 1024 / 1024:.2f} MB", "info")
+            
+            # Extract the zip file
+            self.update_progress_text("Extracting Settings repository...")
+            self.update_progress(0.3)
+            self.log("Extracting Settings repository...", "info")
+            try:
+                if self.check_command("7z"):
+                    success, stdout, stderr = self.run_command([
+                        "7z", "x", str(repo_zip), f"-o{temp_dir}", "-y"
+                    ])
+                    if not success:
+                        self.log(f"7z extraction failed: {stderr}", "error")
+                        raise Exception("7z extraction failed")
+                    self.log("Extraction completed with 7z", "success")
+                elif self.check_command("unzip"):
+                    with zipfile.ZipFile(repo_zip, 'r') as zip_ref:
+                        zip_ref.extractall(temp_dir)
+                    self.log("Extraction completed with unzip", "success")
+                else:
+                    self.log("Neither 7z nor unzip available for extraction", "error")
+                    self.log("Please install 7z or unzip to extract the repository", "error")
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception:
+                        pass
+                    return
+                
+                # Find the extracted directory (usually AffinityOnLinux-main)
+                extracted_dirs = list(temp_dir.glob("AffinityOnLinux-*"))
+                self.log(f"Found {len(extracted_dirs)} extracted director{'y' if len(extracted_dirs) == 1 else 'ies'}", "info")
+                
+                extracted_dir = extracted_dirs[0] if extracted_dirs else None
+                if not extracted_dir:
+                    self.log("Could not find extracted repository directory", "error")
+                    self.log(f"Contents of temp_dir: {[d.name for d in temp_dir.iterdir()]}", "error")
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception:
+                        pass
+                    return
+                
+                self.log(f"Using extracted directory: {extracted_dir.name}", "info")
+                
+                # Check if Auxiliary directory exists
+                auxiliary_dir = extracted_dir / "Auxiliary"
+                if not auxiliary_dir.exists():
+                    self.log("Auxiliary directory not found in repository", "error")
+                    self.log(f"Contents of extracted directory: {[d.name for d in extracted_dir.iterdir()]}", "error")
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception:
+                        pass
+                    return
+                
+                settings_dir = auxiliary_dir / "Settings"
+                if not settings_dir.exists():
+                    self.log("Settings directory not found in Auxiliary", "error")
+                    self.log(f"Contents of Auxiliary: {[d.name for d in auxiliary_dir.iterdir()]}", "error")
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception:
+                        pass
+                    return
+                
+                # List what's in the Settings directory
+                settings_contents = [d.name for d in settings_dir.iterdir() if d.is_dir()]
+                self.log(f"Found Settings folders: {settings_contents}", "info")
+                
+                # Source Settings directory path - For Affinity v3 (Unified), use 3.0
+                # $APP would be "Affinity" and version is 3.0
+                # So the source should be: Auxiliary/Settings/Affinity/3.0/Settings
+                self.update_progress_text("Locating Settings files...")
+                self.update_progress(0.5)
+                settings_source_dirs = [
+                    settings_dir / "Affinity" / "3.0" / "Settings",  # Affinity v3 uses 3.0
+                    settings_dir / "Affinity" / "Settings",
+                    settings_dir / "Unified" / "3.0" / "Settings",
+                    settings_dir / "Unified" / "Settings",
+                ]
+                
+                settings_source = None
+                for source_dir in settings_source_dirs:
+                    if source_dir.exists():
+                        files = list(source_dir.iterdir())
+                        if files:
+                            settings_source = source_dir
+                            self.log(f"Found settings at: {source_dir.relative_to(extracted_dir)}", "success")
+                            self.log(f"  Contains {len(files)} file(s)/folder(s)", "info")
+                            break
+                
+                if not settings_source:
+                    self.log("Settings directory not found in repository", "error")
+                    self.log("Tried paths:", "error")
+                    for path in settings_source_dirs:
+                        self.log(f"  - {path.relative_to(extracted_dir)}: {'exists' if path.exists() else 'not found'}", "error")
+                    
+                    # List what's actually in Settings/Affinity if it exists
+                    affinity_settings = settings_dir / "Affinity"
+                    if affinity_settings.exists():
+                        self.log(f"Contents of Settings/Affinity: {[d.name for d in affinity_settings.iterdir()]}", "info")
+                    
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception:
+                        pass
+                    return
+                
+                # Target directory in Wine prefix
+                # Based on Settings.md: mv $APP/3.0/Settings drive_c/users/$USERNAME/AppData/Roaming/Affinity/
+                # For Affinity v3, this means: Affinity/3.0/Settings -> AppData/Roaming/Affinity/Affinity/3.0/Settings
+                affinity_appdata = users_dir / username / "AppData" / "Roaming" / "Affinity"
+                
+                # Check what version folder Affinity v3 actually uses by looking at existing structure
+                affinity_dir = affinity_appdata / "Affinity"
+                version_folder = None
+                if affinity_dir.exists():
+                    existing_versions = [d.name for d in affinity_dir.iterdir() if d.is_dir()]
+                    if existing_versions:
+                        # Prefer 3.0 for Affinity v3
+                        if "3.0" in existing_versions:
+                            version_folder = "3.0"
+                        elif "2.0" in existing_versions:
+                            version_folder = "2.0"
+                        else:
+                            # Use the first one found (sorted)
+                            version_folder = sorted(existing_versions)[0]
+                        self.log(f"Found existing Affinity version folder: {version_folder}", "info")
+                
+                # If no existing version folder, use 3.0 for Affinity v3
+                if not version_folder:
+                    # Try to detect from source path
+                    source_parts = settings_source.parts
+                    if "3.0" in source_parts:
+                        version_folder = "3.0"
+                    elif "2.0" in source_parts:
+                        version_folder = "2.0"
+                    else:
+                        version_folder = "3.0"  # Default to 3.0 for Affinity v3
+                    self.log(f"Using version folder: {version_folder} (Affinity v3 uses 3.0)", "info")
+                
+                # Target path: AppData/Roaming/Affinity/Affinity/3.0/Settings (for v3)
+                target_dir = affinity_appdata / "Affinity" / version_folder / "Settings"
+                
+                # Remove existing settings if they exist (to force fresh copy)
+                if target_dir.exists():
+                    self.log(f"Removing existing settings from: {target_dir}", "info")
+                    try:
+                        shutil.rmtree(target_dir)
+                        self.log("Old settings removed", "success")
+                    except Exception as e:
+                        self.log(f"Warning: Could not fully remove old settings: {e}", "warning")
+                
+                # Copy settings from source to target
+                self.update_progress_text("Copying Settings files...")
+                self.update_progress(0.7)
+                target_dir.parent.mkdir(parents=True, exist_ok=True)
+                self.log(f"Copying settings from repository to Wine prefix...", "info")
+                self.log(f"  From: {settings_source}", "info")
+                self.log(f"  To: {target_dir}", "info")
+                
+                # Copy with metadata preservation
+                shutil.copytree(settings_source, target_dir, dirs_exist_ok=True)
+                self.update_progress(0.9)
+                self.log(f"Settings copied successfully to: {target_dir}", "success")
+                
+                # Verify the copy
+                copied_files = list(target_dir.rglob("*"))
+                source_files = list(settings_source.rglob("*"))
+                self.log(f"Copied {len(copied_files)} file(s)/folder(s) (source had {len(source_files)})", "success")
+                
+                # List some of the copied files for verification
+                xml_files = list(target_dir.rglob("*.xml"))
+                if xml_files:
+                    self.log(f"Found {len(xml_files)} XML file(s) in settings", "info")
+                    for xml_file in xml_files[:5]:  # Show first 5
+                        self.log(f"  - {xml_file.relative_to(target_dir)}", "info")
+                
+                # Set permissions (make sure files are readable)
+                try:
+                    import os
+                    for root, dirs, files in os.walk(target_dir):
+                        for d in dirs:
+                            os.chmod(os.path.join(root, d), 0o755)
+                        for f in files:
+                            os.chmod(os.path.join(root, f), 0o644)
+                    self.log("File permissions set correctly", "success")
+                except Exception as e:
+                    self.log(f"Note: Could not set permissions: {e}", "warning")
+                
+                # Clean up temp files
+                try:
+                    shutil.rmtree(temp_dir)
+                    self.log("Temp files cleaned up", "info")
+                except Exception as e:
+                    self.log(f"Note: Could not clean up temp files: {e}", "warning")
+                
+                self.update_progress(1.0)
+                self.update_progress_text("Settings installation complete!")
+                self.log("\n✓ Affinity v3 settings installation completed!", "success")
+                self.log("Settings files have been installed for Affinity v3 (Unified).", "info")
+                
+            except Exception as e:
+                import traceback
+                self.log(f"Error installing settings: {e}", "error")
+                self.log(f"Traceback: {traceback.format_exc()}", "error")
+            try:
+                shutil.rmtree(temp_dir)
+                repo_zip.unlink(missing_ok=True)
+            except Exception:
+                pass
         except Exception as e:
             import traceback
             self.log(f"Error installing settings: {e}", "error")
@@ -2679,13 +4759,21 @@ class AffinityInstallerGUI(QMainWindow):
         if app_name:
             self.log(f"Will automatically create desktop entry for {app_name}", "info")
         
-        # Start installation
+        # Start operation and installation
+        self.start_operation("Custom Installation")
         threading.Thread(
-            target=self.run_custom_installation,
+            target=self._run_custom_installation_entry,
             args=(installer_path, app_name),
             daemon=True
         ).start()
     
+    def _run_custom_installation_entry(self, installer_path, app_name):
+        """Wrapper: run custom installation and always end operation."""
+        try:
+            self.run_custom_installation(installer_path, app_name)
+        finally:
+            self.end_operation()
+
     def run_custom_installation(self, installer_path, app_name):
         """Run custom installation process"""
         try:
@@ -2696,7 +4784,7 @@ class AffinityInstallerGUI(QMainWindow):
             sanitized_filename = self.sanitize_filename(original_filename)
             installer_file = Path(self.directory) / sanitized_filename
             shutil.copy2(installer_path, installer_file)
-            self.log("Installer copied to Wine prefix", "success")
+            self.log(f"Installer {original_filename} copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
             
             # Set Windows version
             wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
@@ -2711,15 +4799,16 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Follow the installation wizard in the window that opens.", "info")
             self.log("Click 'No' if you encounter any errors.", "warning")
             
-            self.run_command([str(wine), str(installer_file)], check=False, env=env, capture=False)
-            
-            # Wait for completion
-            time.sleep(3)
-            
+            # Run installer and wait until it finishes, capturing logs (with fallback)
+            success = self._run_installer_and_capture(installer_file, env, label="installer")
+            if not success and not self.check_cancelled():
+                self.log("Installer process exited with a non-zero status", "warning")
+            else:
+                self.log("Installer succes.")
             # Clean up installer
-            if installer_file.exists():
-                installer_file.unlink()
-            self.log("Installer file removed", "success")
+            # if installer_file.exists():
+            #     installer_file.unlink()
+            # self.log("Installer file removed", "success")
             
             # Restore WinMetadata
             self.restore_winmetadata()
@@ -2889,13 +4978,21 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Update cancelled.", "warning")
             return
         
-        # Start update in thread
+        # Start operation and update in thread
+        self.start_operation(f"Update {display_name}")
         threading.Thread(
-            target=self.run_update,
+            target=self._run_update_entry,
             args=(display_name, installer_path),
             daemon=True
         ).start()
     
+    def _run_update_entry(self, display_name, installer_path):
+        """Wrapper: run update and always end operation."""
+        try:
+            self.run_update(display_name, installer_path)
+        finally:
+            self.end_operation()
+
     def run_update(self, display_name, installer_path):
         """Run the update process - simple installer without desktop entries or deps"""
         try:
@@ -2910,7 +5007,7 @@ class AffinityInstallerGUI(QMainWindow):
             sanitized_filename = self.sanitize_filename(original_filename)
             installer_file = Path(self.directory) / sanitized_filename
             shutil.copy2(installer_path, installer_file)
-            self.log("Installer copied to Wine prefix", "success")
+            self.log(f"Installer copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
             
             # Set up environment
             self.update_progress_text("Configuring Wine...")
@@ -2927,10 +5024,10 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Follow the installation wizard in the window that opens.", "info")
             self.log("This will update the application without creating desktop entries.", "info")
             
-            self.run_command([str(wine), str(installer_file)], check=False, env=env, capture=False)
-            
-            # Wait a moment for installer to complete
-            time.sleep(3)
+            # Run updater and wait, capturing logs (with fallback)
+            success = self._run_installer_and_capture(installer_file, env, label="updater")
+            if not success and not self.check_cancelled():
+                self.log("Updater process exited with a non-zero status", "warning")
             
             # Clean up installer
             if installer_file.exists():
@@ -3057,6 +5154,13 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Update error: {e}", "error")
             self.show_message("Update Error", f"An error occurred:\n{e}", "error")
     
+    def _run_installation_entry(self, app_name, installer_path):
+        """Wrapper: run installation and always end operation."""
+        try:
+            self.run_installation(app_name, installer_path)
+        finally:
+            self.end_operation()
+
     def run_installation(self, app_name, installer_path):
         """Run the installation process"""
         try:
@@ -3071,7 +5175,7 @@ class AffinityInstallerGUI(QMainWindow):
             sanitized_filename = self.sanitize_filename(original_filename)
             installer_file = Path(self.directory) / sanitized_filename
             shutil.copy2(installer_path, installer_file)
-            self.log("Installer copied", "success")
+            self.log(f"Installer copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
             
             # Set Windows version
             self.update_progress_text("Configuring Wine...")
@@ -3090,10 +5194,10 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Follow the installation wizard in the window that opens.", "info")
             self.log("Click 'No' if you encounter any errors.", "warning")
             
-            self.run_command([str(wine), str(installer_file)], check=False, env=env, capture=False)
-            
-            # Wait for completion
-            time.sleep(3)
+            # Run installer and wait, capturing logs (with fallback)
+            success = self._run_installer_and_capture(installer_file, env, label="installer")
+            if not success and not self.check_cancelled():
+                self.log("Installer process exited with a non-zero status", "warning")
             
             # Clean up installer
             self.update_progress(0.5)
@@ -3281,6 +5385,25 @@ class AffinityInstallerGUI(QMainWindow):
         self.log(f"Desktop entry created: {desktop_file}", "success")
         self.log("Desktop shortcut created", "success")
     
+    def _download_affinity_installer_thread(self, save_path_obj: Path):
+        """Worker: Download Affinity installer and end operation."""
+        download_url = "https://downloads.affinity.studio/Affinity%20x64.exe"
+        self.log(f"Downloading from: {download_url}", "info")
+        self.log(f"Saving to: {save_path_obj}", "info")
+        try:
+            if self.download_file(download_url, str(save_path_obj), "Affinity installer"):
+                self.log(f"\n✓ Download completed successfully!", "success")
+                self.log(f"Installer saved to: {save_path_obj}", "success")
+                self.show_message(
+                    "Download Complete",
+                    "Affinity installer has been downloaded successfully!\n\nYou can now run it with the installer buttons.",
+                    "info"
+                )
+            else:
+                self.log("✗ Download failed", "error")
+        finally:
+            self.end_operation()
+
     def open_winecfg(self):
         """Open Wine Configuration tool using custom Wine"""
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -3357,11 +5480,15 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Windows 11 + Renderer Configuration", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
+        # Start operation for renderer configuration
+        self.start_operation("Configure Renderer")
+        
         wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
         
         if not wine_cfg.exists():
             self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
             self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
+            self.end_operation()
             return
         
         # Ask user to choose renderer
@@ -3394,6 +5521,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         if dialog.exec() != QDialog.DialogCode.Accepted:
             self.log("Renderer configuration cancelled", "warning")
+            self.end_operation()
             return
         
         # Determine selected renderer
@@ -3436,6 +5564,7 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  Error: {stderr[:200] if stderr else 'Unknown error'}", "error")
         
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
+        self.end_operation()
     
     def set_dpi_scaling(self):
         """Set DPI scaling for Affinity applications"""
@@ -3786,31 +5915,13 @@ class AffinityInstallerGUI(QMainWindow):
         
         save_path_obj = Path(save_path)
         
-        # Download the installer
-        download_url = "https://downloads.affinity.studio/Affinity%20x64.exe"
+        # Start operation and thread to download
+        self.start_operation("Download Affinity Installer")
+        threading.Thread(target=self._download_affinity_installer_thread, args=(save_path_obj,), daemon=True).start()
         
-        self.log(f"Downloading from: {download_url}", "info")
-        self.log(f"Saving to: {save_path_obj}", "info")
-        
-        if self.download_file(download_url, str(save_path_obj), "Affinity installer"):
-            self.log(f"\n✓ Download completed successfully!", "success")
-            self.log(f"Installer saved to: {save_path_obj}", "success")
-            self.show_message(
-                "Download Complete",
-                f"Affinity installer has been downloaded successfully!\n\n"
-                f"Saved to:\n{save_path_obj}\n\n"
-                f"You can now use this installer with 'Install from File Manager' or during installation.",
-                "info"
-            )
-        else:
-            self.log("Download failed.", "error")
-            self.show_message(
-                "Download Failed",
-                f"Failed to download the Affinity installer.\n\n"
-                f"You can try downloading manually from:\n"
-                f"https://downloads.affinity.studio/Affinity%20x64.exe",
-                "error"
-            )
+        # The rest of the logic should be in the _download_affinity_installer_thread method
+        # This is just a placeholder to fix the syntax error
+        pass
     
     def show_thanks(self):
         """Show special thanks window"""

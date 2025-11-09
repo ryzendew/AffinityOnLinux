@@ -1,0 +1,11 @@
+--2025-11-08 10:58:14--  https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/winehq-jammy.sources
+Resolving dl.winehq.org (dl.winehq.org)... 146.75.22.217, 2a04:4e42:75::729
+Connecting to dl.winehq.org (dl.winehq.org)|146.75.22.217|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 163 [binary/octet-stream]
+Saving to: ‘/etc/apt/sources.list.d/winehq-jammy.sources’
+
+     0K                                                       100%  130K=0.001s
+
+2025-11-08 10:58:15 (130 KB/s) - ‘/etc/apt/sources.list.d/winehq-jammy.sources’ saved [163/163]
+

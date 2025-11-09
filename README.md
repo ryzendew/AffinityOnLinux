@@ -2,6 +2,8 @@
 
 A comprehensive solution for running [Affinity software](https://www.affinity.studio/) on GNU/Linux systems using Wine with full OpenCL hardware acceleration support.
 
+![Affinity on Linux Screenshot](./aol-screenshot.png)
+
 ## Features
 
 - **Full OpenCL Support** - Hardware acceleration enabled out of the box
@@ -15,6 +17,7 @@ A comprehensive solution for running [Affinity software](https://www.affinity.st
 OpenCL support is fully functional, enabling GPU acceleration for improved performance in Affinity applications.
 
 <img width="2559" height="1441" alt="OpenCL Hardware Acceleration" src="https://github.com/user-attachments/assets/b5350cbf-09a3-4ba2-9e98-aec86a73986b" />
+
 
 ## Supported Applications
 
