@@ -6030,6 +6030,37 @@ class AffinityInstallerGUI(QMainWindow):
         
         return False
     
+    def get_renderer_setting(self):
+        """Get the current renderer setting from registry (vulkan, opengl, or gdi)"""
+        try:
+            wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            if not wine.exists():
+                return "vulkan"  # Default to vulkan if Wine not set up
+            
+            env = os.environ.copy()
+            env["WINEPREFIX"] = self.directory
+            
+            success, stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D", "/v", "renderer"],
+                check=False,
+                env=env,
+                capture=True
+            )
+            
+            if success and stdout:
+                stdout_lower = stdout.lower()
+                if "opengl" in stdout_lower:
+                    return "opengl"
+                elif "gdi" in stdout_lower:
+                    return "gdi"
+                elif "vulkan" in stdout_lower:
+                    return "vulkan"
+            
+            # Default to vulkan if not found
+            return "vulkan"
+        except Exception:
+            return "vulkan"  # Default to vulkan on error
+    
     def configure_opencl(self, app_name):
         """Configure OpenCL for application"""
         # Only configure if OpenCL is enabled
@@ -7121,19 +7152,44 @@ class AffinityInstallerGUI(QMainWindow):
                     key, value = env_var.split("=", 1)
                     env[key] = value
         
-        # DXVK settings
-        env["DXVK_ASYNC"] = "0"
-        env["DXVK_CONFIG"] = "d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1"
-        env["DXVK_FRAME_RATE"] = "60"
-        env["DXVK_LOG_LEVEL"] = "none"
+        # Check renderer setting - only set DXVK/VKD3D if Vulkan is selected
+        renderer = self.get_renderer_setting()
         
-        # VKD3D settings
-        env["VKD3D_DEBUG"] = "none"
-        env["VKD3D_DISABLE_EXTENSIONS"] = "VK_KHR_present_id"
-        env["VKD3D_FEATURE_LEVEL"] = "12_1"
-        env["VKD3D_FRAME_RATE"] = "60"
-        env["VKD3D_SHADER_DEBUG"] = "none"
-        env["VKD3D_SHADER_MODEL"] = "6_5"
+        if renderer == "vulkan":
+            # DXVK settings (only for Vulkan renderer)
+            env["DXVK_ASYNC"] = "0"
+            env["DXVK_CONFIG"] = "d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1"
+            env["DXVK_FRAME_RATE"] = "60"
+            env["DXVK_LOG_LEVEL"] = "none"
+            
+            # VKD3D settings (only for Vulkan renderer)
+            env["VKD3D_DEBUG"] = "none"
+            env["VKD3D_DISABLE_EXTENSIONS"] = "VK_KHR_present_id"
+            env["VKD3D_FEATURE_LEVEL"] = "12_1"
+            env["VKD3D_FRAME_RATE"] = "60"
+            env["VKD3D_SHADER_DEBUG"] = "none"
+            env["VKD3D_SHADER_MODEL"] = "6_5"
+        else:
+            # For OpenGL or GDI, disable DXVK/VKD3D to prevent Vulkan initialization errors
+            # Also disable DLL overrides that might force Vulkan
+            env["DXVK_STATE_CACHE"] = "0"
+            env["DXVK_HUD"] = "0"
+            # Don't set VKD3D variables for OpenGL/GDI
+            self.log(f"Renderer is set to {renderer.upper()}, DXVK/VKD3D disabled", "info")
+            
+            # If OpenGL/GDI is selected and OpenCL is disabled, remove d3d12 DLL overrides
+            # that might force Vulkan usage
+            if not self.is_opencl_enabled():
+                self.log("Removing d3d12 DLL overrides to prevent Vulkan initialization", "info")
+                try:
+                    wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+                    reg_env = os.environ.copy()
+                    reg_env["WINEPREFIX"] = self.directory
+                    # Remove d3d12 and d3d12core overrides
+                    self.run_command([str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", "d3d12", "/f"], check=False, env=reg_env, capture=True)
+                    self.run_command([str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", "d3d12core", "/f"], check=False, env=reg_env, capture=True)
+                except Exception as e:
+                    self.log(f"Warning: Could not remove d3d12 DLL overrides: {e}", "warning")
         
         self.log("✓ Environment variables configured", "success")
         self.log(f"Wine: {wine_bin}", "info")
