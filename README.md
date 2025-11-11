@@ -2,7 +2,8 @@
 
 A comprehensive solution for running [Affinity software](https://www.affinity.studio/) on GNU/Linux systems using Wine with full OpenCL hardware acceleration support.
 
-![Affinity on Linux Screenshot](./aol-screenshot.png)
+<img width="1276" height="1328" alt="image" src="https://github.com/user-attachments/assets/99ee6679-7048-4714-b852-316e0efade69" />
+
 
 ## Features
 
@@ -11,13 +12,13 @@ A comprehensive solution for running [Affinity software](https://www.affinity.st
 - **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
 - **Desktop Integration** - Automatic desktop entry and shortcut creation
 - **Wine Configuration** - Pre-configured Wine environment optimized for Affinity applications
+- **Settings Save now** - Affinity v3 Settings will save.
 
 ## OpenCL Hardware Acceleration
 
 OpenCL support is fully functional, enabling GPU acceleration for improved performance in Affinity applications.
 
 <img width="2559" height="1441" alt="OpenCL Hardware Acceleration" src="https://github.com/user-attachments/assets/b5350cbf-09a3-4ba2-9e98-aec86a73986b" />
-
 
 ## Supported Applications
 
