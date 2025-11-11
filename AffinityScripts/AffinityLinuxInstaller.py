@@ -2695,15 +2695,18 @@ class AffinityInstallerGUI(QMainWindow):
             icons_dir.mkdir(parents=True, exist_ok=True)
             
             # List of application icons to download from GitHub
-            # Note: icons are in the icons/ directory in the repository root
+            # Note: icons are in Assets/Icons/ directory in the repository
+            # Using the same URLs as setup_wine function for consistency
             icon_files = [
-                ("Affinity.png", "icons/Affinity.png"),
-                ("AffinityDesigner.png", "icons/AffinityDesigner.png"),
-                ("AffinityPhoto.png", "icons/AffinityPhoto.png"),
-                ("AffinityPublisher.svg", "icons/AffinityPublisher.svg"),
-                ("Affinity-Canva.svg", "icons/Affinity-Canva.svg"),
-                ("Affinity-Canva.png", "icons/Affinity-Canva.png"),
-                ("Affinity-Canva.ico", "icons/Affinity-Canva.ico"),
+                # Application icons - using SVG versions from Assets/Icons
+                ("Affinity-Canva.svg", "Assets/Icons/Affinity-Canva.svg"),
+                ("Photo.svg", "Assets/Icons/Photo.svg"),
+                ("Designer.svg", "Assets/Icons/Designer.svg"),
+                ("Publisher.svg", "Assets/Icons/Publisher.svg"),
+                # Application icons with full names (using same URLs as setup_wine)
+                ("AffinityPhoto.svg", "https://github.com/user-attachments/assets/c7b70ee5-58e3-46c6-b385-7c3d02749664"),
+                ("AffinityDesigner.svg", "https://github.com/user-attachments/assets/8ea7f748-c455-4ee8-9a94-775de40dbbf3"),
+                ("AffinityPublisher.svg", "https://github.com/user-attachments/assets/96ae06f8-470b-451f-ba29-835324b5b552"),
             ]
             
             # Check which icons are missing
@@ -2728,7 +2731,12 @@ class AffinityInstallerGUI(QMainWindow):
             for local_name, github_path in missing_icons:
                 icon_path = icons_dir / local_name
                 try:
-                    icon_url = base_url + github_path
+                    # Check if github_path is a full URL (for user-attachments) or relative path
+                    if github_path.startswith("http://") or github_path.startswith("https://"):
+                        icon_url = github_path
+                    else:
+                        icon_url = base_url + github_path
+                    
                     # Use urlretrieve with better error handling
                     urllib.request.urlretrieve(icon_url, str(icon_path))
                     downloaded_count += 1
