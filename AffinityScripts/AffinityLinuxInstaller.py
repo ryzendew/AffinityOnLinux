@@ -1838,20 +1838,82 @@ class AffinityInstallerGUI(QMainWindow):
     def validate_sudo_password(self, password):
         """Validate sudo password by running a test command"""
         try:
+            # Set up environment for sudo
+            env = os.environ.copy()
+            # Unset SUDO_ASKPASS to force sudo to read password from stdin via -S flag
+            # This prevents errors when askpass programs (like ksshaskpass) don't exist
+            env.pop('SUDO_ASKPASS', None)
+            
             # Test the password with a harmless sudo command
             process = subprocess.Popen(
                 ["sudo", "-S", "true"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                env=env,
+                preexec_fn=os.setsid  # Create new process group
             )
-            stdout, stderr = process.communicate(input=f"{password}\n", timeout=5)
+            
+            # Send password and wait for completion with timeout
+            try:
+                stdout, stderr = process.communicate(input=f"{password}\n", timeout=15)
+            except subprocess.TimeoutExpired:
+                # Timeout occurred, terminate the process and all its children
+                try:
+                    # Try to kill the process group first
+                    if process.pid:
+                        try:
+                            pgid = os.getpgid(process.pid)
+                            os.killpg(pgid, signal.SIGTERM)
+                            time.sleep(0.5)
+                            # Force kill if still running
+                            if process.poll() is None:
+                                os.killpg(pgid, signal.SIGKILL)
+                        except (ProcessLookupError, OSError, AttributeError):
+                            # Process group doesn't exist or process already terminated
+                            process.kill()
+                except Exception:
+                    # Fallback to simple kill
+                    try:
+                        process.kill()
+                    except Exception:
+                        pass
+                try:
+                    process.communicate()
+                except Exception:
+                    pass
+                self.log("Password validation timed out - sudo may be waiting for input", "error")
+                self.sudo_password_validated = False
+                return False
+            except Exception as e:
+                # Other I/O errors - check if process succeeded anyway
+                try:
+                    if process.poll() is None:
+                        process.wait(timeout=1)
+                except Exception:
+                    pass
+                # If return code is 0, validation succeeded despite the error
+                if process.returncode == 0:
+                    self.sudo_password_validated = True
+                    return True
+                self.log(f"Error validating sudo password: {e}", "error")
+                self.sudo_password_validated = False
+                return False
             
             if process.returncode == 0:
                 self.sudo_password_validated = True
                 return True
             else:
+                # Check stderr for more details
+                if stderr:
+                    error_msg = stderr.strip()
+                    if "incorrect password" in error_msg.lower() or "sorry" in error_msg.lower():
+                        self.log("Incorrect password", "error")
+                    else:
+                        self.log(f"Password validation failed: {error_msg}", "error")
+                else:
+                    self.log("Password validation failed", "error")
                 self.sudo_password_validated = False
                 return False
         except Exception as e:
@@ -2009,8 +2071,12 @@ class AffinityInstallerGUI(QMainWindow):
     def run_command(self, command, check=True, shell=False, capture=True, env=None):
         """Execute shell command with GUI sudo password support and cancellation."""
         try:
+            # Convert command to list if it's a string
             if isinstance(command, str) and not shell:
                 command = command.split()
+            # Ensure command is a list
+            if not isinstance(command, list):
+                command = list(command)
             
             # Set up environment for non-interactive operation
             if env is None:
@@ -2026,6 +2092,11 @@ class AffinityInstallerGUI(QMainWindow):
             
             # Check if this is a sudo command
             is_sudo = isinstance(command, list) and len(command) > 0 and command[0] == "sudo"
+            
+            # Unset SUDO_ASKPASS to force sudo to read password from stdin via -S flag
+            # This prevents errors when askpass programs (like ksshaskpass) don't exist
+            if is_sudo:
+                env.pop('SUDO_ASKPASS', None)  # Remove SUDO_ASKPASS if it exists
             
             if is_sudo:
                 # Get password if needed
@@ -2053,8 +2124,18 @@ class AffinityInstallerGUI(QMainWindow):
                 
                 # Run command with password via stdin
                 # Add -S flag to read password from stdin if not present
-                if "-S" not in command:
-                    command.insert(1, "-S")
+                # Make sure -S is right after "sudo"
+                # Create a copy to avoid modifying the original
+                command = list(command)
+                if len(command) > 1:
+                    # Only add -S if it's not already in position 1 (right after sudo)
+                    # Don't remove -S that's part of the actual command (like pacman -S)
+                    if command[1] != "-S":
+                        # Insert -S right after "sudo"
+                        command.insert(1, "-S")
+                else:
+                    # Only "sudo" in command, add -S
+                    command.append("-S")
                 
                 proc = subprocess.Popen(
                     command,
@@ -2062,7 +2143,7 @@ class AffinityInstallerGUI(QMainWindow):
                     stdout=subprocess.PIPE if capture else None,
                     stderr=subprocess.PIPE if capture else None,
                     text=True,
-                    env=env if env else os.environ.copy(),
+                    env=env,  # Use the modified env that has SUDO_ASKPASS removed
                     preexec_fn=os.setsid
                 )
                 self._register_process(proc)
@@ -2075,6 +2156,7 @@ class AffinityInstallerGUI(QMainWindow):
                         stderr_acc = ""
                         # Read output without timeout for long-running commands like package installation
                         try:
+                            # Use communicate with input - this is the safest way
                             out, err = proc.communicate(input=password_input, timeout=None)
                             stdout_acc += out or ""
                             stderr_acc += err or ""
@@ -2090,20 +2172,85 @@ class AffinityInstallerGUI(QMainWindow):
                                 stderr_acc += err or ""
                             except Exception:
                                 pass
-                        except (BrokenPipeError, OSError) as e:
-                            self.log(f"Error sending password to sudo: {e}", "error")
+                        except Exception as e:
+                            # Catch all exceptions including "I/O operation on closed file"
+                            error_msg = str(e)
+                            error_type = type(e).__name__
+                            
+                            # Check if process completed successfully despite the error
+                            try:
+                                if proc.poll() is None:
+                                    # Process still running, wait a bit
+                                    proc.wait(timeout=2)
+                            except Exception:
+                                pass
+                            
+                            # If return code is 0, the operation succeeded despite the exception
+                            if proc.returncode == 0:
+                                # Try to read any remaining output
+                                try:
+                                    if proc.stdout and not proc.stdout.closed:
+                                        remaining = proc.stdout.read()
+                                        if remaining:
+                                            stdout_acc += remaining
+                                except Exception:
+                                    pass
+                                try:
+                                    if proc.stderr and not proc.stderr.closed:
+                                        remaining = proc.stderr.read()
+                                        if remaining:
+                                            stderr_acc += remaining
+                                except Exception:
+                                    pass
+                                # Operation succeeded, return success
+                                return True, stdout_acc, stderr_acc
+                            
+                            # Only report error if return code indicates failure
+                            if "closed file" in error_msg.lower() or "I/O operation" in error_msg:
+                                # This is often a harmless error if the process succeeded
+                                if proc.returncode == 0:
+                                    return True, stdout_acc, stderr_acc
+                                # If it failed, log it
+                                self.log(f"Error during command execution ({error_type}): {error_msg}", "error")
+                            else:
+                                self.log(f"Error during command execution ({error_type}): {error_msg}", "error")
+                            
                             self._terminate_process(proc)
-                            return False, "", "Failed to send password to sudo"
+                            return False, stdout_acc, stderr_acc or error_msg
+                        
                         success = proc.returncode == 0
                         return success, stdout_acc, stderr_acc
                     else:
                         # No capture: send password and wait for completion
                         try:
                             proc.communicate(input=password_input, timeout=None)
-                        except (BrokenPipeError, OSError) as e:
-                            self.log(f"Error sending password to sudo: {e}", "error")
+                        except Exception as e:
+                            # Catch all exceptions including "I/O operation on closed file"
+                            error_msg = str(e)
+                            
+                            # Check if process completed successfully despite the error
+                            try:
+                                if proc.poll() is None:
+                                    proc.wait(timeout=2)
+                            except Exception:
+                                pass
+                            
+                            # If return code is 0, operation succeeded despite the exception
+                            if proc.returncode == 0:
+                                return True, "", ""
+                            
+                            # Only report error if return code indicates failure
+                            if "closed file" in error_msg.lower() or "I/O operation" in error_msg:
+                                # This is often a harmless error if the process succeeded
+                                if proc.returncode == 0:
+                                    return True, "", ""
+                                # If it failed, log it
+                                self.log(f"Error during command execution: {error_msg}", "error")
+                            else:
+                                self.log(f"Error during command execution: {error_msg}", "error")
+                            
                             self._terminate_process(proc)
-                            return False, "", "Failed to send password to sudo"
+                            return False, "", error_msg
                         except subprocess.TimeoutExpired:
                             # This shouldn't happen with timeout=None, but handle it just in case
                             if self.cancel_event.is_set():
@@ -2178,6 +2325,11 @@ class AffinityInstallerGUI(QMainWindow):
             env['APT_LISTCHANGES_FRONTEND'] = 'none'
             env['LANG'] = 'C'  # Use C locale to avoid encoding issues
             env['LC_ALL'] = 'C'
+            
+            # Unset SUDO_ASKPASS if this is a sudo command
+            is_sudo = isinstance(command, list) and len(command) > 0 and command[0] == "sudo"
+            if is_sudo:
+                env.pop('SUDO_ASKPASS', None)
             
             process = subprocess.Popen(
                 command,
@@ -2359,6 +2511,11 @@ class AffinityInstallerGUI(QMainWindow):
             # Check if this is a sudo command
             is_sudo = isinstance(command, list) and len(command) > 0 and command[0] == "sudo"
             
+            # Unset SUDO_ASKPASS to force sudo to read password from stdin via -S flag
+            # This prevents errors when askpass programs (like ksshaskpass) don't exist
+            if is_sudo:
+                env.pop('SUDO_ASKPASS', None)
+            
             if is_sudo:
                 # Get password if needed
                 password = self.get_sudo_password()
@@ -2373,8 +2530,18 @@ class AffinityInstallerGUI(QMainWindow):
                         return False, "", "Authentication failed"
                 
                 # Add -S flag if not present
-                if "-S" not in command:
-                    command.insert(1, "-S")
+                # Create a copy to avoid modifying the original
+                command = list(command)
+                if len(command) > 1:
+                    if command[1] != "-S":
+                        # Remove -S if it exists elsewhere (safely)
+                        while "-S" in command:
+                            command.remove("-S")
+                        # Insert -S right after "sudo"
+                        command.insert(1, "-S")
+                else:
+                    # Only "sudo" in command, add -S
+                    command.append("-S")
             
             # Start process
             process = subprocess.Popen(
@@ -2967,21 +3134,45 @@ class AffinityInstallerGUI(QMainWindow):
             # Request password before attempting installation
             self.log("Administrator privileges required for package installation.", "info")
             self.update_progress_text("Requesting administrator password...")
-            password = self.get_sudo_password()
-            if password is None:
-                self.log("Password entry cancelled. Cannot install dependencies.", "error")
+            
+            # Try to get and validate password (with retries)
+            max_password_attempts = 3
+            password_valid = False
+            
+            for password_attempt in range(max_password_attempts):
+                password = self.get_sudo_password()
+                if password is None:
+                    self.log("Password entry cancelled. Cannot install dependencies.", "error")
+                    self.update_progress_text("Dependency installation cancelled")
+                    return False
+                
+                # Validate password before proceeding
+                if not self.sudo_password_validated:
+                    self.log(f"Validating password... (attempt {password_attempt + 1}/{max_password_attempts})", "info")
+                    if self.validate_sudo_password(password):
+                        self.log("Password validated successfully.", "success")
+                        password_valid = True
+                        break
+                    else:
+                        if password_attempt < max_password_attempts - 1:
+                            self.log("Password validation failed. Please try again.", "error")
+                            # Clear the password to force a new dialog on next get_sudo_password call
+                            self.sudo_password = None
+                            self.sudo_password_validated = False
+                            # Wait a moment for user to see the error message
+                            time.sleep(1)
+                        else:
+                            self.log("Password validation failed after multiple attempts.", "error")
+                            return False
+                else:
+                    # Password already validated
+                    password_valid = True
+                    break
+            
+            if not password_valid:
+                self.log("Could not validate password. Cannot install dependencies.", "error")
                 self.update_progress_text("Dependency installation cancelled")
                 return False
-            
-            # Validate password before proceeding
-            if not self.sudo_password_validated:
-                self.log("Validating password...", "info")
-                if not self.validate_sudo_password(password):
-                    self.log("Password validation failed. Please try again.", "error")
-                    self.sudo_password = None
-                    self.sudo_password_validated = False
-                    return False
-                self.log("Password validated successfully.", "success")
             
             if not self.install_dependencies():
                 self.update_progress_text("Dependency installation failed")
@@ -3014,10 +3205,10 @@ class AffinityInstallerGUI(QMainWindow):
             return self.install_popos_dependencies()
         
         commands = {
-            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-core-8.0"],
-            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-core-8.0"],
-            "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
-            "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
+            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
+            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
+            "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
+            "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
             "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
             "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
             "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
@@ -5469,38 +5660,15 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("You may need to add /usr/bin to your PATH or restart your terminal", "info")
                 return True  # Return True anyway since package is installed
         
-        elif self.distro in ["arch", "cachyos"]:
-            # Check via pacman for dotnet-core-8.0
+        elif self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+            # Check via pacman for dotnet-sdk-8.0
             success, stdout, _ = self.run_command(
-                ["pacman", "-Q", "dotnet-core-8.0"],
+                ["pacman", "-Q", "dotnet-sdk-8.0"],
                 check=False,
                 capture=True
             )
-            if success and stdout and "dotnet-core-8.0" in stdout:
-                self.log(".NET SDK package found via pacman (dotnet-core-8.0)", "success")
-                # Try common paths
-                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
-                for path in common_paths:
-                    if Path(path).exists():
-                        success, stdout, _ = self.run_command(
-                            [path, "--version"],
-                            check=False,
-                            capture=True
-                        )
-                        if success and stdout:
-                            version = stdout.strip()
-                            self.log(f".NET SDK found at {path}: {version}", "success")
-                            return True
-                return True  # Package is installed
-        elif self.distro in ["endeavouros", "xerolinux"]:
-            # Check via pacman for dotnet-sdk (other Arch-based distros might use different package name)
-            success, stdout, _ = self.run_command(
-                ["pacman", "-Q", "dotnet-sdk"],
-                check=False,
-                capture=True
-            )
-            if success and stdout and "dotnet-sdk" in stdout:
-                self.log(".NET SDK package found via pacman (dotnet-sdk)", "success")
+            if success and stdout and "dotnet-sdk-8.0" in stdout:
+                self.log(".NET SDK package found via pacman (dotnet-sdk-8.0)", "success")
                 # Try common paths
                 common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
                 for path in common_paths:
@@ -5707,9 +5875,9 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("Settings patching will be skipped.", "warning")
                 self.log("You can install .NET SDK manually:", "info")
                 if self.distro in ["arch", "cachyos"]:
-                    self.log("  sudo pacman -S dotnet-core-8.0", "info")
+                    self.log("  sudo pacman -S dotnet-sdk-8.0", "info")
                 elif self.distro in ["endeavouros", "xerolinux"]:
-                    self.log("  sudo pacman -S dotnet-sdk", "info")
+                    self.log("  sudo pacman -S dotnet-sdk-8.0", "info")
                 elif self.distro in ["fedora", "nobara"]:
                     self.log("  sudo dnf install dotnet-sdk-8.0", "info")
                 elif self.distro in ["pikaos", "pop", "debian"]:
@@ -5993,10 +6161,10 @@ class AffinityInstallerGUI(QMainWindow):
                 return True
             
             commands = {
-                "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-core-8.0"],
-                "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-core-8.0"],
-                "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
-                "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
+                "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
+                "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
+                "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
+                "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
                 "fedora": ["sudo", "dnf", "install", "-y", "dotnet-sdk-8.0"],
                 "nobara": ["sudo", "dnf", "install", "-y", "dotnet-sdk-8.0"],
                 "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "dotnet-sdk-8.0"],
@@ -6053,9 +6221,9 @@ class AffinityInstallerGUI(QMainWindow):
                         self.log("Failed to install .NET SDK automatically", "error")
                         self.log("Please install .NET SDK manually:", "info")
                         if self.distro in ["arch", "cachyos"]:
-                            self.log("  sudo pacman -S dotnet-core-8.0", "info")
+                            self.log("  sudo pacman -S dotnet-sdk-8.0", "info")
                         elif self.distro in ["endeavouros", "xerolinux"]:
-                            self.log("  sudo pacman -S dotnet-sdk", "info")
+                            self.log("  sudo pacman -S dotnet-sdk-8.0", "info")
                         elif self.distro in ["fedora", "nobara"]:
                             self.log("  sudo dnf install dotnet-sdk-8.0", "info")
                         elif self.distro in ["pikaos", "pop", "debian"]:
