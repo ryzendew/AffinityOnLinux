@@ -2059,31 +2059,43 @@ class AffinityInstallerGUI(QMainWindow):
                 )
                 self._register_process(proc)
                 try:
-                    # Send password
+                    # Send password to sudo via stdin
+                    password_input = f"{self.sudo_password}\n"
                     try:
                         if proc.stdin:
-                            proc.stdin.write(f"{self.sudo_password}\n")
+                            proc.stdin.write(password_input)
                             proc.stdin.flush()
-                    except Exception:
-                        pass
+                            proc.stdin.close()
+                    except (BrokenPipeError, OSError) as e:
+                        self.log(f"Error sending password to sudo: {e}", "error")
+                        self._terminate_process(proc)
+                        return False, "", "Failed to send password to sudo"
+                    
                     if capture:
                         stdout_acc = ""
                         stderr_acc = ""
-                        while True:
+                        # Read output without timeout for long-running commands like package installation
+                        try:
+                            out, err = proc.communicate(timeout=None)
+                            stdout_acc += out or ""
+                            stderr_acc += err or ""
+                        except subprocess.TimeoutExpired:
+                            # This shouldn't happen with timeout=None, but handle it just in case
+                            if self.cancel_event.is_set():
+                                self._terminate_process(proc)
+                                return False, stdout_acc, "Cancelled"
+                            # Force read remaining output
                             try:
-                                out, err = proc.communicate(timeout=0.1)
+                                out, err = proc.communicate()
                                 stdout_acc += out or ""
                                 stderr_acc += err or ""
-                                break
-                            except subprocess.TimeoutExpired:
-                                if self.cancel_event.is_set():
-                                    self._terminate_process(proc)
-                                    return False, stdout_acc, "Cancelled"
-                                continue
+                            except Exception:
+                                pass
                         success = proc.returncode == 0
                         return success, stdout_acc, stderr_acc
                     else:
                         # No capture: poll until completion or cancellation
+                        # Password already sent above, just wait for process to complete
                         while True:
                             if self.cancel_event.is_set():
                                 self._terminate_process(proc)
