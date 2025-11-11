@@ -262,14 +262,15 @@ class AffinityInstallerGUI(QMainWindow):
         self.show_spinner_signal.connect(self._show_spinner_safe)
         self.hide_spinner_signal.connect(self._hide_spinner_safe)
         
-        # Ensure icons directory exists (download from GitHub if needed)
-        self._ensure_icons_directory()
-        
         # Load Affinity icon
         self.load_affinity_icon()
         
         # Setup UI
         self.create_ui()
+        
+        # Ensure icons directory exists (download from GitHub if needed)
+        # Do this after UI is created so we can log messages
+        self._ensure_icons_directory()
         
         # Apply dark theme (default)
         self.apply_theme()
@@ -2681,7 +2682,23 @@ class AffinityInstallerGUI(QMainWindow):
     def _ensure_icons_directory(self):
         """Ensure icons directory exists, download from GitHub if missing"""
         try:
-            icons_dir = Path(__file__).parent / "icons"
+            # Determine script directory
+            # When script is piped from curl, __file__ might not be available or might be a temp file
+            script_dir = None
+            try:
+                script_file = Path(__file__)
+                # Check if __file__ is a real file (not a temp file from piping)
+                if script_file.exists() and script_file.is_file() and script_file.stat().st_size > 1000:
+                    script_dir = script_file.parent
+            except (NameError, AttributeError, OSError):
+                pass
+            
+            # Fallback: use standard location in user's config directory
+            if script_dir is None or not script_dir.exists():
+                script_dir = Path.home() / ".config" / "AffinityOnLinux" / "AffinityScripts"
+                script_dir.mkdir(parents=True, exist_ok=True)
+            
+            icons_dir = script_dir / "icons"
             
             # Check if icons directory exists and has files
             if icons_dir.exists() and any(icons_dir.iterdir()):
@@ -2689,6 +2706,11 @@ class AffinityInstallerGUI(QMainWindow):
             
             # Icons directory is missing or empty, download from GitHub
             icons_dir.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                self.log(f"Downloading icons to: {icons_dir}", "info")
+            except Exception:
+                print(f"Downloading icons to: {icons_dir}")
             
             # List of icons to download from GitHub
             # Note: icons are in the icons/ directory in the repository root
@@ -2703,19 +2725,35 @@ class AffinityInstallerGUI(QMainWindow):
             ]
             
             base_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/"
+            downloaded_count = 0
             
             for local_name, github_path in icon_files:
                 icon_path = icons_dir / local_name
                 if not icon_path.exists():
                     try:
                         icon_url = base_url + github_path
+                        # Use urlretrieve with better error handling
                         urllib.request.urlretrieve(icon_url, str(icon_path))
-                    except Exception:
-                        # Silently fail - icons are not critical for functionality
-                        pass
-        except Exception:
-            # Silently fail - icons are not critical for functionality
-            pass
+                        downloaded_count += 1
+                    except Exception as e:
+                        # Log error but continue with other icons
+                        try:
+                            self.log(f"Failed to download icon {local_name}: {e}", "warning")
+                        except Exception:
+                            # If logging isn't available yet, print to console
+                            print(f"Warning: Failed to download icon {local_name}: {e}")
+            
+            if downloaded_count > 0:
+                try:
+                    self.log(f"Downloaded {downloaded_count} icon(s) from GitHub", "success")
+                except Exception:
+                    print(f"Downloaded {downloaded_count} icon(s) from GitHub")
+        except Exception as e:
+            # Log error if possible
+            try:
+                self.log(f"Error ensuring icons directory: {e}", "warning")
+            except Exception:
+                print(f"Warning: Error ensuring icons directory: {e}")
     
     def format_distro_name(self, distro=None):
         """Format distribution name for display with proper capitalization"""
