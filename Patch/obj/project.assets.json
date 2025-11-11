@@ -1,0 +1,134 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0": {
+      "Mono.Cecil/0.11.5": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/Mono.Cecil.Mdb.dll": {
+            "related": ".pdb"
+          },
+          "lib/netstandard2.0/Mono.Cecil.Pdb.dll": {
+            "related": ".pdb"
+          },
+          "lib/netstandard2.0/Mono.Cecil.Rocks.dll": {
+            "related": ".pdb"
+          },
+          "lib/netstandard2.0/Mono.Cecil.dll": {
+            "related": ".Mdb.pdb;.pdb;.Pdb.pdb;.Rocks.pdb"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Mono.Cecil.Mdb.dll": {
+            "related": ".pdb"
+          },
+          "lib/netstandard2.0/Mono.Cecil.Pdb.dll": {
+            "related": ".pdb"
+          },
+          "lib/netstandard2.0/Mono.Cecil.Rocks.dll": {
+            "related": ".pdb"
+          },
+          "lib/netstandard2.0/Mono.Cecil.dll": {
+            "related": ".Mdb.pdb;.pdb;.Pdb.pdb;.Rocks.pdb"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Mono.Cecil/0.11.5": {
+      "sha512": "fxfX+0JGTZ8YQeu1MYjbBiK2CYTSzDyEeIixt+yqKKTn7FW8rv7JMY70qevup4ZJfD7Kk/VG/jDzQQTpfch87g==",
+      "type": "package",
+      "path": "mono.cecil/0.11.5",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net40/Mono.Cecil.Mdb.dll",
+        "lib/net40/Mono.Cecil.Mdb.pdb",
+        "lib/net40/Mono.Cecil.Pdb.dll",
+        "lib/net40/Mono.Cecil.Pdb.pdb",
+        "lib/net40/Mono.Cecil.Rocks.dll",
+        "lib/net40/Mono.Cecil.Rocks.pdb",
+        "lib/net40/Mono.Cecil.dll",
+        "lib/net40/Mono.Cecil.pdb",
+        "lib/netstandard2.0/Mono.Cecil.Mdb.dll",
+        "lib/netstandard2.0/Mono.Cecil.Mdb.pdb",
+        "lib/netstandard2.0/Mono.Cecil.Pdb.dll",
+        "lib/netstandard2.0/Mono.Cecil.Pdb.pdb",
+        "lib/netstandard2.0/Mono.Cecil.Rocks.dll",
+        "lib/netstandard2.0/Mono.Cecil.Rocks.pdb",
+        "lib/netstandard2.0/Mono.Cecil.dll",
+        "lib/netstandard2.0/Mono.Cecil.pdb",
+        "mono.cecil.0.11.5.nupkg.sha512",
+        "mono.cecil.nuspec"
+      ]
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0": [
+      "Mono.Cecil >= 0.11.5"
+    ]
+  },
+  "packageFolders": {
+    "/home/matt/.nuget/packages/": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "/home/matt/Documents/GitHub/AffinityOnLinux/Patch/AffinityPatcher.csproj",
+      "projectName": "AffinityPatcher",
+      "projectPath": "/home/matt/Documents/GitHub/AffinityOnLinux/Patch/AffinityPatcher.csproj",
+      "packagesPath": "/home/matt/.nuget/packages/",
+      "outputPath": "/home/matt/Documents/GitHub/AffinityOnLinux/Patch/obj/",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "/home/matt/.nuget/NuGet/NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0"
+      ],
+      "sources": {
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "projectReferences": {}
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      }
+    },
+    "frameworks": {
+      "net8.0": {
+        "targetAlias": "net8.0",
+        "dependencies": {
+          "Mono.Cecil": {
+            "target": "Package",
+            "version": "[0.11.5, )"
+          }
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "/usr/lib64/dotnet/sdk/8.0.121/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

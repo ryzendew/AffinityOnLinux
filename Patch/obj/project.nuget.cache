@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "fxMqbUZn3mJRXyRZ5P7C2odPYWxt/uQu88uu/dO6mNJri5co4WQMlXkMdO0vKAJ3NqAnUopNtmVBUe+5dKwE+w==",
+  "success": true,
+  "projectFilePath": "/home/matt/Documents/GitHub/AffinityOnLinux/Patch/AffinityPatcher.csproj",
+  "expectedPackageFiles": [
+    "/home/matt/.nuget/packages/mono.cecil/0.11.5/mono.cecil.0.11.5.nupkg.sha512"
+  ],
+  "logs": []
+}

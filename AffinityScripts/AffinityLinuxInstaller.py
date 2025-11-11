@@ -1356,6 +1356,7 @@ class AffinityInstallerGUI(QMainWindow):
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", "windows"),
                 ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", "loop"),
                 ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", "chrome"),
+                ("Fix Settings (v3)", self.fix_affinity_settings, "Patch Affinity v3 DLL to enable settings saving", "cog"),
                 ("Set DPI Scaling", self.set_dpi_scaling, "Adjust interface size for better readability", "scale"),
                 ("Uninstall", self.uninstall_affinity_linux, "Completely remove Affinity Linux installation", "trash"),
             ]
@@ -2840,7 +2841,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         missing = []
         deps = ["wine", "winetricks", "wget", "curl", "tar", "jq"]
-        total_checks = len(deps) + 2  # +2 for archive tools and zstd
+        total_checks = len(deps) + 3  # +3 for archive tools, zstd, and dotnet
         
         for idx, dep in enumerate(deps):
             progress = (idx + 1) / total_checks * 0.5  # Use first 50% for checking
@@ -2877,6 +2878,17 @@ class AffinityInstallerGUI(QMainWindow):
             missing.append("zstd")
         else:
             self.log("zstd support is available", "success")
+        
+        # Check .NET SDK (optional but recommended for Affinity v3 settings fix)
+        progress = (len(deps) + 3) / total_checks * 0.5
+        self.update_progress(progress)
+        self.update_progress_text("Checking .NET SDK...")
+        
+        if not self.check_dotnet_sdk():
+            self.log(".NET SDK is not installed (optional - needed for Affinity v3 settings fix)", "warning")
+            missing.append("dotnet-sdk")
+        else:
+            self.log(".NET SDK is installed", "success")
         
         # Handle unsupported distributions - show warning and allow retry
         if self.distro in ["ubuntu", "linuxmint", "pop", "zorin"]:
@@ -2946,14 +2958,14 @@ class AffinityInstallerGUI(QMainWindow):
             return self.install_popos_dependencies()
         
         commands = {
-            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
-            "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd"],
-            "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"],
-            "opensuse-leap": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd"]
+            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
+            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
+            "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
+            "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
+            "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
+            "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
+            "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
+            "opensuse-leap": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"]
         }
         
         if self.distro in commands:
@@ -3241,10 +3253,11 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress(current_step / total_steps)
         self.log("Installing remaining dependencies...", "info")
         success, _, _ = self.run_command([
-            "sudo", "apt", "install", "-y", "winetricks", "wget", "curl", "p7zip-full", "tar", "jq", "zstd"
+            "sudo", "apt", "install", "-y", "winetricks", "wget", "curl", "p7zip-full", "tar", "jq", "zstd", "dotnet-sdk-8.0"
         ])
         if not success:
             self.log("Failed to install remaining dependencies", "error")
+            self.log("Note: dotnet-sdk-8.0 may require Microsoft's repository. You can install it manually if needed.", "warning")
             return False
         
         self.update_progress(1.0)
@@ -5130,6 +5143,11 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("Reinstalling Affinity v3 settings files...", "info")
                 self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 self._install_affinity_settings_thread()
+                
+                # Patch the DLL to fix settings saving
+                self.update_progress_text("Patching DLL for settings fix...")
+                self.update_progress(0.95)
+                self.patch_affinity_dll(display_name)
             
             self.update_progress(1.0)
             self.update_progress_text("Update complete!")
@@ -5226,6 +5244,11 @@ class AffinityInstallerGUI(QMainWindow):
                     self._install_webview2_runtime_thread()  # Install synchronously in this thread
                 else:
                     self.log("WebView2 Runtime is already installed.", "success")
+                
+                # Patch the DLL to fix settings saving
+                self.update_progress_text("Patching DLL for settings fix...")
+                self.update_progress(0.85)
+                self.patch_affinity_dll(app_name)
             
             # Create desktop entry
             self.update_progress_text("Creating desktop entry...")
@@ -5321,6 +5344,162 @@ class AffinityInstallerGUI(QMainWindow):
         
         if dlls_copied > 0:
             self.log("OpenCL support configured", "success")
+    
+    def check_dotnet_sdk(self):
+        """Check if .NET SDK is installed"""
+        success, stdout, _ = self.run_command(
+            ["dotnet", "--version"],
+            check=False,
+            capture=True
+        )
+        if success and stdout:
+            version = stdout.strip()
+            self.log(f".NET SDK found: {version}", "success")
+            return True
+        return False
+    
+    def build_affinity_patcher(self):
+        """Build the AffinityPatcher .NET project"""
+        # Get the Patch directory path (relative to AffinityScripts)
+        script_dir = Path(__file__).parent
+        patch_dir = script_dir.parent / "Patch"
+        
+        if not patch_dir.exists():
+            self.log(f"Patch directory not found: {patch_dir}", "error")
+            return None
+        
+        csproj_file = patch_dir / "AffinityPatcher.csproj"
+        if not csproj_file.exists():
+            self.log(f"AffinityPatcher.csproj not found: {csproj_file}", "error")
+            return None
+        
+        self.log(f"Building AffinityPatcher from: {patch_dir}", "info")
+        
+        # Build the project
+        output_dir = patch_dir / "bin" / "Release"
+        success, stdout, stderr = self.run_command(
+            ["dotnet", "build", str(csproj_file), "-c", "Release", "-o", str(output_dir)],
+            check=False,
+            capture=True
+        )
+        
+        if not success:
+            self.log(f"Failed to build AffinityPatcher: {stderr}", "error")
+            if stdout:
+                self.log(f"Build output: {stdout}", "warning")
+            return None
+        
+        # Find the built executable - .NET can create different output formats
+        # Try common output names
+        possible_names = [
+            "AffinityPatcher",  # Native executable (Linux)
+            "AffinityPatcher.dll",  # DLL (runnable with dotnet)
+            "AffinityPatcher.exe",  # Windows executable (unlikely on Linux)
+        ]
+        
+        patcher_exe = None
+        for name in possible_names:
+            candidate = output_dir / name
+            if candidate.exists():
+                patcher_exe = candidate
+                break
+        
+        if patcher_exe and patcher_exe.exists():
+            self.log(f"AffinityPatcher built successfully: {patcher_exe}", "success")
+            return patcher_exe
+        else:
+            # List what's actually in the output directory for debugging
+            if output_dir.exists():
+                files = list(output_dir.glob("*"))
+                self.log(f"Files in output directory: {[f.name for f in files]}", "warning")
+            self.log(f"Built patcher not found at expected location: {output_dir}", "error")
+            return None
+    
+    def run_affinity_patcher(self, dll_path):
+        """Run the AffinityPatcher on the specified DLL"""
+        if not Path(dll_path).exists():
+            self.log(f"DLL not found: {dll_path}", "error")
+            return False
+        
+        # Build the patcher if needed
+        patcher_exe = self.build_affinity_patcher()
+        if not patcher_exe:
+            self.log("Failed to build AffinityPatcher", "error")
+            return False
+        
+        self.log(f"Running AffinityPatcher on: {dll_path}", "info")
+        
+        # Run the patcher - use dotnet for DLLs, direct execution for native executables
+        if patcher_exe.suffix == ".dll":
+            cmd = ["dotnet", str(patcher_exe), dll_path]
+        else:
+            cmd = [str(patcher_exe), dll_path]
+        
+        success, stdout, stderr = self.run_command(
+            cmd,
+            check=False,
+            capture=True
+        )
+        
+        if success:
+            self.log("AffinityPatcher completed successfully", "success")
+            if stdout:
+                # Log the patcher output
+                for line in stdout.strip().split('\n'):
+                    if line.strip():
+                        if "SUCCESS" in line or "success" in line.lower():
+                            self.log(line, "success")
+                        elif "ERROR" in line or "error" in line.lower():
+                            self.log(line, "error")
+                        else:
+                            self.log(line, "info")
+            return True
+        else:
+            self.log(f"AffinityPatcher failed: {stderr}", "error")
+            if stdout:
+                self.log(f"Output: {stdout}", "warning")
+            return False
+    
+    def patch_affinity_dll(self, app_name):
+        """Patch the Serif.Affinity.dll for Affinity v3 (Unified)"""
+        # Only patch Affinity v3 (Unified)
+        if app_name != "Add" and app_name != "Affinity (Unified)":
+            return True  # Not applicable, return success
+        
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Patching Affinity DLL for settings fix...", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Check if .NET SDK is available, try to install if missing
+        if not self.check_dotnet_sdk():
+            self.log(".NET SDK not found. Attempting to install...", "info")
+            if not self.install_dotnet_sdk():
+                self.log("Failed to install .NET SDK automatically", "warning")
+                self.log("Settings patching will be skipped.", "warning")
+                self.log("You can install .NET SDK manually:", "info")
+                if self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+                    self.log("  sudo pacman -S dotnet-sdk", "info")
+                elif self.distro in ["fedora", "nobara"]:
+                    self.log("  sudo dnf install dotnet-sdk-8.0", "info")
+                elif self.distro in ["pikaos", "pop"]:
+                    self.log("  sudo apt install dotnet-sdk-8.0", "info")
+                    self.log("  (May require Microsoft's .NET repository)", "warning")
+                elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
+                    self.log("  sudo zypper install dotnet-sdk-8.0", "info")
+                return False
+            else:
+                self.log(".NET SDK installed successfully", "success")
+        
+        # Find the DLL
+        dll_path = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / "Affinity" / "Serif.Affinity.dll"
+        
+        if not dll_path.exists():
+            self.log(f"Serif.Affinity.dll not found at: {dll_path}", "warning")
+            self.log("The DLL may not be installed yet. Patching will be skipped.", "warning")
+            return False
+        
+        # Run the patcher
+        return self.run_affinity_patcher(str(dll_path))
     
     def create_desktop_entry(self, app_name):
         """Create desktop entry for application"""
@@ -5565,6 +5744,152 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
         self.end_operation()
+    
+    def install_dotnet_sdk(self):
+        """Install .NET SDK based on distribution"""
+        try:
+            self.log("Installing .NET SDK...", "info")
+            
+            if self.distro == "pikaos":
+                # Try installing dotnet-sdk-8.0 (may need Microsoft repo)
+                success, _, stderr = self.run_command([
+                    "sudo", "apt", "install", "-y", "dotnet-sdk-8.0"
+                ], check=False)
+                if not success:
+                    self.log("Failed to install dotnet-sdk-8.0 from default repos", "warning")
+                    self.log("You may need to add Microsoft's .NET repository. See: https://learn.microsoft.com/dotnet/core/install/linux", "info")
+                    return False
+                return True
+            
+            if self.distro == "pop":
+                # Try installing dotnet-sdk-8.0 (may need Microsoft repo)
+                success, _, stderr = self.run_command([
+                    "sudo", "apt", "install", "-y", "dotnet-sdk-8.0"
+                ], check=False)
+                if not success:
+                    self.log("Failed to install dotnet-sdk-8.0 from default repos", "warning")
+                    self.log("You may need to add Microsoft's .NET repository. See: https://learn.microsoft.com/dotnet/core/install/linux", "info")
+                    return False
+                return True
+            
+            commands = {
+                "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
+                "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
+                "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
+                "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
+                "fedora": ["sudo", "dnf", "install", "-y", "dotnet-sdk-8.0"],
+                "nobara": ["sudo", "dnf", "install", "-y", "dotnet-sdk-8.0"],
+                "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "dotnet-sdk-8.0"],
+                "opensuse-leap": ["sudo", "zypper", "install", "-y", "dotnet-sdk-8.0"]
+            }
+            
+            if self.distro in commands:
+                success, _, stderr = self.run_command(commands[self.distro], check=False)
+                if success:
+                    self.log(".NET SDK installed successfully", "success")
+                    return True
+                else:
+                    self.log(f"Failed to install .NET SDK: {stderr[:200] if stderr else 'Unknown error'}", "error")
+                    return False
+            
+            self.log(f"Unsupported distribution for .NET SDK auto-install: {self.distro}", "error")
+            return False
+        except Exception as e:
+            self.log(f"Error installing .NET SDK: {e}", "error")
+            return False
+    
+    def fix_affinity_settings(self):
+        """Fix Affinity v3 settings by patching the DLL"""
+        try:
+            self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            self.log("Fix Affinity v3 Settings", "info")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            
+            # Check if Affinity v3 is installed
+            dll_path = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / "Affinity" / "Serif.Affinity.dll"
+            
+            if not dll_path.exists():
+                self.log("Affinity v3 (Unified) is not installed.", "error")
+                self.log(f"Expected DLL at: {dll_path}", "info")
+                self.show_message(
+                    "Affinity v3 Not Found",
+                    "Affinity v3 (Unified) is not installed.\n\n"
+                    "This fix only works for Affinity v3 (Unified).\n"
+                    "Please install Affinity v3 first using the 'Affinity (Unified)' button.",
+                    "error"
+                )
+                return
+            
+            self.start_operation("Fix Affinity Settings")
+            
+            # Check if .NET SDK is installed, if not try to install it
+            if not self.check_dotnet_sdk():
+                self.log(".NET SDK not found. Attempting to install...", "info")
+                try:
+                    if not self.install_dotnet_sdk():
+                        self.log("Failed to install .NET SDK automatically", "error")
+                        self.log("Please install .NET SDK manually:", "info")
+                        if self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+                            self.log("  sudo pacman -S dotnet-sdk", "info")
+                        elif self.distro in ["fedora", "nobara"]:
+                            self.log("  sudo dnf install dotnet-sdk-8.0", "info")
+                        elif self.distro in ["pikaos", "pop"]:
+                            self.log("  sudo apt install dotnet-sdk-8.0", "info")
+                            self.log("  (May require Microsoft's .NET repository)", "warning")
+                        elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
+                            self.log("  sudo zypper install dotnet-sdk-8.0", "info")
+                        self.end_operation()
+                        self.show_message(
+                            ".NET SDK Required",
+                            ".NET SDK is required to patch the Affinity DLL.\n\n"
+                            "Please install it manually using the commands shown in the log, then try again.",
+                            "error"
+                        )
+                        return
+                except Exception as e:
+                    self.log(f"Error during .NET SDK installation: {e}", "error")
+                    self.end_operation()
+                    self.show_message(
+                        "Installation Error",
+                        f"An error occurred while trying to install .NET SDK:\n{e}\n\n"
+                        "Please install .NET SDK manually and try again.",
+                        "error"
+                    )
+                    return
+            
+            # Patch the DLL
+            success = self.patch_affinity_dll("Add")
+            
+            if success:
+                self.log("\n✓ Settings fix completed successfully!", "success")
+                self.log("Affinity v3 should now be able to save settings properly.", "info")
+                self.log("You may need to restart Affinity for the changes to take effect.", "info")
+                self.show_message(
+                    "Settings Fix Complete",
+                    "The Affinity v3 DLL has been patched successfully!\n\n"
+                    "Settings should now save properly.\n"
+                    "You may need to restart Affinity for the changes to take effect.",
+                    "info"
+                )
+            else:
+                self.log("\n✗ Settings fix failed", "error")
+                self.show_message(
+                    "Settings Fix Failed",
+                    "Failed to patch the Affinity v3 DLL.\n\n"
+                    "Please check the log for details.\n"
+                    "Make sure .NET SDK is installed if you see related errors.",
+                    "error"
+                )
+        except Exception as e:
+            self.log(f"Unexpected error during settings fix: {e}", "error")
+            self.show_message(
+                "Unexpected Error",
+                f"An unexpected error occurred:\n{e}\n\n"
+                "Please check the log for details.",
+                "error"
+            )
+        finally:
+            self.end_operation()
     
     def set_dpi_scaling(self):
         """Set DPI scaling for Affinity applications"""
