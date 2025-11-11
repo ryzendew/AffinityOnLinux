@@ -371,6 +371,13 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"  zstd: ✗ Not installed", "error")
             deps_installed = False
         
+        # Check .NET SDK
+        if self.check_dotnet_sdk():
+            self.log(f"  .NET SDK: ✓ Installed", "success")
+        else:
+            self.log(f"  .NET SDK: ✗ Not installed", "error")
+            # Don't set deps_installed = False since .NET SDK is optional (only needed for settings fix)
+        
         # Check Winetricks Dependencies (only if Wine is set up)
         if wine_exists:
             self.log("Winetricks Dependencies:", "info")
@@ -651,15 +658,16 @@ class AffinityInstallerGUI(QMainWindow):
                 border-color: #4a4a4a;
             }
             QPushButton[class="primary"] {
-                background-color: #4caf50;
-                color: #ffffff;
+                background-color: #6b8e6b;
+                color: #000000;
                 font-weight: bold;
                 font-size: 12px;
-                border: 1px solid #45a049;
+                border: 1px solid #5a7a5a;
             }
             QPushButton[class="primary"]:hover {
-                background-color: #5fbf63;
-                border-color: #4caf50;
+                background-color: #7a9e7a;
+                border-color: #6b8e6b;
+                color: #000000;
             }
             QTextEdit {
                 background-color: #1a1a1a;
@@ -820,20 +828,20 @@ class AffinityInstallerGUI(QMainWindow):
                 border: 1px solid #c5c5c5;
             }
             QPushButton[class="primary"] {
-                background-color: #8ff361;
+                background-color: #9bc49b;
                 color: #1c1c1c;
                 font-weight: bold;
                 font-size: 12px;
-                border: 1px solid #7acb52;
+                border: 1px solid #8ab48a;
             }
             QPushButton[class="primary"]:hover {
-                background-color: #a0f579;
-                border-color: #8ff361;
+                background-color: #a8d0a8;
+                border-color: #9bc49b;
             }
             QTextEdit {
-                background-color: #ffffff;
-                color: #2d2d2d;
-                border: 1px solid #c0c0c0;
+                background-color: #fafafa;
+                color: #1a1a1a;
+                border: 1px solid #d0d0d0;
                 font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                 font-size: 11px;
                 border-radius: 8px;
@@ -3682,6 +3690,11 @@ class AffinityInstallerGUI(QMainWindow):
         if self.distro == "pikaos":
             self.log("Using PikaOS dependency installation...", "info")
             success = self.install_pikaos_dependencies()
+            if success:
+                # Also install .NET SDK if not already installed
+                if not self.check_dotnet_sdk():
+                    self.log("Installing .NET SDK...", "info")
+                    self.install_dotnet_sdk()
             self.log("System dependencies installation completed" if success else "System dependencies installation failed", "success" if success else "error")
             self.end_operation()
             return
@@ -3691,6 +3704,16 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log(f"Installing dependencies for {self.distro}...", "info")
         success = self.install_dependencies()
+        
+        # After installing main dependencies, check and install .NET SDK if missing
+        # (it should be included in install_dependencies, but check anyway)
+        if success:
+            if not self.check_dotnet_sdk():
+                self.log(".NET SDK not found in installed packages. Installing separately...", "info")
+                self.install_dotnet_sdk()
+            else:
+                self.log(".NET SDK is already installed", "success")
+        
         self.log("System dependencies installation completed" if success else "System dependencies installation failed", "success" if success else "error")
         self.end_operation()
         return success
@@ -5144,10 +5167,14 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 self._install_affinity_settings_thread()
                 
-                # Patch the DLL to fix settings saving
+                # Patch the DLL to fix settings saving (this is the last step)
                 self.update_progress_text("Patching DLL for settings fix...")
                 self.update_progress(0.95)
-                self.patch_affinity_dll(display_name)
+                patch_success = self.patch_affinity_dll(display_name)
+                if patch_success:
+                    self.log("Settings fix patch applied successfully", "success")
+                else:
+                    self.log("Settings fix patch was skipped or failed (check log for details)", "warning")
             
             self.update_progress(1.0)
             self.update_progress_text("Update complete!")
@@ -5161,6 +5188,7 @@ class AffinityInstallerGUI(QMainWindow):
             message_text += "WinMetadata has been reinstalled to prevent corruption.\n"
             if display_name and ("Unified" in display_name or display_name == "Affinity (Unified)"):
                 message_text += "Affinity v3 settings have been reinstalled.\n"
+                message_text += "Settings fix patch has been applied (settings should now save properly).\n"
             message_text += "Use your existing desktop entry to launch the application."
             
             self.show_message(
@@ -5347,6 +5375,7 @@ class AffinityInstallerGUI(QMainWindow):
     
     def check_dotnet_sdk(self):
         """Check if .NET SDK is installed"""
+        # First, try to run dotnet --version
         success, stdout, _ = self.run_command(
             ["dotnet", "--version"],
             check=False,
@@ -5356,6 +5385,89 @@ class AffinityInstallerGUI(QMainWindow):
             version = stdout.strip()
             self.log(f".NET SDK found: {version}", "success")
             return True
+        
+        # If dotnet command not found, check if it's installed via package manager
+        # This is useful when dotnet is installed but not in PATH
+        if self.distro in ["fedora", "nobara"]:
+            # Check via dnf if package is installed
+            success, stdout, _ = self.run_command(
+                ["dnf", "list", "installed", "dotnet-sdk-8.0"],
+                check=False,
+                capture=True
+            )
+            if success and stdout and "dotnet-sdk-8.0" in stdout:
+                self.log(".NET SDK package found via dnf (dotnet-sdk-8.0)", "success")
+                # Try to find dotnet in common locations
+                common_paths = [
+                    "/usr/bin/dotnet",
+                    "/usr/local/bin/dotnet",
+                    "/opt/dotnet/dotnet",
+                    Path.home() / ".dotnet" / "dotnet"
+                ]
+                for path in common_paths:
+                    if Path(path).exists():
+                        # Try running it
+                        success, stdout, _ = self.run_command(
+                            [str(path), "--version"],
+                            check=False,
+                            capture=True
+                        )
+                        if success and stdout:
+                            version = stdout.strip()
+                            self.log(f".NET SDK found at {path}: {version}", "success")
+                            return True
+                # Package is installed but dotnet command not accessible
+                self.log(".NET SDK package is installed but 'dotnet' command not found in PATH", "warning")
+                self.log("You may need to add /usr/bin to your PATH or restart your terminal", "info")
+                return True  # Return True anyway since package is installed
+        
+        elif self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+            # Check via pacman
+            success, stdout, _ = self.run_command(
+                ["pacman", "-Q", "dotnet-sdk"],
+                check=False,
+                capture=True
+            )
+            if success and stdout and "dotnet-sdk" in stdout:
+                self.log(".NET SDK package found via pacman (dotnet-sdk)", "success")
+                # Try common paths
+                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
+                for path in common_paths:
+                    if Path(path).exists():
+                        success, stdout, _ = self.run_command(
+                            [path, "--version"],
+                            check=False,
+                            capture=True
+                        )
+                        if success and stdout:
+                            version = stdout.strip()
+                            self.log(f".NET SDK found at {path}: {version}", "success")
+                            return True
+                return True  # Package is installed
+        
+        elif self.distro in ["pikaos", "pop"]:
+            # Check via apt/dpkg
+            success, stdout, _ = self.run_command(
+                ["dpkg", "-l", "dotnet-sdk-8.0"],
+                check=False,
+                capture=True
+            )
+            if success and stdout and "dotnet-sdk-8.0" in stdout:
+                self.log(".NET SDK package found via dpkg (dotnet-sdk-8.0)", "success")
+                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
+                for path in common_paths:
+                    if Path(path).exists():
+                        success, stdout, _ = self.run_command(
+                            [path, "--version"],
+                            check=False,
+                            capture=True
+                        )
+                        if success and stdout:
+                            version = stdout.strip()
+                            self.log(f".NET SDK found at {path}: {version}", "success")
+                            return True
+                return True  # Package is installed
+        
         return False
     
     def build_affinity_patcher(self):

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AffinityPatcher")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8ff7155c4aa41696bf76e0e8da249bbe564d561f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+11de23d1fbde0f43fc6ffaf6cb57b0b5a92169b6")]
 [assembly: System.Reflection.AssemblyProductAttribute("AffinityPatcher")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AffinityPatcher")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
