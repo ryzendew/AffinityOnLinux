@@ -257,9 +257,9 @@ PikaOS users must replace the built-in Wine with WineHQ staging before installat
 ## Additional Resources
 
 - **[GUI Installer Guide](Guide/GUI-Installer-Guide.md)** - Complete guide for using the Python GUI installer with step-by-step instructions, button explanations, workflows, and troubleshooting
-- [Other Software on GNU/Linux](https://github.com/Twig6943/AffinityOnLinux/blob/main/OtherSoftware-on-Linux.md) - Additional software compatibility information
-- [Known Issues](https://github.com/Twig6943/AffinityOnLinux/blob/main/Known-issues.md) - Troubleshooting guide for common problems
-- [OpenCL Guide](https://github.com/Twig6943/AffinityOnLinux/blob/main/OpenCL-Guide.md) - Detailed OpenCL configuration information
+- [Other Software on GNU/Linux](OtherSoftware-on-Linux.md) - Additional software compatibility information
+- [Known Issues](Known-issues.md) - Troubleshooting guide for common problems
+- [OpenCL Guide](OpenCL-Guide.md) - Detailed OpenCL configuration information
 
 ## Contributing
 
