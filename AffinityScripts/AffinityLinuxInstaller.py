@@ -2985,8 +2985,8 @@ class AffinityInstallerGUI(QMainWindow):
             return self.install_popos_dependencies()
         
         commands = {
-            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
-            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
+            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-core-8.0"],
+            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-core-8.0"],
             "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
             "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk"],
             "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
@@ -5440,8 +5440,31 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("You may need to add /usr/bin to your PATH or restart your terminal", "info")
                 return True  # Return True anyway since package is installed
         
-        elif self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
-            # Check via pacman
+        elif self.distro in ["arch", "cachyos"]:
+            # Check via pacman for dotnet-core-8.0
+            success, stdout, _ = self.run_command(
+                ["pacman", "-Q", "dotnet-core-8.0"],
+                check=False,
+                capture=True
+            )
+            if success and stdout and "dotnet-core-8.0" in stdout:
+                self.log(".NET SDK package found via pacman (dotnet-core-8.0)", "success")
+                # Try common paths
+                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
+                for path in common_paths:
+                    if Path(path).exists():
+                        success, stdout, _ = self.run_command(
+                            [path, "--version"],
+                            check=False,
+                            capture=True
+                        )
+                        if success and stdout:
+                            version = stdout.strip()
+                            self.log(f".NET SDK found at {path}: {version}", "success")
+                            return True
+                return True  # Package is installed
+        elif self.distro in ["endeavouros", "xerolinux"]:
+            # Check via pacman for dotnet-sdk (other Arch-based distros might use different package name)
             success, stdout, _ = self.run_command(
                 ["pacman", "-Q", "dotnet-sdk"],
                 check=False,
@@ -5654,7 +5677,9 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("Failed to install .NET SDK automatically", "warning")
                 self.log("Settings patching will be skipped.", "warning")
                 self.log("You can install .NET SDK manually:", "info")
-                if self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+                if self.distro in ["arch", "cachyos"]:
+                    self.log("  sudo pacman -S dotnet-core-8.0", "info")
+                elif self.distro in ["endeavouros", "xerolinux"]:
                     self.log("  sudo pacman -S dotnet-sdk", "info")
                 elif self.distro in ["fedora", "nobara"]:
                     self.log("  sudo dnf install dotnet-sdk-8.0", "info")
@@ -5950,8 +5975,8 @@ class AffinityInstallerGUI(QMainWindow):
                 return True
             
             commands = {
-                "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
-                "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
+                "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-core-8.0"],
+                "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-core-8.0"],
                 "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
                 "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk"],
                 "fedora": ["sudo", "dnf", "install", "-y", "dotnet-sdk-8.0"],
@@ -6009,7 +6034,9 @@ class AffinityInstallerGUI(QMainWindow):
                     if not self.install_dotnet_sdk():
                         self.log("Failed to install .NET SDK automatically", "error")
                         self.log("Please install .NET SDK manually:", "info")
-                        if self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+                        if self.distro in ["arch", "cachyos"]:
+                            self.log("  sudo pacman -S dotnet-core-8.0", "info")
+                        elif self.distro in ["endeavouros", "xerolinux"]:
                             self.log("  sudo pacman -S dotnet-sdk", "info")
                         elif self.distro in ["fedora", "nobara"]:
                             self.log("  sudo dnf install dotnet-sdk-8.0", "info")
