@@ -2720,13 +2720,8 @@ class AffinityInstallerGUI(QMainWindow):
             if not missing_icons:
                 return  # All icons already exist
             
-            try:
-                self.log(f"Downloading {len(missing_icons)} missing icon(s) to: {icons_dir}", "info")
-            except Exception:
-                print(f"Downloading {len(missing_icons)} missing icon(s) to: {icons_dir}")
-            
+            # Download icons silently (no log messages)
             base_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/"
-            downloaded_count = 0
             
             for local_name, github_path in missing_icons:
                 icon_path = icons_dir / local_name
@@ -2739,30 +2734,12 @@ class AffinityInstallerGUI(QMainWindow):
                     
                     # Use urlretrieve with better error handling
                     urllib.request.urlretrieve(icon_url, str(icon_path))
-                    downloaded_count += 1
-                    try:
-                        self.log(f"Downloaded {local_name}", "success")
-                    except Exception:
-                        print(f"Downloaded {local_name}")
-                except Exception as e:
-                    # Log error but continue with other icons
-                    try:
-                        self.log(f"Failed to download icon {local_name}: {e}", "warning")
-                    except Exception:
-                        # If logging isn't available yet, print to console
-                        print(f"Warning: Failed to download icon {local_name}: {e}")
-            
-            if downloaded_count > 0:
-                try:
-                    self.log(f"Downloaded {downloaded_count} icon(s) from GitHub", "success")
                 except Exception:
-                    print(f"Downloaded {downloaded_count} icon(s) from GitHub")
-        except Exception as e:
-            # Log error if possible
-            try:
-                self.log(f"Error ensuring icons directory: {e}", "warning")
-            except Exception:
-                print(f"Warning: Error ensuring icons directory: {e}")
+                    # Silently fail - icons are not critical for functionality
+                    pass
+        except Exception:
+            # Silently fail - icons are not critical for functionality
+            pass
     
     def format_distro_name(self, distro=None):
         """Format distribution name for display with proper capitalization"""
