@@ -262,6 +262,9 @@ class AffinityInstallerGUI(QMainWindow):
         self.show_spinner_signal.connect(self._show_spinner_safe)
         self.hide_spinner_signal.connect(self._hide_spinner_safe)
         
+        # Ensure icons directory exists (download from GitHub if needed)
+        self._ensure_icons_directory()
+        
         # Load Affinity icon
         self.load_affinity_icon()
         
@@ -2674,6 +2677,45 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception as e:
             self.log(f"Error detecting distribution: {e}", "error")
             return False
+    
+    def _ensure_icons_directory(self):
+        """Ensure icons directory exists, download from GitHub if missing"""
+        try:
+            icons_dir = Path(__file__).parent / "icons"
+            
+            # Check if icons directory exists and has files
+            if icons_dir.exists() and any(icons_dir.iterdir()):
+                return  # Icons already exist
+            
+            # Icons directory is missing or empty, download from GitHub
+            icons_dir.mkdir(parents=True, exist_ok=True)
+            
+            # List of icons to download from GitHub
+            # Note: icons are in the icons/ directory in the repository root
+            icon_files = [
+                ("Affinity.png", "icons/Affinity.png"),
+                ("AffinityDesigner.png", "icons/AffinityDesigner.png"),
+                ("AffinityPhoto.png", "icons/AffinityPhoto.png"),
+                ("AffinityPublisher.svg", "icons/AffinityPublisher.svg"),
+                ("Affinity-Canva.svg", "icons/Affinity-Canva.svg"),
+                ("Affinity-Canva.png", "icons/Affinity-Canva.png"),
+                ("Affinity-Canva.ico", "icons/Affinity-Canva.ico"),
+            ]
+            
+            base_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/"
+            
+            for local_name, github_path in icon_files:
+                icon_path = icons_dir / local_name
+                if not icon_path.exists():
+                    try:
+                        icon_url = base_url + github_path
+                        urllib.request.urlretrieve(icon_url, str(icon_path))
+                    except Exception:
+                        # Silently fail - icons are not critical for functionality
+                        pass
+        except Exception:
+            # Silently fail - icons are not critical for functionality
+            pass
     
     def format_distro_name(self, distro=None):
         """Format distribution name for display with proper capitalization"""
