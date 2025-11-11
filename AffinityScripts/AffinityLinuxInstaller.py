@@ -281,6 +281,10 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Affinity Linux Installer - Ready", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Ensure patcher files are available (silently)
+        self.ensure_patcher_files(silent=True)
+        
         self.log("System Detection:", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
         
@@ -2577,6 +2581,9 @@ class AffinityInstallerGUI(QMainWindow):
     def _one_click_setup_thread(self):
         """One-click setup in background thread"""
         self.start_operation("One-Click Full Setup")
+        
+        # Ensure patcher files are available
+        self.ensure_patcher_files()
         
         # Step 1: Detect distribution
         self.update_progress_text("Step 1/4: Detecting Linux distribution...")
@@ -5470,11 +5477,57 @@ class AffinityInstallerGUI(QMainWindow):
         
         return False
     
+    def ensure_patcher_files(self, silent=False):
+        """Ensure AffinityPatcher files are available in .AffinityLinux/Patch/"""
+        try:
+            # Source: repo's Patch directory
+            script_dir = Path(__file__).parent
+            source_patch_dir = script_dir.parent / "Patch"
+            
+            # Destination: .AffinityLinux/Patch/
+            dest_patch_dir = Path(self.directory) / "Patch"
+            dest_patch_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Files to copy
+            files_to_copy = ["AffinityPatcher.cs", "AffinityPatcher.csproj"]
+            
+            files_copied = False
+            all_exist = True
+            for filename in files_to_copy:
+                source_file = source_patch_dir / filename
+                dest_file = dest_patch_dir / filename
+                
+                if source_file.exists():
+                    # Only copy if destination doesn't exist or source is newer
+                    if not dest_file.exists() or source_file.stat().st_mtime > dest_file.stat().st_mtime:
+                        shutil.copy2(source_file, dest_file)
+                        files_copied = True
+                        if not silent:
+                            self.log(f"Copied {filename} to .AffinityLinux/Patch/", "info")
+                else:
+                    if not silent:
+                        self.log(f"Warning: {filename} not found in source Patch directory", "warning")
+                    all_exist = False
+                
+                # Check if destination file exists after copy attempt
+                if not dest_file.exists():
+                    all_exist = False
+            
+            if files_copied and not silent:
+                self.log("Patcher files are ready in .AffinityLinux/Patch/", "success")
+            elif not all_exist and not silent:
+                self.log("Some patcher files are missing", "warning")
+            
+            return all_exist
+        except Exception as e:
+            if not silent:
+                self.log(f"Error ensuring patcher files: {e}", "error")
+            return False
+    
     def build_affinity_patcher(self):
         """Build the AffinityPatcher .NET project"""
-        # Get the Patch directory path (relative to AffinityScripts)
-        script_dir = Path(__file__).parent
-        patch_dir = script_dir.parent / "Patch"
+        # Use Patch directory from .AffinityLinux (ensured to be available)
+        patch_dir = Path(self.directory) / "Patch"
         
         if not patch_dir.exists():
             self.log(f"Patch directory not found: {patch_dir}", "error")
@@ -5916,6 +5969,9 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             self.log("Fix Affinity v3 Settings", "info")
             self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            
+            # Ensure patcher files are available
+            self.ensure_patcher_files()
             
             # Check if Affinity v3 is installed
             dll_path = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / "Affinity" / "Serif.Affinity.dll"
