@@ -2,7 +2,8 @@
 
 A comprehensive solution for running [Affinity software](https://www.affinity.studio/) on GNU/Linux systems using Wine with full OpenCL hardware acceleration support.
 
-![Affinity on Linux Screenshot](./aol-screenshot.png)
+<img width="1276" height="1328" alt="image" src="https://github.com/user-attachments/assets/99ee6679-7048-4714-b852-316e0efade69" />
+
 
 ## Features
 
