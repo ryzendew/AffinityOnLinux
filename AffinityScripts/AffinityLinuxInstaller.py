@@ -235,6 +235,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.waiting_for_question_response = False  # Whether waiting for question dialog response
         self.dark_mode = True  # Track current theme mode
         self.icon_buttons = []  # Store buttons with icons for theme updates
+        self.enable_opencl = False  # OpenCL support preference
         # Cancellation helpers
         self.cancel_event = threading.Event()
         self._process_lock = threading.Lock()
@@ -2739,71 +2740,71 @@ class AffinityInstallerGUI(QMainWindow):
         """Detect available GPUs in the system"""
         gpus = []
         
-        # Check for NVIDIA GPUs
-        nvidia_success, nvidia_stdout, _ = self.run_command(["lspci"], check=False, capture=True)
-        if nvidia_success and nvidia_stdout:
-            nvidia_count = nvidia_stdout.lower().count("nvidia")
-            if nvidia_count > 0:
-                # Try to get NVIDIA model names
-                nvidia_models = []
-                for line in nvidia_stdout.split('\n'):
-                    if 'nvidia' in line.lower() and 'vga' in line.lower():
-                        # Extract model name
-                        model = line.split(':')[2].strip() if ':' in line else "NVIDIA GPU"
-                        nvidia_models.append(model)
-                
-                for i, model in enumerate(nvidia_models) if nvidia_models else range(nvidia_count):
-                    gpus.append({
-                        "type": "nvidia",
-                        "name": nvidia_models[i] if nvidia_models else f"NVIDIA GPU {i+1}",
-                        "index": i,
-                        "id": f"nvidia_{i}"
-                    })
-        
-        # Check for AMD GPUs
-        if nvidia_success and nvidia_stdout:
-            amd_count = nvidia_stdout.lower().count("amd") + nvidia_stdout.lower().count("radeon")
-            if amd_count > 0:
-                amd_models = []
-                for line in nvidia_stdout.split('\n'):
-                    if ('amd' in line.lower() or 'radeon' in line.lower()) and 'vga' in line.lower():
-                        model = line.split(':')[2].strip() if ':' in line else "AMD GPU"
-                        amd_models.append(model)
-                
-                for i, model in enumerate(amd_models) if amd_models else range(amd_count):
-                    gpus.append({
-                        "type": "amd",
-                        "name": amd_models[i] if amd_models else f"AMD GPU {i+1}",
-                        "index": i,
-                        "id": f"amd_{i}"
-                    })
-        
-        # Check for Intel GPUs
-        if nvidia_success and nvidia_stdout:
-            intel_count = nvidia_stdout.lower().count("intel")
-            if intel_count > 0:
-                intel_models = []
-                for line in nvidia_stdout.split('\n'):
-                    if 'intel' in line.lower() and 'vga' in line.lower():
-                        model = line.split(':')[2].strip() if ':' in line else "Intel GPU"
-                        intel_models.append(model)
-                
-                for i, model in enumerate(intel_models) if intel_models else range(intel_count):
-                    gpus.append({
-                        "type": "intel",
-                        "name": intel_models[i] if intel_models else f"Intel GPU {i+1}",
-                        "index": i,
-                        "id": f"intel_{i}"
-                    })
-        
-        # If no GPUs detected, add a default "auto" option
-        if not gpus:
+        # Get lspci output once
+        lspci_success, lspci_stdout, _ = self.run_command(["lspci"], check=False, capture=True)
+        if not lspci_success or not lspci_stdout:
+            # If lspci fails, return auto option only
             gpus.append({
                 "type": "auto",
                 "name": "Auto (System Default)",
                 "index": 0,
                 "id": "auto"
             })
+            return gpus
+        
+        # Parse lspci output to find actual GPU devices
+        # Look for VGA, 3D, or Display controller entries
+        gpu_lines = []
+        for line in lspci_stdout.split('\n'):
+            line_lower = line.lower()
+            # Check if this is a graphics/display device
+            if any(keyword in line_lower for keyword in ['vga', '3d', 'display controller', 'graphics']):
+                gpu_lines.append(line)
+        
+        # Process each GPU line to extract type and model
+        for line in gpu_lines:
+            line_lower = line.lower()
+            
+            # Extract model name (everything after the last colon)
+            if ':' in line:
+                model = line.split(':')[2].strip() if len(line.split(':')) > 2 else "Unknown GPU"
+            else:
+                model = "Unknown GPU"
+            
+            # Determine GPU type
+            gpu_type = None
+            gpu_id = None
+            
+            if 'nvidia' in line_lower:
+                gpu_type = "nvidia"
+                # Count existing nvidia GPUs to get index
+                nvidia_count = sum(1 for gpu in gpus if gpu["type"] == "nvidia")
+                gpu_id = f"nvidia_{nvidia_count}"
+            elif 'amd' in line_lower or 'radeon' in line_lower or 'amd/ati' in line_lower:
+                gpu_type = "amd"
+                amd_count = sum(1 for gpu in gpus if gpu["type"] == "amd")
+                gpu_id = f"amd_{amd_count}"
+            elif 'intel' in line_lower:
+                gpu_type = "intel"
+                intel_count = sum(1 for gpu in gpus if gpu["type"] == "intel")
+                gpu_id = f"intel_{intel_count}"
+            
+            # Only add if we identified a GPU type
+            if gpu_type:
+                gpus.append({
+                    "type": gpu_type,
+                    "name": model,
+                    "index": len([g for g in gpus if g["type"] == gpu_type]),
+                    "id": gpu_id
+                })
+        
+        # Always add "Auto" option as the first choice
+        gpus.insert(0, {
+            "type": "auto",
+            "name": "Auto (System Default)",
+            "index": 0,
+            "id": "auto"
+        })
         
         return gpus
     
@@ -2927,15 +2928,117 @@ class AffinityInstallerGUI(QMainWindow):
                     
                     gpu_name = next((gpu["name"] for gpu in gpus if gpu["id"] == selected_id), "Auto")
                     self.log(f"GPU selection saved: {gpu_name}", "success")
+                    
+                    # Update existing desktop entries
+                    self.update_existing_desktop_entries()
+                    
                     self.show_message(
                         "GPU Selection Saved",
                         f"Selected GPU: {gpu_name}\n\n"
-                        "This will be applied to all Affinity applications.\n"
-                        "You may need to recreate desktop entries for the change to take effect.",
+                        "All existing desktop entries have been updated with the new GPU configuration.",
                         "info"
                     )
                 except Exception as e:
                     self.log(f"Failed to save GPU selection: {e}", "error")
+    
+    def update_existing_desktop_entries(self):
+        """Update existing desktop entries with current GPU configuration"""
+        desktop_dir = Path.home() / ".local" / "share" / "applications"
+        if not desktop_dir.exists():
+            return
+        
+        # Get current GPU environment variables
+        gpu_env = self.get_gpu_env_vars()
+        directory_str = str(self.directory).rstrip("/")
+        
+        # Find all Affinity desktop entries
+        affinity_desktop_files = [
+            desktop_dir / "AffinityPhoto.desktop",
+            desktop_dir / "AffinityDesigner.desktop",
+            desktop_dir / "AffinityPublisher.desktop",
+            desktop_dir / "Affinity.desktop"
+        ]
+        
+        updated_count = 0
+        for desktop_file in affinity_desktop_files:
+            if not desktop_file.exists():
+                continue
+            
+            try:
+                # Read the desktop file
+                with open(desktop_file, 'r') as f:
+                    lines = f.readlines()
+                
+                # Find and update the Exec line
+                new_lines = []
+                exec_updated = False
+                
+                for line in lines:
+                    if line.startswith("Exec="):
+                        # Parse the existing Exec line
+                        exec_content = line[5:].strip()  # Remove "Exec=" prefix
+                        
+                        # Use regex to extract the app path (everything after wine, typically in quotes or ending with .exe)
+                        # Pattern 1: Find app path in quotes after wine
+                        quoted_path_match = re.search(r'wine\s+"([^"]+)"', exec_content)
+                        if quoted_path_match:
+                            app_path = quoted_path_match.group(1)
+                        else:
+                            # Pattern 2: Find app path without quotes (look for .exe)
+                            exe_match = re.search(r'wine\s+([^\s]+\.exe[^\s]*)', exec_content)
+                            if exe_match:
+                                app_path = exe_match.group(1)
+                            else:
+                                # Pattern 3: Find any path containing .exe
+                                exe_match = re.search(r'([^\s]+\.exe[^\s]*)', exec_content)
+                                if exe_match:
+                                    app_path = exe_match.group(1).strip('"')
+                                else:
+                                    # Fallback: try to extract from the end
+                                    parts = exec_content.split()
+                                    for part in reversed(parts):
+                                        if ".exe" in part or "drive_c" in part:
+                                            app_path = part.strip('"')
+                                            break
+                        
+                        # Get wine path (standard location)
+                        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+                        wine_path = str(wine)
+                        
+                        # Rebuild Exec line with new GPU env vars
+                        exec_line = f'Exec=env WINEPREFIX={directory_str}'
+                        if gpu_env:
+                            exec_line += f' {gpu_env}'
+                        exec_line += f' {wine_path}'
+                        if app_path:
+                            # Quote the app path if it contains spaces or special characters
+                            if ' ' in app_path or not app_path.startswith('/'):
+                                exec_line += f' "{app_path}"'
+                            else:
+                                exec_line += f' {app_path}'
+                        else:
+                            # If we couldn't parse app_path, log a warning but still update GPU env
+                            self.log(f"Warning: Could not parse app path from {desktop_file.name}, updating GPU env only", "warning")
+                        
+                        new_lines.append(exec_line + "\n")
+                        exec_updated = True
+                    else:
+                        new_lines.append(line)
+                
+                # Write back if Exec line was updated
+                if exec_updated:
+                    with open(desktop_file, 'w') as f:
+                        f.writelines(new_lines)
+                    updated_count += 1
+                    self.log(f"Updated desktop entry: {desktop_file.name}", "info")
+            
+            except Exception as e:
+                self.log(f"Failed to update {desktop_file.name}: {e}", "warning")
+        
+        if updated_count > 0:
+            self.log(f"Updated {updated_count} desktop entry/entries with new GPU configuration", "success")
+        else:
+            self.log("No desktop entries found to update", "info")
     
     def format_distro_name(self, distro=None):
         """Format distribution name for display with proper capitalization"""
@@ -3061,6 +3164,43 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Ensure patcher files are available
         self.ensure_patcher_files()
+        
+        # Ask about OpenCL support (only if not already configured)
+        opencl_config_file = Path(self.directory) / ".opencl_enabled"
+        if not opencl_config_file.exists():
+            opencl_reply = self.show_question_dialog(
+                "Enable OpenCL Support?",
+                "OpenCL (Open Computing Language) enables hardware acceleration for certain features in Affinity applications, "
+                "which can improve performance for tasks like image processing, filters, and effects.\n\n"
+                "This will download and configure vkd3d-proton, which provides OpenCL support through Vulkan.\n\n"
+                "Would you like to enable OpenCL support?\n\n"
+                "Note: You can change this setting later if needed.",
+                ["Yes", "No"]
+            )
+            
+            if opencl_reply == "Yes":
+                self.enable_opencl = True
+                self.log("OpenCL support will be enabled", "info")
+            else:
+                self.enable_opencl = False
+                self.log("OpenCL support will be disabled", "info")
+            
+            # Save OpenCL preference
+            try:
+                with open(opencl_config_file, 'w') as f:
+                    f.write("1" if self.enable_opencl else "0")
+            except Exception as e:
+                self.log(f"Failed to save OpenCL preference: {e}", "warning")
+        else:
+            # Load existing preference
+            self.enable_opencl = self.is_opencl_enabled()
+            if self.enable_opencl:
+                self.log("OpenCL support is enabled (from previous setup)", "info")
+            else:
+                self.log("OpenCL support is disabled (from previous setup)", "info")
+        
+        if self.check_cancelled():
+            return
         
         # Step 1: Detect distribution
         self.update_progress_text("Step 1/4: Detecting Linux distribution...")
@@ -3924,10 +4064,15 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Setup vkd3d-proton
-            self.update_progress_text("Setting up vkd3d-proton...")
-            self.update_progress(0.80)
-            self.setup_vkd3d()
+            # Setup vkd3d-proton (only if OpenCL is enabled)
+            if self.is_opencl_enabled():
+                self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
+                self.update_progress(0.80)
+                self.setup_vkd3d()
+            else:
+                self.update_progress_text("Skipping OpenCL setup...")
+                self.update_progress(0.80)
+                self.log("OpenCL support is disabled, skipping vkd3d-proton setup", "info")
             
             if self.check_cancelled():
                 return False
@@ -5383,8 +5528,9 @@ class AffinityInstallerGUI(QMainWindow):
                 # Wait a bit more to ensure installation is fully complete
                 time.sleep(2)
                 
-                # Configure OpenCL for Affinity apps
-                self.configure_opencl(app_name)
+                # Configure OpenCL for Affinity apps (if enabled)
+                if self.is_opencl_enabled():
+                    self.configure_opencl(app_name)
                 
                 # Verify app path exists before creating desktop entry
                 app_names = {
@@ -5790,10 +5936,13 @@ class AffinityInstallerGUI(QMainWindow):
             self.update_progress(0.6)
             self.restore_winmetadata()
             
-            # Configure OpenCL
-            self.update_progress_text("Configuring OpenCL...")
-            self.update_progress(0.7)
-            self.configure_opencl(app_name)
+            # Configure OpenCL (if enabled)
+            if self.is_opencl_enabled():
+                self.update_progress_text("Configuring OpenCL...")
+                self.update_progress(0.7)
+                self.configure_opencl(app_name)
+            else:
+                self.log("OpenCL support is disabled, skipping configuration", "info")
             
             # For Affinity v3 (Unified), check and install WebView2 Runtime if needed
             if app_name == "Add" or app_name == "Affinity (Unified)":
@@ -5863,8 +6012,31 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("WinMetadata.zip not found, downloading...", "info")
             self.setup_winmetadata()
     
+    def is_opencl_enabled(self):
+        """Check if OpenCL is enabled"""
+        # First check instance variable (set during one-click setup)
+        if hasattr(self, 'enable_opencl') and self.enable_opencl:
+            return True
+        
+        # Check saved preference
+        opencl_config_file = Path(self.directory) / ".opencl_enabled"
+        if opencl_config_file.exists():
+            try:
+                with open(opencl_config_file, 'r') as f:
+                    content = f.read().strip()
+                    return content == "1"
+            except Exception:
+                pass
+        
+        return False
+    
     def configure_opencl(self, app_name):
         """Configure OpenCL for application"""
+        # Only configure if OpenCL is enabled
+        if not self.is_opencl_enabled():
+            self.log("OpenCL support is disabled, skipping configuration", "info")
+            return
+        
         app_dirs = {
             "Photo": "Photo 2",
             "Designer": "Designer 2",
