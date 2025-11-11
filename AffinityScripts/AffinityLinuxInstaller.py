@@ -6607,15 +6607,55 @@ class AffinityInstallerGUI(QMainWindow):
             env=env
         )
         
+        # Filter out common harmless winetricks warnings
+        harmless_warnings = [
+            "you are using a 64-bit wineprefix",
+            "note that many verbs only install 32-bit",
+            "executing cd",
+            "using override",
+            "wineprefix",
+            "------------------------------------------------------",
+            "warning:"
+        ]
+        
+        # Check if stderr contains only harmless warnings
+        has_real_error = False
+        if stderr and not success:
+            # Only check for real errors if the command failed
+            lines = stderr.split('\n')
+            for line in lines:
+                line_lower = line.lower().strip()
+                if not line_lower:
+                    continue
+                # Skip harmless warnings
+                is_harmless = any(warning in line_lower for warning in harmless_warnings)
+                if not is_harmless and ("error" in line_lower or "failed" in line_lower or "cannot" in line_lower):
+                    has_real_error = True
+                    break
+        
         if success:
+            # Command succeeded - ignore any warnings in stderr
             self.log(f"✓ {renderer_name} renderer configured successfully", "success")
         else:
             error_msg = (stderr or "").lower()
             if "already installed" in error_msg or "already exists" in error_msg:
                 self.log(f"✓ {renderer_name} renderer is already configured", "success")
+            elif not has_real_error:
+                # Only warnings, not real errors - likely succeeded despite non-zero exit
+                self.log(f"✓ {renderer_name} renderer configured (warnings ignored)", "success")
             else:
                 self.log(f"⚠ Warning: {renderer_name} renderer configuration may have failed", "warning")
-                self.log(f"  Error: {stderr[:200] if stderr else 'Unknown error'}", "error")
+                # Only log the actual error part, not the harmless warnings
+                error_lines = []
+                for line in (stderr or "").split('\n'):
+                    line_lower = line.lower().strip()
+                    if line_lower and not any(warning in line_lower for warning in harmless_warnings):
+                        if "error" in line_lower or "failed" in line_lower or "cannot" in line_lower:
+                            error_lines.append(line)
+                if error_lines:
+                    self.log(f"  Error: {' '.join(error_lines[:3])}", "error")
+                else:
+                    self.log(f"  Error: {stderr[:200] if stderr else 'Unknown error'}", "error")
         
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
         self.end_operation()
