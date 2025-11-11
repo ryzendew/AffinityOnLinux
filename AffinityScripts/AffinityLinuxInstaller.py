@@ -121,7 +121,7 @@ if not PYQT6_AVAILABLE:
     print("  Arch/CachyOS/EndeavourOS/XeroLinux: sudo pacman -S python-pyqt6")
     print("  Fedora/Nobara: sudo dnf install python3-pyqt6")
     print("  Debian/Ubuntu/Mint/Pop/Zorin/PikaOS: sudo apt install python3-pyqt6")
-    print("  openSUSE: sudo zypper install python3-qt6")
+    print("  openSUSE: sudo zypper install python313-PyQt6")
     sys.exit(1)
 
 
