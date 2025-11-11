@@ -6111,8 +6111,26 @@ class AffinityInstallerGUI(QMainWindow):
         if dlls_copied > 0:
             self.log("OpenCL support configured", "success")
     
+    def _parse_version(self, version_str):
+        """Parse version string and return tuple of (major, minor, patch) for comparison"""
+        try:
+            # Remove any non-numeric suffixes (e.g., "8.0.100-preview" -> "8.0.100")
+            version_str = version_str.strip().split('-')[0].split('+')[0]
+            parts = version_str.split('.')
+            major = int(parts[0]) if len(parts) > 0 else 0
+            minor = int(parts[1]) if len(parts) > 1 else 0
+            patch = int(parts[2]) if len(parts) > 2 else 0
+            return (major, minor, patch)
+        except (ValueError, IndexError):
+            return (0, 0, 0)
+    
+    def _is_version_sufficient(self, version_str, min_major=8):
+        """Check if version is 8.0 or newer"""
+        major, minor, patch = self._parse_version(version_str)
+        return major >= min_major
+    
     def check_dotnet_sdk(self):
-        """Check if .NET SDK is installed"""
+        """Check if .NET SDK version 8.0 or newer is installed"""
         # First, try to run dotnet --version
         success, stdout, _ = self.run_command(
             ["dotnet", "--version"],
@@ -6121,90 +6139,122 @@ class AffinityInstallerGUI(QMainWindow):
         )
         if success and stdout:
             version = stdout.strip()
-            self.log(f".NET SDK found: {version}", "success")
-            return True
+            if self._is_version_sufficient(version):
+                self.log(f".NET SDK found (version {version}) - using installed version", "success")
+                return True
+            else:
+                self.log(f".NET SDK found but version {version} is too old (need 8.0+)", "warning")
         
         # If dotnet command not found, check if it's installed via package manager
         # This is useful when dotnet is installed but not in PATH
         if self.distro in ["fedora", "nobara"]:
-            # Check via dnf if package is installed
+            # Check for any dotnet-sdk package (not just 8.0)
             success, stdout, _ = self.run_command(
-                ["dnf", "list", "installed", "dotnet-sdk-8.0"],
+                ["dnf", "list", "installed", "dotnet-sdk*"],
                 check=False,
                 capture=True
             )
-            if success and stdout and "dotnet-sdk-8.0" in stdout:
-                self.log(".NET SDK package found via dnf (dotnet-sdk-8.0)", "success")
-                # Try to find dotnet in common locations
-                common_paths = [
-                    "/usr/bin/dotnet",
-                    "/usr/local/bin/dotnet",
-                    "/opt/dotnet/dotnet",
-                    Path.home() / ".dotnet" / "dotnet"
-                ]
-                for path in common_paths:
-                    if Path(path).exists():
-                        # Try running it
-                        success, stdout, _ = self.run_command(
-                            [str(path), "--version"],
-                            check=False,
-                            capture=True
-                        )
-                        if success and stdout:
-                            version = stdout.strip()
-                            self.log(f".NET SDK found at {path}: {version}", "success")
-                            return True
-                # Package is installed but dotnet command not accessible
-                self.log(".NET SDK package is installed but 'dotnet' command not found in PATH", "warning")
-                self.log("You may need to add /usr/bin to your PATH or restart your terminal", "info")
-                return True  # Return True anyway since package is installed
+            if success and stdout:
+                # Look for any dotnet-sdk package
+                for line in stdout.split('\n'):
+                    if 'dotnet-sdk' in line.lower() and 'installed' in line.lower():
+                        # Extract version from package name (e.g., dotnet-sdk-8.0, dotnet-sdk-9.0)
+                        match = re.search(r'dotnet-sdk-(\d+)\.(\d+)', line)
+                        if match:
+                            major = int(match.group(1))
+                            if major >= 8:
+                                self.log(f".NET SDK package found via dnf: {line.split()[0]}", "success")
+                                # Try to find dotnet in common locations
+                                common_paths = [
+                                    "/usr/bin/dotnet",
+                                    "/usr/local/bin/dotnet",
+                                    "/opt/dotnet/dotnet",
+                                    Path.home() / ".dotnet" / "dotnet"
+                                ]
+                                for path in common_paths:
+                                    if Path(path).exists():
+                                        # Try running it
+                                        success, stdout, _ = self.run_command(
+                                            [str(path), "--version"],
+                                            check=False,
+                                            capture=True
+                                        )
+                                        if success and stdout:
+                                            version = stdout.strip()
+                                            if self._is_version_sufficient(version):
+                                                self.log(f".NET SDK found at {path}: {version} - using installed version", "success")
+                                                return True
+                                # Package is installed but dotnet command not accessible
+                                self.log(".NET SDK package is installed but 'dotnet' command not found in PATH", "warning")
+                                self.log("You may need to add /usr/bin to your PATH or restart your terminal", "info")
+                                return True  # Return True anyway since package is installed
         
         elif self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
-            # Check via pacman for dotnet-sdk-8.0
+            # Check for any dotnet-sdk package via pacman
+            # Query all installed packages and filter for dotnet-sdk
             success, stdout, _ = self.run_command(
-                ["pacman", "-Q", "dotnet-sdk-8.0"],
+                ["pacman", "-Q"],
                 check=False,
                 capture=True
             )
-            if success and stdout and "dotnet-sdk-8.0" in stdout:
-                self.log(".NET SDK package found via pacman (dotnet-sdk-8.0)", "success")
-                # Try common paths
-                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
-                for path in common_paths:
-                    if Path(path).exists():
-                        success, stdout, _ = self.run_command(
-                            [path, "--version"],
-                            check=False,
-                            capture=True
-                        )
-                        if success and stdout:
-                            version = stdout.strip()
-                            self.log(f".NET SDK found at {path}: {version}", "success")
-                            return True
-                return True  # Package is installed
+            if success and stdout:
+                # Check all installed packages for dotnet-sdk
+                for line in stdout.split('\n'):
+                    if 'dotnet-sdk' in line.lower():
+                        # Extract version from package name (e.g., dotnet-sdk-8.0, dotnet-sdk-9.0)
+                        match = re.search(r'dotnet-sdk-(\d+)\.(\d+)', line)
+                        if match:
+                            major = int(match.group(1))
+                            if major >= 8:
+                                package_name = line.split()[0]
+                                self.log(f".NET SDK package found via pacman: {package_name}", "success")
+                                # Try common paths
+                                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
+                                for path in common_paths:
+                                    if Path(path).exists():
+                                        success, stdout, _ = self.run_command(
+                                            [path, "--version"],
+                                            check=False,
+                                            capture=True
+                                        )
+                                        if success and stdout:
+                                            version = stdout.strip()
+                                            if self._is_version_sufficient(version):
+                                                self.log(f".NET SDK found at {path}: {version} - using installed version", "success")
+                                                return True
+                                return True  # Package is installed
         
         elif self.distro in ["pikaos", "pop", "debian"]:
-            # Check via apt/dpkg
+            # Check for any dotnet-sdk package via dpkg
             success, stdout, _ = self.run_command(
-                ["dpkg", "-l", "dotnet-sdk-8.0"],
+                ["dpkg", "-l", "dotnet-sdk*"],
                 check=False,
                 capture=True
             )
-            if success and stdout and "dotnet-sdk-8.0" in stdout:
-                self.log(".NET SDK package found via dpkg (dotnet-sdk-8.0)", "success")
-                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
-                for path in common_paths:
-                    if Path(path).exists():
-                        success, stdout, _ = self.run_command(
-                            [path, "--version"],
-                            check=False,
-                            capture=True
-                        )
-                        if success and stdout:
-                            version = stdout.strip()
-                            self.log(f".NET SDK found at {path}: {version}", "success")
-                            return True
-                return True  # Package is installed
+            if success and stdout:
+                # Look for any dotnet-sdk package
+                for line in stdout.split('\n'):
+                    if 'dotnet-sdk' in line.lower() and line.startswith('ii'):
+                        # Extract version from package name (e.g., dotnet-sdk-8.0, dotnet-sdk-9.0)
+                        match = re.search(r'dotnet-sdk-(\d+)\.(\d+)', line)
+                        if match:
+                            major = int(match.group(1))
+                            if major >= 8:
+                                self.log(f".NET SDK package found via dpkg: {line.split()[1]}", "success")
+                                common_paths = ["/usr/bin/dotnet", "/usr/local/bin/dotnet"]
+                                for path in common_paths:
+                                    if Path(path).exists():
+                                        success, stdout, _ = self.run_command(
+                                            [path, "--version"],
+                                            check=False,
+                                            capture=True
+                                        )
+                                        if success and stdout:
+                                            version = stdout.strip()
+                                            if self._is_version_sufficient(version):
+                                                self.log(f".NET SDK found at {path}: {version} - using installed version", "success")
+                                                return True
+                                return True  # Package is installed
         
         return False
     
