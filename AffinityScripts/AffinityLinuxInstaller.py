@@ -6599,63 +6599,102 @@ class AffinityInstallerGUI(QMainWindow):
         else:
             self.log("⚠ Warning: Failed to set Windows version", "warning")
         
-        # Configure renderer using winetricks
+        # Set renderer directly via registry (more reliable than winetricks)
         self.log(f"Configuring {renderer_name} renderer...", "info")
-        success, stdout, stderr = self.run_command(
-            ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", f"renderer={renderer_value}"],
+        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        
+        # Set renderer directly via registry - this is more reliable than winetricks
+        self.log(f"Setting {renderer_name} renderer via registry...", "info")
+        reg_add_success, reg_add_stdout, reg_add_stderr = self.run_command(
+            [str(wine), "reg", "add", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D", "/v", "renderer", "/t", "REG_SZ", "/d", renderer_value, "/f"],
             check=False,
-            env=env
+            env=env,
+            capture=True
         )
         
-        # Filter out common harmless winetricks warnings
-        harmless_warnings = [
-            "you are using a 64-bit wineprefix",
-            "note that many verbs only install 32-bit",
-            "executing cd",
-            "using override",
-            "wineprefix",
-            "------------------------------------------------------",
-            "warning:"
-        ]
-        
-        # Check if stderr contains only harmless warnings
-        has_real_error = False
-        if stderr and not success:
-            # Only check for real errors if the command failed
-            lines = stderr.split('\n')
-            for line in lines:
-                line_lower = line.lower().strip()
-                if not line_lower:
-                    continue
-                # Skip harmless warnings
-                is_harmless = any(warning in line_lower for warning in harmless_warnings)
-                if not is_harmless and ("error" in line_lower or "failed" in line_lower or "cannot" in line_lower):
-                    has_real_error = True
-                    break
-        
-        if success:
-            # Command succeeded - ignore any warnings in stderr
-            self.log(f"✓ {renderer_name} renderer configured successfully", "success")
+        if reg_add_success:
+            self.log(f"✓ {renderer_name} renderer set via registry", "success")
         else:
-            error_msg = (stderr or "").lower()
-            if "already installed" in error_msg or "already exists" in error_msg:
-                self.log(f"✓ {renderer_name} renderer is already configured", "success")
-            elif not has_real_error:
-                # Only warnings, not real errors - likely succeeded despite non-zero exit
-                self.log(f"✓ {renderer_name} renderer configured (warnings ignored)", "success")
+            # Fallback to winetricks if direct registry setting fails
+            self.log(f"Registry method failed, trying winetricks...", "info")
+            success, stdout, stderr = self.run_command(
+                ["winetricks", "--unattended", "--force", "--no-isolate", "--optout", f"renderer={renderer_value}"],
+                check=False,
+                env=env
+            )
+            if success:
+                self.log(f"✓ {renderer_name} renderer set via winetricks", "success")
             else:
-                self.log(f"⚠ Warning: {renderer_name} renderer configuration may have failed", "warning")
-                # Only log the actual error part, not the harmless warnings
-                error_lines = []
-                for line in (stderr or "").split('\n'):
-                    line_lower = line.lower().strip()
-                    if line_lower and not any(warning in line_lower for warning in harmless_warnings):
-                        if "error" in line_lower or "failed" in line_lower or "cannot" in line_lower:
-                            error_lines.append(line)
-                if error_lines:
-                    self.log(f"  Error: {' '.join(error_lines[:3])}", "error")
+                self.log(f"⚠ Warning: Failed to set {renderer_name} renderer via both methods", "warning")
+        
+        # Verify renderer was actually set in registry
+        self.log(f"Verifying {renderer_name} renderer configuration...", "info")
+        renderer_verified = False
+        
+        try:
+            # Check registry for renderer setting
+            renderer_check_success, renderer_check_stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D", "/v", "renderer"],
+                check=False,
+                env=env,
+                capture=True
+            )
+            
+            if renderer_check_success and renderer_check_stdout:
+                renderer_check_lower = renderer_check_stdout.lower()
+                # Check for the renderer value we set
+                if renderer_value == "vulkan" and "vulkan" in renderer_check_lower:
+                    renderer_verified = True
+                elif renderer_value == "opengl" and "opengl" in renderer_check_lower:
+                    renderer_verified = True
+                elif renderer_value == "gdi" and "gdi" in renderer_check_lower:
+                    renderer_verified = True
+                
+                if renderer_verified:
+                    self.log(f"✓ {renderer_name} renderer verified in registry", "success")
                 else:
-                    self.log(f"  Error: {stderr[:200] if stderr else 'Unknown error'}", "error")
+                    # Show what was actually found
+                    actual_renderer = None
+                    if "renderer" in renderer_check_lower:
+                        # Extract the actual value
+                        match = re.search(r'renderer\s+REG_SZ\s+(\w+)', renderer_check_stdout, re.IGNORECASE)
+                        if match:
+                            actual_renderer = match.group(1)
+                            self.log(f"⚠ Warning: Expected {renderer_name} but found {actual_renderer} in registry", "warning")
+                        else:
+                            self.log(f"⚠ Warning: {renderer_name} renderer may not be set correctly", "warning")
+                    else:
+                        self.log(f"⚠ Warning: Could not verify {renderer_name} renderer in registry", "warning")
+                    
+                    # Retry setting the renderer if verification failed
+                    if not actual_renderer or actual_renderer.lower() != renderer_value.lower():
+                        self.log(f"Retrying to set {renderer_name} renderer via registry...", "info")
+                        retry_success, _, retry_stderr = self.run_command(
+                            [str(wine), "reg", "add", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D", "/v", "renderer", "/t", "REG_SZ", "/d", renderer_value, "/f"],
+                            check=False,
+                            env=env,
+                            capture=True
+                        )
+                        
+                        if retry_success:
+                            # Verify again after retry
+                            verify_success, verify_stdout, _ = self.run_command(
+                                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D", "/v", "renderer"],
+                                check=False,
+                                env=env,
+                                capture=True
+                            )
+                            
+                            if verify_success and renderer_value.lower() in (verify_stdout or "").lower():
+                                self.log(f"✓ {renderer_name} renderer set successfully via registry", "success")
+                            else:
+                                self.log(f"⚠ Warning: Failed to verify {renderer_name} renderer after retry", "warning")
+                        else:
+                            self.log(f"⚠ Warning: Failed to set {renderer_name} renderer via registry: {retry_stderr[:100] if retry_stderr else 'Unknown error'}", "warning")
+            else:
+                self.log(f"⚠ Warning: Could not read renderer from registry", "warning")
+        except Exception as e:
+            self.log(f"⚠ Warning: Error verifying renderer: {e}", "warning")
         
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
         self.end_operation()
