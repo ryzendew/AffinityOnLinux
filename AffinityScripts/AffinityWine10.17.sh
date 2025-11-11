@@ -527,14 +527,10 @@ install_runtime_dependencies() {
         echo ""
     }
     
-    # Install required components (check first)
+    # Install required components (matching guide order)
+    # Guide: winetricks --unattended --force remove_mono vcrun2022 dotnet48 corefonts win11
+    # Note: Guide also mentions optional renderer=vulkan and tahoma, but we install them by default
     install_component_if_needed "remove_mono" "Remove Mono"
-    install_component_if_needed "dotnet35" ".NET Framework 3.5"
-    
-    # Enable .NET 3.5 via registry after installation (equivalent to "Turn Windows features on or off")
-    local prefix=$(get_wine_prefix)
-    enable_dotnet35_registry "$prefix"
-    
     install_component_if_needed "vcrun2022" "Visual C++ Redistributables 2022"
     install_component_if_needed "dotnet48" ".NET Framework 4.8"
     install_component_if_needed "corefonts" "Windows Core Fonts"
@@ -892,8 +888,8 @@ copy_helper_files() {
         fi
     fi
     
-    # Check for Affinity 2.x (separate apps)
-    for app in "Affinity Photo" "Affinity Designer" "Affinity Publisher"; do
+    # Check for Affinity 2.x (separate apps - guide uses "Photo 2", "Designer 2", "Publisher 2")
+    for app in "Photo 2" "Designer 2" "Publisher 2"; do
         local app_dir="$affinity_dir/$app"
         if [ -d "$app_dir" ]; then
             local dll_dest="$app_dir/wintypes.dll"
@@ -910,7 +906,7 @@ copy_helper_files() {
         fi
     done
     
-    if [ "$files_copied" = false ] && [ ! -d "$affinity_dir/Affinity" ] && [ ! -d "$affinity_dir/Affinity Photo" ]; then
+    if [ "$files_copied" = false ] && [ ! -d "$affinity_dir/Affinity" ] && [ ! -d "$affinity_dir/Photo 2" ]; then
         print_warning "No Affinity installation found. Files will be copied when you install Affinity."
     fi
     
@@ -1173,7 +1169,7 @@ show_introduction() {
     if [ -n "$WINEPREFIX" ]; then
         echo -e "  ${CYAN}Using: $WINEPREFIX${NC}"
     else
-        echo -e "  ${CYAN}Using: ~/.wine (Wine default)${NC}"
+        echo -e "  ${CYAN}Using: ~/.wine (default)${NC}"
     fi
     echo ""
     echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1222,6 +1218,8 @@ show_affinity_menu() {
 
 install_affinity_product() {
     local product=$1
+    # Use cache directory like Python script for Affinity v3, Downloads for v2
+    local cache_dir="$HOME/.cache/affinity-installer"
     local downloads_dir="$HOME/Downloads"
     local installer_file=""
     local download_url=""
@@ -1230,7 +1228,9 @@ install_affinity_product() {
         "Affinity"|"Add")
             print_header "Installing Affinity (Unified Application v3)"
             download_url="https://downloads.affinity.studio/Affinity%20x64.exe"
-            installer_file="$downloads_dir/Affinity-x64.exe"
+            # Use cache directory for v3 like Python script
+            mkdir -p "$cache_dir"
+            installer_file="$cache_dir/Affinity-x64.exe"
             ;;
         "Photo")
             print_header "Installing Affinity Photo v2"
@@ -1253,59 +1253,72 @@ install_affinity_product() {
             ;;
     esac
     
-    # Always download the latest version (remove old installer if it exists)
-    if [ -f "$installer_file" ]; then
-        print_info "Removing old installer to ensure we get the latest version..."
-        rm -f "$installer_file"
-    fi
-    
-    print_step "Downloading latest $product installer..."
-    print_warning "This is a large download (~500MB), please be patient..."
-    print_info "Always downloading the newest version from Affinity servers..."
-    mkdir -p "$downloads_dir"
-    
-    if download_file "$download_url" "$installer_file" "$product installer"; then
-        print_success "$product installer downloaded successfully (latest version)"
+    # For Affinity v3, always download the latest version (remove old installer if it exists)
+    if [ "$product" = "Affinity" ] || [ "$product" = "Add" ]; then
+        if [ -f "$installer_file" ]; then
+            print_info "Removing old installer to ensure we get the latest version..."
+            rm -f "$installer_file"
+        fi
+        
+        print_step "Downloading latest Affinity v3 installer..."
+        print_warning "This is a large download (~500MB), please be patient..."
+        print_info "Downloading from: $download_url"
+        print_info "Saving to: $installer_file"
+        
+        if download_file "$download_url" "$installer_file" "Affinity v3 installer"; then
+            print_success "Affinity v3 installer downloaded successfully (latest version)"
+        else
+            print_error "Failed to download Affinity v3 installer"
+            print_info "You can download it manually from: https://downloads.affinity.studio/Affinity%20x64.exe"
+            return 1
+        fi
     else
-        print_error "Failed to download $product installer"
-        print_info "You can download it manually from: https://www.affinity.studio/get-affinity"
-        read -p "Enter the full path to your $product installer (.exe file): " installer_file
+        # For v2 apps, check if file exists first, then download if needed
+        if [ -f "$installer_file" ]; then
+            print_info "Installer found at: $installer_file"
+            read -p "Use existing installer or download latest? (u/d): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Dd]$ ]]; then
+                print_info "Removing old installer to ensure we get the latest version..."
+                rm -f "$installer_file"
+            fi
+        fi
         
         if [ ! -f "$installer_file" ]; then
-            print_error "File not found: $installer_file"
-            return 1
+            print_step "Downloading latest $product installer..."
+            print_warning "This is a large download (~500MB), please be patient..."
+            mkdir -p "$downloads_dir"
+            
+            if download_file "$download_url" "$installer_file" "$product installer"; then
+                print_success "$product installer downloaded successfully (latest version)"
+            else
+                print_error "Failed to download $product installer"
+                print_info "You can download it manually from: https://www.affinity.studio/get-affinity"
+                read -p "Enter the full path to your $product installer (.exe file): " installer_file
+                
+                if [ ! -f "$installer_file" ]; then
+                    print_error "File not found: $installer_file"
+                    return 1
+                fi
+            fi
         fi
     fi
     
     print_step "Found installer: $installer_file"
     
-    # Verify .NET 3.5 is properly installed before launching installer
-    print_step "Verifying .NET Framework 3.5 installation..."
-    local prefix=$(get_wine_prefix)
-    local winetricks_cmd="winetricks"
-    if ! check_command winetricks; then
-        if [ -f "$HOME/winetricks" ]; then
-            winetricks_cmd="$HOME/winetricks"
-        fi
+    # Verify installer file exists and is executable
+    if [ ! -f "$installer_file" ]; then
+        print_error "Installer file not found: $installer_file"
+        return 1
     fi
     
-    # Check if dotnet35 is actually installed and functional
-    if ! check_winetricks_component "dotnet35" "$winetricks_cmd"; then
-        print_warning ".NET Framework 3.5 appears to be missing or incomplete"
-        print_info "Reinstalling .NET Framework 3.5 to ensure proper installation..."
-        if [ -n "$WINEPREFIX" ]; then
-            export WINEPREFIX
-            "$winetricks_cmd" --unattended --force dotnet35 >/dev/null 2>&1 || true
-        else
-            WINEPREFIX="$prefix" "$winetricks_cmd" --unattended --force dotnet35 >/dev/null 2>&1 || true
-        fi
-        # Wait a moment for installation to complete
-        sleep 3
+    if [ ! -r "$installer_file" ]; then
+        print_error "Installer file is not readable: $installer_file"
+        return 1
     fi
     
-    # Enable .NET 3.5 via registry (equivalent to "Turn Windows features on or off")
-    print_step "Enabling .NET Framework 3.5 via registry (Windows features equivalent)..."
-    enable_dotnet35_registry "$prefix"
+    print_info "Installer file verified: $installer_file"
+    print_info "File size: $(du -h "$installer_file" | cut -f1)"
     
     # For Affinity v3, fix UI Automation issue
     if [ "$product" = "Affinity" ] || [ "$product" = "Add" ]; then
@@ -1371,26 +1384,13 @@ install_affinity_product() {
         fi
     fi
     
-    # Verify again after registry configuration
-    if ! check_winetricks_component "dotnet35" "$winetricks_cmd"; then
-        print_error ".NET Framework 3.5 installation or configuration failed"
-        print_warning "The installer may fail. You can try installing dotnet35 manually with:"
-        if [ -n "$WINEPREFIX" ]; then
-            echo "  WINEPREFIX=\"$WINEPREFIX\" winetricks dotnet35"
-        else
-            echo "  WINEPREFIX=\"$prefix\" winetricks dotnet35"
-        fi
-        read -p "Continue anyway? (y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            return 1
-        fi
-    else
-        print_success ".NET Framework 3.5 is installed and enabled"
-    fi
-    
     print_info "Launching $product installer..."
+    print_info "Installer path: $installer_file"
+    print_info "Wine prefix: $prefix"
     print_warning "Follow the installation prompts in the installer window"
+    if [ "$product" != "Affinity" ] && [ "$product" != "Add" ]; then
+        print_info "Note: For Affinity v2 apps, you may need to run the installer 3 times for each app"
+    fi
     
     # For Affinity v3, set environment variables to help with UI Automation errors
     local wine_env=""
@@ -1400,38 +1400,73 @@ install_affinity_product() {
         wine_env="WINEDEBUG=-all"
     fi
     
+    # Launch the installer and wait for it to complete
+    # Try wine start /wait /unix first (like Python script), then fallback to wine
+    print_step "Executing installer with Wine..."
+    local installer_exit_code=0
+    local installer_launched=false
+    
+    # Set up environment variables
     if [ -n "$WINEPREFIX" ]; then
         export WINEPREFIX
-        if [ -n "$wine_env" ]; then
-            env $wine_env wine "$installer_file" || {
-                print_error "Failed to launch installer"
-                print_info "Note: UI Automation errors may appear but installer should still work"
-                return 1
-            }
-        else
-            wine "$installer_file" || {
-                print_error "Failed to launch installer"
-                return 1
-            }
-        fi
+        print_info "Using WINEPREFIX from environment: $WINEPREFIX"
     else
-        if [ -n "$wine_env" ]; then
-            env $wine_env WINEPREFIX="$prefix" wine "$installer_file" || {
-                print_error "Failed to launch installer"
-                print_info "Note: UI Automation errors may appear but installer should still work"
-                return 1
-            }
-        else
-            WINEPREFIX="$prefix" wine "$installer_file" || {
-                print_error "Failed to launch installer"
-                return 1
-            }
+        export WINEPREFIX="$prefix"
+        print_info "Using WINEPREFIX: $prefix"
+    fi
+    
+    # Try wine start /wait /unix first (more reliable for installers)
+    print_info "Attempt 1: Trying 'wine start /wait /unix'..."
+    if [ -n "$wine_env" ]; then
+        # Parse wine_env (e.g., "WINEDEBUG=-all") and export it
+        if [[ "$wine_env" =~ ^([^=]+)=(.*)$ ]]; then
+            export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
         fi
     fi
+    
+    if wine start /wait /unix "$installer_file" 2>&1; then
+        installer_exit_code=$?
+        installer_launched=true
+        print_info "Installer launched successfully with 'wine start /wait /unix'"
+    else
+        installer_exit_code=$?
+        print_warning "First attempt returned exit code $installer_exit_code, trying fallback method..."
+        installer_launched=false
+    fi
+    
+    # Fallback to direct wine command if first attempt failed or exited too quickly
+    if [ "$installer_launched" = false ] || [ $installer_exit_code -ne 0 ]; then
+        print_info "Attempt 2: Trying 'wine' directly..."
+        if wine "$installer_file" 2>&1; then
+            installer_exit_code=$?
+            installer_launched=true
+            print_info "Installer launched successfully with 'wine'"
+        else
+            installer_exit_code=$?
+            print_warning "Second attempt returned exit code $installer_exit_code"
+            # Don't fail here - some installers return non-zero even on success
+        fi
+    fi
+    
+    # Wait for all Wine processes to finish (like Python script)
+    print_info "Waiting for Wine processes to finish (wineserver -w)..."
+    wineserver -w 2>/dev/null || true
+    
+    print_info "Installer process completed with exit code: $installer_exit_code"
     
     # Restore WINEDEBUG if we changed it
     if [ "$product" = "Affinity" ] || [ "$product" = "Add" ]; then
         unset WINEDEBUG
+    fi
+    
+    # Wait a moment for installer to fully complete and files to be written
+    print_info "Waiting for installation to complete..."
+    sleep 3
+    
+    # Check if installation was successful
+    if [ $installer_exit_code -ne 0 ]; then
+        print_warning "Installer exited with code $installer_exit_code"
+        print_info "This may be normal - some installers return non-zero codes even on success"
     fi
     
     # Finalize OpenCL configuration after installation
@@ -1491,9 +1526,34 @@ install_affinity_product() {
         fi
     else
         print_warning "$product installation directory not found. OpenCL configuration skipped."
+        print_info "If you just finished installing, the directory may not be created yet."
+        print_info "You can run the OpenCL configuration manually later, or re-run this script."
     fi
     
-    print_success "$product installation completed!"
+    # Verify installation actually completed
+    case $product in
+        "Affinity"|"Add")
+            local check_exe="$prefix/drive_c/Program Files/Affinity/Affinity/Affinity.exe"
+            ;;
+        "Photo")
+            local check_exe="$prefix/drive_c/Program Files/Affinity/Photo 2/Photo 2.exe"
+            ;;
+        "Designer")
+            local check_exe="$prefix/drive_c/Program Files/Affinity/Designer 2/Designer 2.exe"
+            ;;
+        "Publisher")
+            local check_exe="$prefix/drive_c/Program Files/Affinity/Publisher 2/Publisher 2.exe"
+            ;;
+    esac
+    
+    if [ -f "$check_exe" ]; then
+        print_success "$product installation completed successfully!"
+    else
+        print_warning "$product installation may not have completed successfully."
+        print_info "The executable was not found at: $check_exe"
+        print_info "Please verify the installation completed in the installer window."
+    fi
+    
     return 0
 }
 
@@ -1501,7 +1561,7 @@ main() {
     # Show introduction and ask for confirmation
     show_introduction
     
-    # Use WINEPREFIX from environment, or Wine's default (~/.wine) if not set
+    # Use WINEPREFIX from environment, or default (~/.wine) if not set
     if [ -n "$WINEPREFIX" ]; then
         export WINEPREFIX
         print_info "Wine prefix: $WINEPREFIX"
