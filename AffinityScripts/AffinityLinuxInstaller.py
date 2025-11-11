@@ -5487,7 +5487,7 @@ class AffinityInstallerGUI(QMainWindow):
                             return True
                 return True  # Package is installed
         
-        elif self.distro in ["pikaos", "pop"]:
+        elif self.distro in ["pikaos", "pop", "debian"]:
             # Check via apt/dpkg
             success, stdout, _ = self.run_command(
                 ["dpkg", "-l", "dotnet-sdk-8.0"],
@@ -5683,7 +5683,7 @@ class AffinityInstallerGUI(QMainWindow):
                     self.log("  sudo pacman -S dotnet-sdk", "info")
                 elif self.distro in ["fedora", "nobara"]:
                     self.log("  sudo dnf install dotnet-sdk-8.0", "info")
-                elif self.distro in ["pikaos", "pop"]:
+                elif self.distro in ["pikaos", "pop", "debian"]:
                     self.log("  sudo apt install dotnet-sdk-8.0", "info")
                     self.log("  (May require Microsoft's .NET repository)", "warning")
                 elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
@@ -5952,18 +5952,7 @@ class AffinityInstallerGUI(QMainWindow):
         try:
             self.log("Installing .NET SDK...", "info")
             
-            if self.distro == "pikaos":
-                # Try installing dotnet-sdk-8.0 (may need Microsoft repo)
-                success, _, stderr = self.run_command([
-                    "sudo", "apt", "install", "-y", "dotnet-sdk-8.0"
-                ], check=False)
-                if not success:
-                    self.log("Failed to install dotnet-sdk-8.0 from default repos", "warning")
-                    self.log("You may need to add Microsoft's .NET repository. See: https://learn.microsoft.com/dotnet/core/install/linux", "info")
-                    return False
-                return True
-            
-            if self.distro == "pop":
+            if self.distro in ["pikaos", "pop", "debian"]:
                 # Try installing dotnet-sdk-8.0 (may need Microsoft repo)
                 success, _, stderr = self.run_command([
                     "sudo", "apt", "install", "-y", "dotnet-sdk-8.0"
@@ -6040,7 +6029,7 @@ class AffinityInstallerGUI(QMainWindow):
                             self.log("  sudo pacman -S dotnet-sdk", "info")
                         elif self.distro in ["fedora", "nobara"]:
                             self.log("  sudo dnf install dotnet-sdk-8.0", "info")
-                        elif self.distro in ["pikaos", "pop"]:
+                        elif self.distro in ["pikaos", "pop", "debian"]:
                             self.log("  sudo apt install dotnet-sdk-8.0", "info")
                             self.log("  (May require Microsoft's .NET repository)", "warning")
                         elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
