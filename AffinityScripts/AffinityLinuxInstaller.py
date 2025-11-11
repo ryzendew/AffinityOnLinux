@@ -1774,6 +1774,9 @@ class AffinityInstallerGUI(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("Administrator Authentication Required")
         dialog.setMinimumWidth(400)
+        dialog.setModal(True)  # Ensure dialog is modal
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)  # Keep on top
+        
         layout = QVBoxLayout(dialog)
         
         # Add explanation label
@@ -1799,6 +1802,11 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Allow Enter key to submit
         password_input.returnPressed.connect(dialog.accept)
+        
+        # Ensure dialog is visible and raised
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
         
         # Focus the password input
         password_input.setFocus()
@@ -2059,24 +2067,15 @@ class AffinityInstallerGUI(QMainWindow):
                 )
                 self._register_process(proc)
                 try:
-                    # Send password to sudo via stdin
+                    # Send password to sudo via stdin using communicate() which handles stdin properly
                     password_input = f"{self.sudo_password}\n"
-                    try:
-                        if proc.stdin:
-                            proc.stdin.write(password_input)
-                            proc.stdin.flush()
-                            proc.stdin.close()
-                    except (BrokenPipeError, OSError) as e:
-                        self.log(f"Error sending password to sudo: {e}", "error")
-                        self._terminate_process(proc)
-                        return False, "", "Failed to send password to sudo"
                     
                     if capture:
                         stdout_acc = ""
                         stderr_acc = ""
                         # Read output without timeout for long-running commands like package installation
                         try:
-                            out, err = proc.communicate(timeout=None)
+                            out, err = proc.communicate(input=password_input, timeout=None)
                             stdout_acc += out or ""
                             stderr_acc += err or ""
                         except subprocess.TimeoutExpired:
@@ -2091,18 +2090,29 @@ class AffinityInstallerGUI(QMainWindow):
                                 stderr_acc += err or ""
                             except Exception:
                                 pass
+                        except (BrokenPipeError, OSError) as e:
+                            self.log(f"Error sending password to sudo: {e}", "error")
+                            self._terminate_process(proc)
+                            return False, "", "Failed to send password to sudo"
                         success = proc.returncode == 0
                         return success, stdout_acc, stderr_acc
                     else:
-                        # No capture: poll until completion or cancellation
-                        # Password already sent above, just wait for process to complete
-                        while True:
+                        # No capture: send password and wait for completion
+                        try:
+                            proc.communicate(input=password_input, timeout=None)
+                        except (BrokenPipeError, OSError) as e:
+                            self.log(f"Error sending password to sudo: {e}", "error")
+                            self._terminate_process(proc)
+                            return False, "", "Failed to send password to sudo"
+                        except subprocess.TimeoutExpired:
+                            # This shouldn't happen with timeout=None, but handle it just in case
                             if self.cancel_event.is_set():
                                 self._terminate_process(proc)
                                 return False, "", "Cancelled"
-                            if proc.poll() is not None:
-                                break
-                            time.sleep(0.1)
+                            try:
+                                proc.communicate()
+                            except Exception:
+                                pass
                         return proc.returncode == 0, "", ""
                 finally:
                     self._unregister_process(proc)
@@ -2953,6 +2963,25 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"\nInstalling missing dependencies: {', '.join(missing)}", "info")
             self.update_progress_text(f"Installing {len(missing)} missing packages...")
             self.update_progress(0.5)  # Start second half of progress
+            
+            # Request password before attempting installation
+            self.log("Administrator privileges required for package installation.", "info")
+            self.update_progress_text("Requesting administrator password...")
+            password = self.get_sudo_password()
+            if password is None:
+                self.log("Password entry cancelled. Cannot install dependencies.", "error")
+                self.update_progress_text("Dependency installation cancelled")
+                return False
+            
+            # Validate password before proceeding
+            if not self.sudo_password_validated:
+                self.log("Validating password...", "info")
+                if not self.validate_sudo_password(password):
+                    self.log("Password validation failed. Please try again.", "error")
+                    self.sudo_password = None
+                    self.sudo_password_validated = False
+                    return False
+                self.log("Password validated successfully.", "success")
             
             if not self.install_dependencies():
                 self.update_progress_text("Dependency installation failed")
