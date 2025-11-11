@@ -2694,19 +2694,12 @@ class AffinityInstallerGUI(QMainWindow):
             # Ensure icons directory exists
             icons_dir.mkdir(parents=True, exist_ok=True)
             
-            # List of application icons to download from GitHub
-            # Note: icons are in Assets/Icons/ directory in the repository
-            # Using the same URLs as setup_wine function for consistency
+            # List of UI theme icons to download from GitHub
+            # Note: Application icons (Affinity.png, etc.) are downloaded elsewhere
+            # These are just the UI button icons needed for the installer interface
             icon_files = [
-                # Application icons - using SVG versions from Assets/Icons
-                ("Affinity-Canva.svg", "Assets/Icons/Affinity-Canva.svg"),
-                ("Photo.svg", "Assets/Icons/Photo.svg"),
-                ("Designer.svg", "Assets/Icons/Designer.svg"),
-                ("Publisher.svg", "Assets/Icons/Publisher.svg"),
-                # Application icons with full names (using same URLs as setup_wine)
-                ("AffinityPhoto.svg", "https://github.com/user-attachments/assets/c7b70ee5-58e3-46c6-b385-7c3d02749664"),
-                ("AffinityDesigner.svg", "https://github.com/user-attachments/assets/8ea7f748-c455-4ee8-9a94-775de40dbbf3"),
-                ("AffinityPublisher.svg", "https://github.com/user-attachments/assets/96ae06f8-470b-451f-ba29-835324b5b552"),
+                # UI theme icons - these are the ones actually used by the installer buttons
+                # The application icons are handled by setup_wine function
             ]
             
             # Check which icons are missing
