@@ -2691,19 +2691,10 @@ class AffinityInstallerGUI(QMainWindow):
             
             icons_dir = script_dir / "icons"
             
-            # Check if icons directory exists and has files
-            if icons_dir.exists() and any(icons_dir.iterdir()):
-                return  # Icons already exist
-            
-            # Icons directory is missing or empty, download from GitHub
+            # Ensure icons directory exists
             icons_dir.mkdir(parents=True, exist_ok=True)
             
-            try:
-                self.log(f"Downloading icons to: {icons_dir}", "info")
-            except Exception:
-                print(f"Downloading icons to: {icons_dir}")
-            
-            # List of icons to download from GitHub
+            # List of application icons to download from GitHub
             # Note: icons are in the icons/ directory in the repository root
             icon_files = [
                 ("Affinity.png", "icons/Affinity.png"),
@@ -2715,24 +2706,43 @@ class AffinityInstallerGUI(QMainWindow):
                 ("Affinity-Canva.ico", "icons/Affinity-Canva.ico"),
             ]
             
-            base_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/"
-            downloaded_count = 0
-            
+            # Check which icons are missing
+            missing_icons = []
             for local_name, github_path in icon_files:
                 icon_path = icons_dir / local_name
                 if not icon_path.exists():
+                    missing_icons.append((local_name, github_path))
+            
+            # Only download if there are missing icons
+            if not missing_icons:
+                return  # All icons already exist
+            
+            try:
+                self.log(f"Downloading {len(missing_icons)} missing icon(s) to: {icons_dir}", "info")
+            except Exception:
+                print(f"Downloading {len(missing_icons)} missing icon(s) to: {icons_dir}")
+            
+            base_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/"
+            downloaded_count = 0
+            
+            for local_name, github_path in missing_icons:
+                icon_path = icons_dir / local_name
+                try:
+                    icon_url = base_url + github_path
+                    # Use urlretrieve with better error handling
+                    urllib.request.urlretrieve(icon_url, str(icon_path))
+                    downloaded_count += 1
                     try:
-                        icon_url = base_url + github_path
-                        # Use urlretrieve with better error handling
-                        urllib.request.urlretrieve(icon_url, str(icon_path))
-                        downloaded_count += 1
-                    except Exception as e:
-                        # Log error but continue with other icons
-                        try:
-                            self.log(f"Failed to download icon {local_name}: {e}", "warning")
-                        except Exception:
-                            # If logging isn't available yet, print to console
-                            print(f"Warning: Failed to download icon {local_name}: {e}")
+                        self.log(f"Downloaded {local_name}", "success")
+                    except Exception:
+                        print(f"Downloaded {local_name}")
+                except Exception as e:
+                    # Log error but continue with other icons
+                    try:
+                        self.log(f"Failed to download icon {local_name}: {e}", "warning")
+                    except Exception:
+                        # If logging isn't available yet, print to console
+                        print(f"Warning: Failed to download icon {local_name}: {e}")
             
             if downloaded_count > 0:
                 try:
