@@ -2675,6 +2675,32 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Error detecting distribution: {e}", "error")
             return False
     
+    def format_distro_name(self, distro=None):
+        """Format distribution name for display with proper capitalization"""
+        if distro is None:
+            distro = self.distro
+        
+        # Map lowercase distro IDs to proper display names
+        distro_names = {
+            "arch": "Arch",
+            "cachyos": "CachyOS",
+            "endeavouros": "EndeavourOS",
+            "xerolinux": "XeroLinux",
+            "fedora": "Fedora",
+            "nobara": "Nobara",
+            "opensuse-tumbleweed": "openSUSE Tumbleweed",
+            "opensuse-leap": "openSUSE Leap",
+            "pikaos": "PikaOS",
+            "pop": "Pop!_OS",
+            "ubuntu": "Ubuntu",
+            "linuxmint": "Linux Mint",
+            "zorin": "Zorin OS",
+            "debian": "Debian",
+            "manjaro": "Manjaro"
+        }
+        
+        return distro_names.get(distro.lower(), distro.title())
+    
     def download_file(self, url, output_path, description=""):
         """Download file with progress tracking"""
         try:
@@ -2739,7 +2765,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Failed to detect distribution. Exiting.", "error")
             return
         
-        self.log(f"Detected distribution: {self.distro} {self.distro_version or ''}", "success")
+        self.log(f"Detected distribution: {self.format_distro_name()} {self.distro_version or ''}", "success")
         self.update_progress(0.2)
         
         # Check dependencies
@@ -2787,7 +2813,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.end_operation()
             return
         
-        self.log(f"Detected distribution: {self.distro} {self.distro_version or ''}", "success")
+        self.log(f"Detected distribution: {self.format_distro_name()} {self.distro_version or ''}", "success")
         
         if self.check_cancelled():
             return
@@ -3189,7 +3215,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("⚠️  WARNING: UNSUPPORTED DISTRIBUTION", "error")
         self.log("="*80, "warning")
         self.log(f"\nYOU ARE ON YOUR OWN!", "error")
-        self.log(f"\nThe distribution ({self.distro}) is OUT OF DATE", "warning")
+        self.log(f"\nThe distribution ({self.format_distro_name()}) is OUT OF DATE", "warning")
         self.log("and the script will NOT be built around it.", "warning")
         self.log("\nFor a modern, stable Linux experience, please consider:", "info")
         self.log("  • PikaOS 4", "success")
@@ -3216,8 +3242,8 @@ class AffinityInstallerGUI(QMainWindow):
         }
         
         if self.distro in commands:
-            self.log(f"Installing dependencies for {self.distro}...", "info")
-            self.update_progress_text(f"Installing packages for {self.distro}...")
+            self.log(f"Installing dependencies for {self.format_distro_name()}...", "info")
+            self.update_progress_text(f"Installing packages for {self.format_distro_name()}...")
             self.update_progress(0.6)
             
             success, stdout, stderr = self.run_command(commands[self.distro])
@@ -3244,7 +3270,7 @@ class AffinityInstallerGUI(QMainWindow):
                 else:
                     return False
         
-        self.log(f"Unsupported distribution: {self.distro}", "error")
+        self.log(f"Unsupported distribution: {self.format_distro_name()}", "error")
         return False
     
     def install_pikaos_dependencies(self):
@@ -3941,7 +3967,7 @@ class AffinityInstallerGUI(QMainWindow):
         if not self.distro:
             self.detect_distro()
         
-        self.log(f"Installing dependencies for {self.distro}...", "info")
+        self.log(f"Installing dependencies for {self.format_distro_name()}...", "info")
         success = self.install_dependencies()
         
         # After installing main dependencies, check and install .NET SDK if missing
@@ -6180,7 +6206,7 @@ class AffinityInstallerGUI(QMainWindow):
                     self.log(f"Failed to install .NET SDK: {stderr[:200] if stderr else 'Unknown error'}", "error")
                     return False
             
-            self.log(f"Unsupported distribution for .NET SDK auto-install: {self.distro}", "error")
+            self.log(f"Unsupported distribution for .NET SDK auto-install: {self.format_distro_name()}", "error")
             return False
         except Exception as e:
             self.log(f"Error installing .NET SDK: {e}", "error")
