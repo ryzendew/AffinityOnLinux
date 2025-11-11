@@ -548,7 +548,9 @@ class AffinityInstallerGUI(QMainWindow):
         if not icon_name:
             return None
         
-        icons_dir = Path(__file__).parent / "icons"
+        # Use standard location in user's config directory
+        # This works even when script is piped from curl
+        icons_dir = Path.home() / ".config" / "AffinityOnLinux" / "AffinityScripts" / "icons"
         theme_suffix = "light" if self.dark_mode else "dark"
         
         # Check for theme-specific icon first
@@ -2682,21 +2684,10 @@ class AffinityInstallerGUI(QMainWindow):
     def _ensure_icons_directory(self):
         """Ensure icons directory exists, download from GitHub if missing"""
         try:
-            # Determine script directory
-            # When script is piped from curl, __file__ might not be available or might be a temp file
-            script_dir = None
-            try:
-                script_file = Path(__file__)
-                # Check if __file__ is a real file (not a temp file from piping)
-                if script_file.exists() and script_file.is_file() and script_file.stat().st_size > 1000:
-                    script_dir = script_file.parent
-            except (NameError, AttributeError, OSError):
-                pass
-            
-            # Fallback: use standard location in user's config directory
-            if script_dir is None or not script_dir.exists():
-                script_dir = Path.home() / ".config" / "AffinityOnLinux" / "AffinityScripts"
-                script_dir.mkdir(parents=True, exist_ok=True)
+            # Always use the standard location in user's config directory
+            # This ensures icons are available even when script is piped from curl
+            script_dir = Path.home() / ".config" / "AffinityOnLinux" / "AffinityScripts"
+            script_dir.mkdir(parents=True, exist_ok=True)
             
             icons_dir = script_dir / "icons"
             
