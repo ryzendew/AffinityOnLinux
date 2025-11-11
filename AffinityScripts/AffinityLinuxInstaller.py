@@ -1372,6 +1372,7 @@ class AffinityInstallerGUI(QMainWindow):
                 ("Wine Configuration", self.open_winecfg, "Open Wine settings to configure Windows version and libraries", "wine"),
                 ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", "wand"),
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", "windows"),
+                ("GPU Selection", self.configure_gpu_selection, "Select which GPU to use for dual GPU setups", "display"),
                 ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", "loop"),
                 ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", "chrome"),
                 ("Fix Settings (v3)", self.fix_affinity_settings, "Patch Affinity v3 DLL to enable settings saving", "cog"),
@@ -2733,6 +2734,208 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception:
             # Silently fail - icons are not critical for functionality
             pass
+    
+    def detect_gpus(self):
+        """Detect available GPUs in the system"""
+        gpus = []
+        
+        # Check for NVIDIA GPUs
+        nvidia_success, nvidia_stdout, _ = self.run_command(["lspci"], check=False, capture=True)
+        if nvidia_success and nvidia_stdout:
+            nvidia_count = nvidia_stdout.lower().count("nvidia")
+            if nvidia_count > 0:
+                # Try to get NVIDIA model names
+                nvidia_models = []
+                for line in nvidia_stdout.split('\n'):
+                    if 'nvidia' in line.lower() and 'vga' in line.lower():
+                        # Extract model name
+                        model = line.split(':')[2].strip() if ':' in line else "NVIDIA GPU"
+                        nvidia_models.append(model)
+                
+                for i, model in enumerate(nvidia_models) if nvidia_models else range(nvidia_count):
+                    gpus.append({
+                        "type": "nvidia",
+                        "name": nvidia_models[i] if nvidia_models else f"NVIDIA GPU {i+1}",
+                        "index": i,
+                        "id": f"nvidia_{i}"
+                    })
+        
+        # Check for AMD GPUs
+        if nvidia_success and nvidia_stdout:
+            amd_count = nvidia_stdout.lower().count("amd") + nvidia_stdout.lower().count("radeon")
+            if amd_count > 0:
+                amd_models = []
+                for line in nvidia_stdout.split('\n'):
+                    if ('amd' in line.lower() or 'radeon' in line.lower()) and 'vga' in line.lower():
+                        model = line.split(':')[2].strip() if ':' in line else "AMD GPU"
+                        amd_models.append(model)
+                
+                for i, model in enumerate(amd_models) if amd_models else range(amd_count):
+                    gpus.append({
+                        "type": "amd",
+                        "name": amd_models[i] if amd_models else f"AMD GPU {i+1}",
+                        "index": i,
+                        "id": f"amd_{i}"
+                    })
+        
+        # Check for Intel GPUs
+        if nvidia_success and nvidia_stdout:
+            intel_count = nvidia_stdout.lower().count("intel")
+            if intel_count > 0:
+                intel_models = []
+                for line in nvidia_stdout.split('\n'):
+                    if 'intel' in line.lower() and 'vga' in line.lower():
+                        model = line.split(':')[2].strip() if ':' in line else "Intel GPU"
+                        intel_models.append(model)
+                
+                for i, model in enumerate(intel_models) if intel_models else range(intel_count):
+                    gpus.append({
+                        "type": "intel",
+                        "name": intel_models[i] if intel_models else f"Intel GPU {i+1}",
+                        "index": i,
+                        "id": f"intel_{i}"
+                    })
+        
+        # If no GPUs detected, add a default "auto" option
+        if not gpus:
+            gpus.append({
+                "type": "auto",
+                "name": "Auto (System Default)",
+                "index": 0,
+                "id": "auto"
+            })
+        
+        return gpus
+    
+    def get_gpu_env_vars(self, gpu_id=None):
+        """Get environment variables for GPU selection"""
+        if gpu_id is None:
+            # Load from saved preference
+            gpu_config_file = Path(self.directory) / ".gpu_config"
+            if gpu_config_file.exists():
+                try:
+                    with open(gpu_config_file, 'r') as f:
+                        gpu_id = f.read().strip()
+                except Exception:
+                    gpu_id = "auto"
+            else:
+                gpu_id = "auto"
+        
+        env_vars = []
+        
+        if gpu_id == "auto" or not gpu_id:
+            # No specific GPU selection - use system default
+            return ""
+        
+        if gpu_id.startswith("nvidia_"):
+            # NVIDIA GPU selection
+            env_vars.append("__NV_PRIME_RENDER_OFFLOAD=1")
+            env_vars.append("__GLX_VENDOR_LIBRARY_NAME=nvidia")
+            # Also set for Vulkan
+            env_vars.append("__VK_LAYER_NV_optimus=NVIDIA_only")
+        
+        elif gpu_id.startswith("amd_"):
+            # AMD discrete GPU (using DRI_PRIME)
+            index = int(gpu_id.split("_")[1]) if "_" in gpu_id else 1
+            env_vars.append(f"DRI_PRIME={index}")
+        
+        elif gpu_id.startswith("intel_"):
+            # Intel GPU (usually integrated, use DRI_PRIME=0)
+            env_vars.append("DRI_PRIME=0")
+        
+        if env_vars:
+            return " ".join(env_vars) + " "
+        return ""
+    
+    def configure_gpu_selection(self):
+        """Configure GPU selection for dual GPU setups"""
+        gpus = self.detect_gpus()
+        
+        if len(gpus) <= 1:
+            self.show_message(
+                "GPU Selection",
+                "Only one GPU detected or no GPUs found.\n\n"
+                "GPU selection is only needed for dual GPU setups.\n"
+                "Your system will use the default GPU automatically.",
+                "info"
+            )
+            return
+        
+        # Load current selection
+        gpu_config_file = Path(self.directory) / ".gpu_config"
+        current_gpu = "auto"
+        if gpu_config_file.exists():
+            try:
+                with open(gpu_config_file, 'r') as f:
+                    current_gpu = f.read().strip()
+            except Exception:
+                pass
+        
+        # Create dialog for GPU selection
+        dialog = QDialog(self)
+        dialog.setWindowTitle("GPU Selection for Affinity Applications")
+        dialog.setMinimumWidth(500)
+        layout = QVBoxLayout(dialog)
+        
+        label = QLabel(
+            "Select which GPU to use for Affinity applications:\n\n"
+            "This is useful for dual GPU setups (e.g., Intel + NVIDIA, AMD + NVIDIA)."
+        )
+        layout.addWidget(label)
+        
+        # Create radio buttons for each GPU
+        button_group = QButtonGroup(dialog)
+        radio_buttons = []
+        
+        # Add "Auto" option first
+        auto_radio = QRadioButton("Auto (System Default)")
+        auto_radio.setChecked(current_gpu == "auto")
+        button_group.addButton(auto_radio, -1)
+        layout.addWidget(auto_radio)
+        radio_buttons.append(("auto", auto_radio))
+        
+        # Add detected GPUs
+        for gpu in gpus:
+            if gpu["id"] != "auto":  # Skip if it's the auto placeholder
+                gpu_label = f"{gpu['name']} ({gpu['type'].upper()})"
+                radio = QRadioButton(gpu_label)
+                radio.setChecked(current_gpu == gpu["id"])
+                button_group.addButton(radio, gpus.index(gpu))
+                layout.addWidget(radio)
+                radio_buttons.append((gpu["id"], radio))
+        
+        # Add buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_id = None
+            for gpu_id, radio in radio_buttons:
+                if radio.isChecked():
+                    selected_id = gpu_id
+                    break
+            
+            if selected_id:
+                # Save selection
+                try:
+                    with open(gpu_config_file, 'w') as f:
+                        f.write(selected_id)
+                    
+                    gpu_name = next((gpu["name"] for gpu in gpus if gpu["id"] == selected_id), "Auto")
+                    self.log(f"GPU selection saved: {gpu_name}", "success")
+                    self.show_message(
+                        "GPU Selection Saved",
+                        f"Selected GPU: {gpu_name}\n\n"
+                        "This will be applied to all Affinity applications.\n"
+                        "You may need to recreate desktop entries for the change to take effect.",
+                        "info"
+                    )
+                except Exception as e:
+                    self.log(f"Failed to save GPU selection: {e}", "error")
     
     def format_distro_name(self, distro=None):
         """Format distribution name for display with proper capitalization"""
@@ -5285,6 +5488,9 @@ class AffinityInstallerGUI(QMainWindow):
         if exe_path_normalized.startswith("C:/"):
             exe_path_normalized = directory_str + "/drive_c" + exe_path_normalized[2:]
         
+        # Get GPU environment variables if configured
+        gpu_env = self.get_gpu_env_vars()
+        
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
             f.write(f"Name={app_name}\n")
@@ -5294,7 +5500,12 @@ class AffinityInstallerGUI(QMainWindow):
                 f.write(f"Icon={icon_path_str}\n")
             f.write(f"Path={directory_str}\n")
             # Use Linux path format with proper quoting for spaces
-            f.write(f'Exec=env WINEPREFIX={directory_str} {wine_str} "{exe_path_normalized}"\n')
+            # Include GPU environment variables if configured
+            exec_line = f'Exec=env WINEPREFIX={directory_str}'
+            if gpu_env:
+                exec_line += f' {gpu_env}'
+            exec_line += f' {wine_str} "{exe_path_normalized}"'
+            f.write(f'{exec_line}\n')
             f.write("Terminal=false\n")
             f.write("Type=Application\n")
             f.write("Categories=Application;\n")
@@ -6013,6 +6224,9 @@ class AffinityInstallerGUI(QMainWindow):
         icon_path_str = str(icon_path)
         app_path_str = str(app_path).replace("\\", "/")  # Ensure forward slashes, no double slashes
         
+        # Get GPU environment variables if configured
+        gpu_env = self.get_gpu_env_vars()
+        
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
             f.write(f"Name=Affinity {name}\n")
@@ -6020,7 +6234,12 @@ class AffinityInstallerGUI(QMainWindow):
             f.write(f"Icon={icon_path_str}\n")
             f.write(f"Path={directory_str}\n")
             # Use Linux path format with proper quoting for spaces
-            f.write(f'Exec=env WINEPREFIX={directory_str} {wine_str} "{app_path_str}"\n')
+            # Include GPU environment variables if configured
+            exec_line = f'Exec=env WINEPREFIX={directory_str}'
+            if gpu_env:
+                exec_line += f' {gpu_env}'
+            exec_line += f' {wine_str} "{app_path_str}"'
+            f.write(f'{exec_line}\n')
             f.write("Terminal=false\n")
             f.write("Type=Application\n")
             f.write("Categories=Graphics;\n")
@@ -6641,6 +6860,15 @@ class AffinityInstallerGUI(QMainWindow):
         env["WINEPREFIX"] = self.directory
         env["WINEDEBUG"] = "-all,fixme-all"
         env["WINEDLLOVERRIDES"] = "opencl="
+        
+        # Add GPU selection environment variables if configured
+        gpu_env = self.get_gpu_env_vars()
+        if gpu_env:
+            # Parse GPU env vars and add to environment
+            for env_var in gpu_env.strip().split():
+                if "=" in env_var:
+                    key, value = env_var.split("=", 1)
+                    env[key] = value
         
         # DXVK settings
         env["DXVK_ASYNC"] = "0"
