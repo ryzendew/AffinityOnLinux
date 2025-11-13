@@ -207,6 +207,7 @@ class AffinityInstallerGUI(QMainWindow):
     install_application_signal = pyqtSignal(str)  # Signal to install an application
     show_spinner_signal = pyqtSignal(object)  # button -> show spinner
     hide_spinner_signal = pyqtSignal(object)  # button -> hide spinner
+    wine_selection_signal = pyqtSignal()  # Signal to show Wine selection dialog
     
     def __init__(self):
         super().__init__()
@@ -233,6 +234,8 @@ class AffinityInstallerGUI(QMainWindow):
         self.waiting_for_response = False  # Whether we're waiting for user response
         self.question_dialog_response = None  # Response from question dialogs
         self.waiting_for_question_response = False  # Whether waiting for question dialog response
+        self.wine_selection_response = None  # Response from Wine selection dialog
+        self.waiting_for_wine_selection = False  # Whether waiting for Wine selection
         self.dark_mode = True  # Track current theme mode
         self.icon_buttons = []  # Store buttons with icons for theme updates
         self.enable_opencl = False  # OpenCL support preference
@@ -262,6 +265,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.install_application_signal.connect(self.install_application)
         self.show_spinner_signal.connect(self._show_spinner_safe)
         self.hide_spinner_signal.connect(self._hide_spinner_safe)
+        self.wine_selection_signal.connect(self._show_wine_selection_dialog_safe)
         
         # Load Affinity icon
         self.load_affinity_icon()
@@ -298,7 +302,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
         self.log("Welcome! Please use the buttons on the right to get started.", "info")
-        wine_path = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_path = self.get_wine_path("wine")
         if not wine_path.exists():
             self.log("Click 'Setup Wine Environment' or 'One-Click Full Setup' to begin.", "info")
         else:
@@ -307,21 +311,33 @@ class AffinityInstallerGUI(QMainWindow):
     def check_installation_status(self):
         """Check if Wine and Affinity applications are installed, and update button states"""
         # Check if Wine is set up
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         wine_exists = wine.exists()
         
         # Update system status indicator
         if hasattr(self, 'system_status_label'):
             if wine_exists:
+                wine_type = self.get_wine_type()
+                wine_type_names = {
+                    "stable": "Stable Wine (9.14)",
+                    "wine-tkg-affinity": "Wine-TKG-Affinity"
+                }
+                wine_name = wine_type_names.get(wine_type, "Wine")
                 self.system_status_label.setStyleSheet("font-size: 14px; color: #4ec9b0; padding: 0 5px;")
-                self.system_status_label.setToolTip("System Status: Ready - Wine is installed")
+                self.system_status_label.setToolTip(f"System Status: Ready - {wine_name} is installed")
             else:
                 self.system_status_label.setStyleSheet("font-size: 14px; color: #f48771; padding: 0 5px;")
                 self.system_status_label.setToolTip("System Status: Not Ready - Wine needs to be installed")
         
         # Log Wine status
         if wine_exists:
-            self.log("Wine: ✓ Installed (ElementalWarriorWine)", "success")
+            wine_type = self.get_wine_type()
+            wine_type_names = {
+                "stable": "Stable Wine (9.14)",
+                "wine-tkg-affinity": "Wine-TKG-Affinity"
+            }
+            wine_name = wine_type_names.get(wine_type, "Wine")
+            self.log(f"Wine: ✓ Installed ({wine_name})", "success")
         else:
             self.log("Wine: ✗ Not installed", "error")
         
@@ -392,7 +408,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Winetricks Dependencies:", "info")
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
-            wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            wine = self.get_wine_path("wine")
             
             # List of winetricks components to check
             winetricks_components = [
@@ -2028,6 +2044,344 @@ class AffinityInstallerGUI(QMainWindow):
         
         return self.question_dialog_response or "Cancel"
     
+    def get_wine_type(self):
+        """Get the selected Wine type from config file"""
+        wine_config_file = Path(self.directory) / ".wine_type"
+        if wine_config_file.exists():
+            try:
+                with open(wine_config_file, 'r') as f:
+                    wine_type = f.read().strip()
+                    # Handle legacy names
+                    if wine_type == "archbuilt":
+                        wine_type = "wine-tkg-affinity"
+                    if wine_type in ["stable", "wine-tkg-affinity"]:
+                        return wine_type
+            except Exception:
+                pass
+        return "stable"  # Default to stable
+    
+    def save_wine_type(self, wine_type):
+        """Save the selected Wine type to config file"""
+        wine_config_file = Path(self.directory) / ".wine_type"
+        try:
+            Path(self.directory).mkdir(parents=True, exist_ok=True)
+            with open(wine_config_file, 'w') as f:
+                f.write(wine_type)
+        except Exception as e:
+            self.log(f"Failed to save Wine type: {e}", "warning")
+    
+    def get_wine_dir(self):
+        """Get the Wine directory path based on the selected Wine type"""
+        wine_type = self.get_wine_type()
+        
+        if wine_type == "stable":
+            wine_dir = Path(self.directory) / "ElementalWarriorWine"
+        elif wine_type == "wine-tkg-affinity":
+            wine_dir = Path(self.directory) / "wine-tkg-affinity"
+        else:
+            wine_dir = Path(self.directory) / "ElementalWarriorWine"  # Fallback
+        
+        return wine_dir
+    
+    def get_wine_path(self, binary="wine"):
+        """Get the path to a Wine binary based on the selected Wine type"""
+        return self.get_wine_dir() / "bin" / binary
+    
+    def show_wine_selection_dialog(self):
+        """Show dialog to select Wine version"""
+        self.wine_selection_response = None
+        self.waiting_for_wine_selection = True
+        self.wine_selection_signal.emit()
+        
+        # Wait for response with timeout
+        max_wait = 300  # 30 seconds
+        waited = 0
+        while self.waiting_for_wine_selection and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.wine_selection_response
+    
+    def _show_wine_selection_dialog_safe(self):
+        """Show Wine selection dialog (called from main thread)"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Wine Version")
+        dialog.setModal(True)
+        dialog.resize(800, 650)
+        dialog.setMinimumSize(750, 550)
+        
+        # Main layout with proper spacing
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 25)
+        
+        # Header section with title and description
+        header_widget = QWidget()
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Title with icon-like styling
+        title_label = QLabel("Select Wine Version")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 22px; 
+                font-weight: bold; 
+                color: #ffffff;
+                padding: 0;
+                margin: 0;
+            }
+        """)
+        header_layout.addWidget(title_label)
+        
+        # Subtitle
+        subtitle_label = QLabel("Choose the Wine version that best suits your needs for running Affinity applications")
+        subtitle_label.setStyleSheet("""
+            QLabel {
+                font-size: 13px; 
+                color: #aaaaaa;
+                padding: 0;
+                margin: 0;
+            }
+        """)
+        subtitle_label.setWordWrap(True)
+        header_layout.addWidget(subtitle_label)
+        
+        layout.addWidget(header_widget)
+        
+        # Scroll area for options
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none; 
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #1e1e1e;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #444;
+                border-radius: 5px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #555;
+            }
+        """)
+        
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setSpacing(18)
+        scroll_layout.setContentsMargins(5, 5, 15, 5)
+        
+        # Wine options
+        wine_options = [
+            {
+                "type": "stable",
+                "name": "Stable Wine (9.14)",
+                "badge": "Recommended",
+                "description": "Official Wine release, version 9.14. This is the stable and extensively tested version that offers broad compatibility with a wide range of Windows applications. It's tried and tested, ensuring reliability and consistent performance. Recommended for most users."
+            },
+            {
+                "type": "wine-tkg-affinity",
+                "name": "Wine-TKG-Affinity",
+                "badge": "WIP",
+                "description": "⚠️ WARNING: This is a Work In Progress (WIP) experimental build. Custom Wine build optimized for Affinity applications with additional patches and performance enhancements. This build is experimental and may have stability issues. Use at your own risk. Note: OpenCL support could not be made to work with this build."
+            }
+        ]
+        
+        button_group = QButtonGroup()
+        radio_buttons = {}
+        
+        for idx, option in enumerate(wine_options):
+            # Container for each option with modern rounded design
+            option_frame = QFrame()
+            option_frame.setFrameShape(QFrame.Shape.NoFrame)
+            option_frame.setStyleSheet("""
+                QFrame { 
+                    background-color: #252525;
+                    border-radius: 12px;
+                    padding: 0;
+                }
+            """)
+            option_layout = QVBoxLayout(option_frame)
+            option_layout.setSpacing(0)
+            option_layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Inner container for content
+            content_widget = QWidget()
+            content_widget.setStyleSheet("""
+                QWidget {
+                    background-color: #252525;
+                    border-radius: 12px;
+                }
+            """)
+            content_layout = QVBoxLayout(content_widget)
+            content_layout.setSpacing(14)
+            content_layout.setContentsMargins(20, 20, 20, 20)
+            
+            # Header row with radio button, name, and badge
+            header_row = QHBoxLayout()
+            header_row.setSpacing(12)
+            header_row.setContentsMargins(0, 0, 0, 0)
+            
+            # Radio button with custom styling
+            radio = QRadioButton()
+            radio.setStyleSheet("""
+                QRadioButton {
+                    padding: 0;
+                }
+                QRadioButton::indicator {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    border: 2px solid #666;
+                    background-color: #1e1e1e;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #888;
+                }
+                QRadioButton::indicator:checked {
+                    border-color: #4a9eff;
+                    background-color: #4a9eff;
+                }
+                QRadioButton::indicator:checked::after {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background-color: #ffffff;
+                }
+            """)
+            button_group.addButton(radio, idx)
+            radio_buttons[idx] = option["type"]
+            header_row.addWidget(radio)
+            
+            # Name label
+            name_label = QLabel(option["name"])
+            name_label.setStyleSheet("""
+                QLabel {
+                    font-weight: bold; 
+                    font-size: 16px;
+                    color: #ffffff;
+                    padding: 0;
+                }
+            """)
+            header_row.addWidget(name_label)
+            
+            header_row.addStretch()
+            
+            # Badge
+            badge_label = QLabel(option["badge"])
+            badge_label.setStyleSheet("""
+                QLabel {
+                    background-color: #4a9eff;
+                    color: #ffffff;
+                    font-size: 11px;
+                    font-weight: bold;
+                    padding: 4px 10px;
+                    border-radius: 10px;
+                }
+            """)
+            header_row.addWidget(badge_label)
+            
+            content_layout.addLayout(header_row)
+            
+            # Description
+            desc = QLabel(option["description"])
+            desc.setWordWrap(True)
+            desc.setStyleSheet("""
+                QLabel {
+                    padding: 0; 
+                    color: #bbbbbb;
+                    font-size: 13px;
+                    line-height: 1.6;
+                }
+            """)
+            desc.setMinimumHeight(70)
+            content_layout.addWidget(desc)
+            
+            # Select button
+            select_button = QPushButton("Select This Option")
+            select_button.setStyleSheet("""
+                QPushButton {
+                    padding: 12px 24px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    background-color: #4a9eff;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 8px;
+                    min-width: 160px;
+                }
+                QPushButton:hover {
+                    background-color: #5aaeff;
+                }
+                QPushButton:pressed {
+                    background-color: #3a8eef;
+                }
+            """)
+            select_button.clicked.connect(lambda checked, opt_type=option["type"]: self._select_wine_option(dialog, opt_type))
+            
+            button_layout = QHBoxLayout()
+            button_layout.setContentsMargins(0, 4, 0, 0)
+            button_layout.addStretch()
+            button_layout.addWidget(select_button)
+            content_layout.addLayout(button_layout)
+            
+            option_layout.addWidget(content_widget)
+            scroll_layout.addWidget(option_frame)
+            
+            # Set first option as default
+            if idx == 0:
+                radio.setChecked(True)
+        
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
+        
+        # Footer with cancel button
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(0, 10, 0, 0)
+        footer_layout.addStretch()
+        
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setStyleSheet("""
+            QPushButton {
+                padding: 10px 24px;
+                font-size: 13px;
+                font-weight: 500;
+                background-color: #3a3a3a;
+                color: #ffffff;
+                border: none;
+                border-radius: 8px;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+        """)
+        cancel_button.clicked.connect(lambda: self._select_wine_option(dialog, None))
+        footer_layout.addWidget(cancel_button)
+        
+        layout.addLayout(footer_layout)
+        
+        dialog.exec()
+    
+    def _select_wine_option(self, dialog, wine_type):
+        """Handle Wine selection"""
+        self.wine_selection_response = wine_type
+        self.waiting_for_wine_selection = False
+        dialog.accept()
+    
     def _register_process(self, proc):
         """Track a running subprocess for potential cancellation."""
         try:
@@ -2406,7 +2760,7 @@ class AffinityInstallerGUI(QMainWindow):
         """Convert a UNIX path to a Windows path for Wine 'start' using winepath.
         Falls back to Z: drive mapping if winepath is unavailable."""
         try:
-            winepath_bin = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winepath"
+            winepath_bin = self.get_wine_path("winepath")
             if winepath_bin.exists():
                 success, stdout, _ = self.run_command([str(winepath_bin), "-w", str(unix_path)], check=False, env=env, capture=True)
                 if success and stdout:
@@ -2454,7 +2808,7 @@ class AffinityInstallerGUI(QMainWindow):
         2) If it exits too quickly or returns non-zero with no activity, try 'wine <file>'
         3) After launch, wait on 'wineserver -w' to ensure child processes finish (cancellable)
         """
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         attempts = [
             [str(wine), "start", "/wait", "/unix", str(installer_file)],
             [str(wine), str(installer_file)],
@@ -3002,7 +3356,7 @@ class AffinityInstallerGUI(QMainWindow):
                                             break
                         
                         # Get wine path (standard location)
-                        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+                        wine = self.get_wine_path("wine")
                         wine_path = str(wine)
                         
                         # Rebuild Exec line with new GPU env vars
@@ -3250,20 +3604,44 @@ class AffinityInstallerGUI(QMainWindow):
         if self.check_cancelled():
             return
         
-        # Step 3: Setup Wine environment (this includes winetricks dependencies via configure_wine)
-        self.update_progress_text("Step 3/4: Setting up Wine environment...")
+        # Step 3: Select Wine version (if not already selected)
+        wine_config_file = Path(self.directory) / ".wine_type"
+        if not wine_config_file.exists():
+            self.update_progress_text("Step 3/5: Selecting Wine version...")
+            self.update_progress(0.35)
+            
+            if self.check_cancelled():
+                return
+            
+            wine_type = self.show_wine_selection_dialog()
+            if wine_type is None:
+                self.log("Wine selection cancelled", "warning")
+                self.update_progress_text("Ready")
+                self.end_operation()
+                return
+            
+            self.save_wine_type(wine_type)
+            wine_type_names = {
+                "stable": "Stable Wine (9.14)",
+                "wine-tkg-affinity": "Wine-TKG-Affinity"
+            }
+            self.log(f"Selected: {wine_type_names.get(wine_type, wine_type)}", "info")
+        
+        # Step 4: Setup Wine environment (this includes winetricks dependencies via configure_wine)
+        self.update_progress_text("Step 4/5: Setting up Wine environment...")
         self.update_progress(0.40)
         
         if self.check_cancelled():
             return
         
-        self.setup_wine()
+        wine_type = self.get_wine_type()
+        self.setup_wine(wine_type)
         
         if self.check_cancelled():
             return
         
-        # Step 4: Install Affinity v3 settings to enable settings saving
-        self.update_progress_text("Step 4/4: Installing Affinity v3 settings...")
+        # Step 5: Install Affinity v3 settings to enable settings saving
+        self.update_progress_text("Step 5/5: Installing Affinity v3 settings...")
         self.update_progress(0.90)
         
         if self.check_cancelled():
@@ -3348,7 +3726,7 @@ class AffinityInstallerGUI(QMainWindow):
         display_name = app_names.get(app_code, "Affinity")
         
         # Check if Wine is set up
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         if not wine.exists():
             self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
             self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
@@ -3940,11 +4318,23 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("All dependencies installed for Pop!_OS", "success")
         return True
     
-    def setup_wine(self):
-        """Setup Wine environment"""
+    def setup_wine(self, wine_type=None):
+        """Setup Wine environment
+        
+        Args:
+            wine_type: Wine type to install ("stable", "archbuilt", "fedorabuilt")
+                       If None, uses saved preference or defaults to "stable"
+        """
         self.start_operation("Setting up Wine environment")
         
         try:
+            # Determine Wine type
+            if wine_type is None:
+                wine_type = self.get_wine_type()
+            
+            # Save Wine type preference
+            self.save_wine_type(wine_type)
+            
             # Check if cancelled at start
             if self.check_cancelled():
                 return False
@@ -3952,6 +4342,28 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             self.log("Wine Binary Setup", "info")
             self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            
+            # Determine Wine URLs and directory names based on type
+            if wine_type == "stable":
+                wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
+                wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarriorWine*"
+                archive_format = "gz"
+                wine_display_name = "Stable Wine (9.14)"
+            elif wine_type == "wine-tkg-affinity":
+                wine_url = "https://github.com/daegalus/wine-tkg-affinity/releases/download/25O11.309/wine-tkg-affinity-archbuilt.tar.zst"
+                wine_file_name = "wine-tkg-affinity-archbuilt.tar.zst"
+                wine_dir_name = "wine-tkg-affinity"
+                wine_dir_pattern = "wine-tkg-affinity*"
+                archive_format = "zst"
+                wine_display_name = "Wine-TKG-Affinity"
+            else:
+                self.log(f"Unknown Wine type: {wine_type}", "error")
+                self.update_progress_text("Ready")
+                return False
+            
+            self.log(f"Installing: {wine_display_name}", "info")
         
             # Stop Wine processes
             self.update_progress_text("Preparing Wine environment...")
@@ -3972,14 +4384,13 @@ class AffinityInstallerGUI(QMainWindow):
                 return False
             
             # Download Wine binary
-            wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
-            wine_file = Path(self.directory) / "ElementalWarriorWine-x86_64.tar.gz"
+            wine_file = Path(self.directory) / wine_file_name
             
-            self.update_progress_text("Downloading Wine binary...")
+            self.update_progress_text(f"Downloading {wine_display_name}...")
             self.update_progress(0.10)
-            self.log("Downloading Wine binary...", "info")
-            if not self.download_file(wine_url, str(wine_file), "Wine binaries"):
-                self.log("Failed to download Wine binary", "error")
+            self.log(f"Downloading {wine_display_name}...", "info")
+            if not self.download_file(wine_url, str(wine_file), f"{wine_display_name} binaries"):
+                self.log(f"Failed to download {wine_display_name}", "error")
                 self.update_progress_text("Ready")
                 return False
             
@@ -3991,8 +4402,72 @@ class AffinityInstallerGUI(QMainWindow):
             self.update_progress(0.50)
             self.log("Extracting Wine binary...", "info")
             try:
-                with tarfile.open(wine_file, "r:gz") as tar:
-                    tar.extractall(self.directory, filter='data')
+                if archive_format == "gz":
+                    # Extract .tar.gz
+                    with tarfile.open(wine_file, "r:gz") as tar:
+                        tar.extractall(self.directory, filter='data')
+                elif archive_format == "zst":
+                    # Extract .tar.zst using zstd
+                    if not self.check_command("zstd"):
+                        self.log("zstd is required to extract wine-tkg-affinity archives. Please install zstd.", "error")
+                        self.update_progress_text("Ready")
+                        return False
+                    
+                    # First decompress with zstd, then extract with tar
+                    tar_file = wine_file.with_suffix('.tar')
+                    success, _, _ = self.run_command(["zstd", "-d", str(wine_file), "-o", str(tar_file)], check=True)
+                    if not success:
+                        self.log("Failed to decompress Wine archive", "error")
+                        self.update_progress_text("Ready")
+                        return False
+                    
+                    # Extract the tar file to a temporary location first
+                    temp_extract_dir = Path(self.directory) / "temp_extract"
+                    temp_extract_dir.mkdir(exist_ok=True)
+                    with tarfile.open(tar_file, "r") as tar:
+                        tar.extractall(temp_extract_dir, filter='data')
+                    
+                    # Clean up intermediate tar file
+                    tar_file.unlink()
+                    
+                    # For wine-tkg builds, find usr folder and reorganize
+                    usr_folder = None
+                    for path in temp_extract_dir.rglob("usr"):
+                        if path.is_dir():
+                            usr_folder = path
+                            break
+                    
+                    if usr_folder and usr_folder.exists():
+                        # Create the target directory
+                        target_wine_dir = Path(self.directory) / "ElementalWarriorWine-x86_64"
+                        target_wine_dir.mkdir(exist_ok=True)
+                        
+                        # Move contents from usr folder to target directory
+                        self.log("Reorganizing wine-tkg structure...", "info")
+                        for item in usr_folder.iterdir():
+                            dest = target_wine_dir / item.name
+                            if dest.exists() or dest.is_symlink():
+                                if dest.is_dir():
+                                    shutil.rmtree(dest)
+                                else:
+                                    dest.unlink()
+                            shutil.move(str(item), str(dest))
+                        
+                        # Clean up temporary extraction directory
+                        shutil.rmtree(temp_extract_dir)
+                        self.log("Wine-tkg structure reorganized", "success")
+                    else:
+                        # Fallback: if no usr folder found, try to find the extracted directory
+                        self.log("Warning: usr folder not found, using fallback extraction", "warning")
+                        # Move everything from temp_extract to the expected location
+                        found_dirs = list(temp_extract_dir.iterdir())
+                        if found_dirs:
+                            target_wine_dir = Path(self.directory) / "ElementalWarriorWine-x86_64"
+                            if target_wine_dir.exists():
+                                shutil.rmtree(target_wine_dir)
+                            shutil.move(str(found_dirs[0]), str(target_wine_dir))
+                        shutil.rmtree(temp_extract_dir)
+                
                 wine_file.unlink()
                 self.log("Wine binary extracted", "success")
             except Exception as e:
@@ -4003,19 +4478,38 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Find and link Wine directory
+            # Find and link Wine directory (for stable Wine, handle legacy naming)
             self.update_progress(0.55)
-            wine_dir = next(Path(self.directory).glob("ElementalWarriorWine*"), None)
-            if wine_dir and wine_dir != Path(self.directory) / "ElementalWarriorWine":
-                target = Path(self.directory) / "ElementalWarriorWine"
-                if target.exists() or target.is_symlink():
-                    target.unlink()
-                target.symlink_to(wine_dir)
-                self.log("Wine symlink created", "success")
+            if wine_type == "stable":
+                wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
+                if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
+                    target = Path(self.directory) / wine_dir_name
+                    if target.exists() or target.is_symlink():
+                        target.unlink()
+                    target.symlink_to(wine_dir)
+                    self.log("Wine symlink created", "success")
+            else:
+                # For tkg builds, they should now be in ElementalWarriorWine-x86_64
+                # Create symlink to the expected name
+                source_dir = Path(self.directory) / "ElementalWarriorWine-x86_64"
+                target_dir = Path(self.directory) / wine_dir_name
+                
+                if source_dir.exists() and source_dir.is_dir():
+                    if target_dir.exists() or target_dir.is_symlink():
+                        if target_dir.is_symlink():
+                            target_dir.unlink()
+                        elif target_dir.is_dir():
+                            shutil.rmtree(target_dir)
+                    
+                    # Create symlink from wine_dir_name to ElementalWarriorWine-x86_64
+                    target_dir.symlink_to(source_dir)
+                    self.log(f"Wine directory linked: {wine_dir_name} -> ElementalWarriorWine-x86_64", "success")
+                else:
+                    self.log(f"Warning: ElementalWarriorWine-x86_64 not found after extraction", "warning")
             
             # Verify Wine binary
             self.update_progress(0.60)
-            wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            wine_binary = Path(self.directory) / wine_dir_name / "bin" / "wine"
             if not wine_binary.exists():
                 self.log("Wine binary not found", "error")
                 self.update_progress_text("Ready")
@@ -4152,7 +4646,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
         # Check if Wine is set up
-        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_binary = self.get_wine_path("wine")
         if not wine_binary.exists():
             self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
             QMessageBox.warning(
@@ -4245,7 +4739,7 @@ class AffinityInstallerGUI(QMainWindow):
         # Copy DLLs
         vkd3d_dir = next(Path(self.directory).glob("vkd3d-proton-*"), None)
         if vkd3d_dir:
-            wine_lib_dir = Path(self.directory) / "ElementalWarriorWine" / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+            wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
             wine_lib_dir.mkdir(parents=True, exist_ok=True)
             
             for dll in ["d3d12.dll", "d3d12core.dll"]:
@@ -4272,7 +4766,7 @@ class AffinityInstallerGUI(QMainWindow):
         env["WINETRICKS_GUI"] = "0"
         env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
         
-        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+        wine_cfg = self.get_wine_path("winecfg")
         
         components = [
             "dotnet35", "dotnet48", "corefonts", "vcrun2022", 
@@ -4321,7 +4815,7 @@ class AffinityInstallerGUI(QMainWindow):
             str(theme_file),
             "dark theme"
         ):
-            regedit = Path(self.directory) / "ElementalWarriorWine" / "bin" / "regedit"
+            regedit = self.get_wine_path("regedit")
             self.run_command([str(regedit), str(theme_file)], check=False, env=env)
             theme_file.unlink()
         
@@ -4402,7 +4896,7 @@ class AffinityInstallerGUI(QMainWindow):
             return
         
         # Check if Wine is set up
-        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_binary = self.get_wine_path("wine")
         if not wine_binary.exists():
             self.log("Wine is not set up yet. Please wait for Wine setup to complete.", "error")
             QMessageBox.warning(self, "Wine Not Ready", "Wine setup must complete before installing winetricks dependencies.")
@@ -4505,7 +4999,7 @@ class AffinityInstallerGUI(QMainWindow):
                         else:
                             # Check if it might already be installed by checking the component
                             if self._check_winetricks_component(component.split('=')[0] if '=' in component else component, 
-                                                                 Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine", env):
+                                                                 self.get_wine_path("wine"), env):
                                 self.log(f"✓ {description} appears to already be installed", "success")
                             else:
                                 self.log(f"✗ {description} installation failed after retry. You may need to install manually.", "error")
@@ -4520,7 +5014,7 @@ class AffinityInstallerGUI(QMainWindow):
                     # Windows 11 compatibility will be set below
         
             # Set Windows version to 11
-            wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+            wine_cfg = self.get_wine_path("winecfg")
             self.log("Setting Windows version to 11...", "info")
             self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
             
@@ -4532,7 +5026,7 @@ class AffinityInstallerGUI(QMainWindow):
                 str(theme_file),
                 "dark theme"
             ):
-                regedit = Path(self.directory) / "ElementalWarriorWine" / "bin" / "regedit"
+                regedit = self.get_wine_path("regedit")
                 self.run_command([str(regedit), str(theme_file)], check=False, env=env)
                 theme_file.unlink()
                 self.log("Dark theme applied", "success")
@@ -4549,7 +5043,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Note: This fix applies only to Affinity v3 (Unified).", "info")
         
         # Check if Wine is set up
-        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_binary = self.get_wine_path("wine")
         if not wine_binary.exists():
             self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
             QMessageBox.warning(
@@ -4899,7 +5393,7 @@ class AffinityInstallerGUI(QMainWindow):
     
     def check_webview2_installed(self):
         """Check if WebView2 Runtime is already installed"""
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         if not wine.exists():
             return False
         
@@ -4941,7 +5435,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
         # Check if Wine is set up
-        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_binary = self.get_wine_path("wine")
         if not wine_binary.exists():
             self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
             QMessageBox.warning(
@@ -4966,7 +5460,7 @@ class AffinityInstallerGUI(QMainWindow):
     def _install_webview2_runtime_thread(self):
         """Install Microsoft Edge WebView2 Runtime in background thread"""
         # Check if Wine is set up
-        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_binary = self.get_wine_path("wine")
         if not wine_binary.exists():
             self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
             return False
@@ -4974,9 +5468,9 @@ class AffinityInstallerGUI(QMainWindow):
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
         
-        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
-        regedit = Path(self.directory) / "ElementalWarriorWine" / "bin" / "regedit"
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_cfg = self.get_wine_path("winecfg")
+        regedit = self.get_wine_path("regedit")
+        wine = self.get_wine_path("wine")
         
         # Check if WebView2 Runtime is already installed
         self.log("Checking if WebView2 Runtime is already installed...", "info")
@@ -5421,7 +5915,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
         # Check if Wine is set up
-        wine_binary = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine_binary = self.get_wine_path("wine")
         if not wine_binary.exists():
             self.log("Wine is not set up yet. Please wait for Wine setup to complete.", "error")
             QMessageBox.warning(
@@ -5495,13 +5989,13 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Installer {original_filename} copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
             
             # Set Windows version
-            wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+            wine_cfg = self.get_wine_path("winecfg")
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
             
             # Run installer
-            wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            wine = self.get_wine_path("wine")
             env["WINEDEBUG"] = "-all"
             self.log("Launching installer with custom Wine...", "info")
             self.log("Follow the installation wizard in the window that opens.", "info")
@@ -5622,7 +6116,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         desktop_file = desktop_dir / f"{app_name.replace(' ', '')}.desktop"
         
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         
         # Normalize all paths to strings to avoid double slashes
         wine_str = str(wine)
@@ -5675,7 +6169,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
         # Check if Wine is set up
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         if not wine.exists():
             self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
             self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
@@ -5736,7 +6230,7 @@ class AffinityInstallerGUI(QMainWindow):
             # Run installer with custom Wine
             self.update_progress_text("Running updater...")
             self.update_progress(0.4)
-            wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            wine = self.get_wine_path("wine")
             self.log("Launching installer...", "info")
             self.log("Follow the installation wizard in the window that opens.", "info")
             self.log("This will update the application without creating desktop entries.", "info")
@@ -5907,7 +6401,7 @@ class AffinityInstallerGUI(QMainWindow):
             # Set Windows version
             self.update_progress_text("Configuring Wine...")
             self.update_progress(0.2)
-            wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+            wine_cfg = self.get_wine_path("winecfg")
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
@@ -5915,7 +6409,7 @@ class AffinityInstallerGUI(QMainWindow):
             # Run installer
             self.update_progress_text("Running installer...")
             self.update_progress(0.3)
-            wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            wine = self.get_wine_path("wine")
             env["WINEDEBUG"] = "-all"
             self.log("Launching installer...", "info")
             self.log("Follow the installation wizard in the window that opens.", "info")
@@ -6033,7 +6527,7 @@ class AffinityInstallerGUI(QMainWindow):
     def get_renderer_setting(self):
         """Get the current renderer setting from registry (vulkan, opengl, or gdi)"""
         try:
-            wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+            wine = self.get_wine_path("wine")
             if not wine.exists():
                 return "vulkan"  # Default to vulkan if Wine not set up
             
@@ -6082,7 +6576,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Application directory not found: {app_dir}", "warning")
             return
         
-        wine_lib_dir = Path(self.directory) / "ElementalWarriorWine" / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+        wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
         vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
         
         dlls_copied = 0
@@ -6102,7 +6596,7 @@ class AffinityInstallerGUI(QMainWindow):
             f.write('"d3d12"="native"\n')
             f.write('"d3d12core"="native"\n')
         
-        regedit = Path(self.directory) / "ElementalWarriorWine" / "bin" / "regedit"
+        regedit = self.get_wine_path("regedit")
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
         self.run_command([str(regedit), str(reg_file)], check=False, env=env)
@@ -6261,41 +6755,73 @@ class AffinityInstallerGUI(QMainWindow):
     def ensure_patcher_files(self, silent=False):
         """Ensure AffinityPatcher files are available in .AffinityLinux/Patch/"""
         try:
-            # Source: repo's Patch directory
-            script_dir = Path(__file__).parent
-            source_patch_dir = script_dir.parent / "Patch"
-            
             # Destination: .AffinityLinux/Patch/
             dest_patch_dir = Path(self.directory) / "Patch"
             dest_patch_dir.mkdir(parents=True, exist_ok=True)
             
-            # Files to copy
-            files_to_copy = ["AffinityPatcher.cs", "AffinityPatcher.csproj"]
+            # Files to copy/download
+            files_to_get = {
+                "AffinityPatcher.cs": "https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/main/Patch/AffinityPatcher.cs",
+                "AffinityPatcher.csproj": "https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/main/Patch/AffinityPatcher.csproj"
+            }
+            
+            # First, try to copy from local repository if available
+            script_dir = Path(__file__).parent
+            source_patch_dir = script_dir.parent / "Patch"
             
             files_copied = False
+            files_downloaded = False
             all_exist = True
-            for filename in files_to_copy:
-                source_file = source_patch_dir / filename
+            
+            for filename, github_url in files_to_get.items():
                 dest_file = dest_patch_dir / filename
                 
+                # Check if file already exists and is valid
+                if dest_file.exists():
+                    # File already exists, skip
+                    continue
+                
+                # Try to copy from local repository first
+                source_file = source_patch_dir / filename
                 if source_file.exists():
-                    # Only copy if destination doesn't exist or source is newer
-                    if not dest_file.exists() or source_file.stat().st_mtime > dest_file.stat().st_mtime:
+                    try:
                         shutil.copy2(source_file, dest_file)
                         files_copied = True
                         if not silent:
                             self.log(f"Copied {filename} to .AffinityLinux/Patch/", "info")
-                else:
-                    if not silent:
-                        self.log(f"Warning: {filename} not found in source Patch directory", "warning")
-                    all_exist = False
+                        continue
+                    except Exception as e:
+                        if not silent:
+                            self.log(f"Failed to copy {filename} from local: {e}", "warning")
                 
-                # Check if destination file exists after copy attempt
+                # If local copy failed or doesn't exist, download from GitHub
+                if not dest_file.exists():
+                    if not silent:
+                        self.log(f"Downloading {filename} from GitHub...", "info")
+                    try:
+                        if self.download_file(github_url, str(dest_file), filename):
+                            files_downloaded = True
+                            if not silent:
+                                self.log(f"Downloaded {filename} to .AffinityLinux/Patch/", "success")
+                        else:
+                            all_exist = False
+                            if not silent:
+                                self.log(f"Failed to download {filename}", "error")
+                    except Exception as e:
+                        all_exist = False
+                        if not silent:
+                            self.log(f"Error downloading {filename}: {e}", "error")
+            
+            # Final check - verify all files exist
+            for filename in files_to_get.keys():
+                dest_file = dest_patch_dir / filename
                 if not dest_file.exists():
                     all_exist = False
             
             if files_copied and not silent:
                 self.log("Patcher files are ready in .AffinityLinux/Patch/", "success")
+            elif files_downloaded and not silent:
+                self.log("Patcher files downloaded and ready in .AffinityLinux/Patch/", "success")
             elif not all_exist and not silent:
                 self.log("Some patcher files are missing", "warning")
             
@@ -6467,7 +6993,7 @@ class AffinityInstallerGUI(QMainWindow):
         if app_name == "Add":
             desktop_file = desktop_dir / "Affinity.desktop"
         
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         app_path = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / dir_name / exe
         icon_path = Path.home() / ".local" / "share" / "icons" / icon
         
@@ -6545,7 +7071,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Opening Wine Configuration", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+        wine_cfg = self.get_wine_path("winecfg")
         
         if not wine_cfg.exists():
             self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
@@ -6572,7 +7098,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Opening Winetricks", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+        wine_cfg = self.get_wine_path("winecfg")
         
         if not wine_cfg.exists():
             self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
@@ -6618,7 +7144,7 @@ class AffinityInstallerGUI(QMainWindow):
         # Start operation for renderer configuration
         self.start_operation("Configure Renderer")
         
-        wine_cfg = Path(self.directory) / "ElementalWarriorWine" / "bin" / "winecfg"
+        wine_cfg = self.get_wine_path("winecfg")
         
         if not wine_cfg.exists():
             self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
@@ -6682,7 +7208,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Set renderer directly via registry (more reliable than winetricks)
         self.log(f"Configuring {renderer_name} renderer...", "info")
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         
         # Set renderer directly via registry - this is more reliable than winetricks
         self.log(f"Setting {renderer_name} renderer via registry...", "info")
@@ -6926,7 +7452,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("DPI Scaling Configuration", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+        wine = self.get_wine_path("wine")
         
         if not wine.exists():
             self.log("Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
@@ -7162,11 +7688,7 @@ class AffinityInstallerGUI(QMainWindow):
             return
         
         # Check if Wine is set up
-        # Try both possible directory names
-        runner_path = Path(self.directory) / "ElementalWarriorWine-x86_64"
-        if not runner_path.exists():
-            runner_path = Path(self.directory) / "ElementalWarriorWine"
-        wine_bin = runner_path / "bin" / "wine"
+        wine_bin = self.get_wine_path("wine")
         if not wine_bin.exists():
             self.log("✗ Wine is not set up", "error")
             self.log("Please run 'Setup Wine Environment' first", "info")
@@ -7183,9 +7705,10 @@ class AffinityInstallerGUI(QMainWindow):
         env = os.environ.copy()
         
         # Set PATH to include Wine binaries
-        runner_path_str = str(runner_path)
+        wine_dir = self.get_wine_dir()
+        wine_dir_str = str(wine_dir)
         current_path = env.get("PATH", "")
-        env["PATH"] = f"{runner_path_str}/bin:{current_path}"
+        env["PATH"] = f"{wine_dir_str}/bin:{current_path}"
         
         # Set Wine-related environment variables
         env["WINE"] = str(wine_bin)
@@ -7232,7 +7755,7 @@ class AffinityInstallerGUI(QMainWindow):
             if not self.is_opencl_enabled():
                 self.log("Removing d3d12 DLL overrides to prevent Vulkan initialization", "info")
                 try:
-                    wine = Path(self.directory) / "ElementalWarriorWine" / "bin" / "wine"
+                    wine = self.get_wine_path("wine")
                     reg_env = os.environ.copy()
                     reg_env["WINEPREFIX"] = self.directory
                     # Remove d3d12 and d3d12core overrides

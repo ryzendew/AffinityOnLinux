@@ -327,7 +327,12 @@ get_wine_prefix() {
     if [ -n "$WINEPREFIX" ]; then
         echo "$WINEPREFIX"
     else
-        echo "$HOME/.wine"
+        # Use .affinity as default to match guide, but allow .wine for compatibility
+        if [ -d "$HOME/.affinity" ] && [ -f "$HOME/.affinity/system.reg" ]; then
+            echo "$HOME/.affinity"
+        else
+            echo "$HOME/.wine"
+        fi
     fi
 }
 
@@ -1169,7 +1174,10 @@ show_introduction() {
     if [ -n "$WINEPREFIX" ]; then
         echo -e "  ${CYAN}Using: $WINEPREFIX${NC}"
     else
-        echo -e "  ${CYAN}Using: ~/.wine (default)${NC}"
+        local default_prefix=$(get_wine_prefix)
+        echo -e "  ${CYAN}Using: $default_prefix${NC}"
+        echo -e "  ${YELLOW}Note: You can set WINEPREFIX environment variable to use a custom location${NC}"
+        echo -e "  ${YELLOW}Example: WINEPREFIX=\"\$HOME/.affinity\" $0${NC}"
     fi
     echo ""
     echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1548,11 +1556,154 @@ install_affinity_product() {
     
     if [ -f "$check_exe" ]; then
         print_success "$product installation completed successfully!"
+        
+        # Offer to install AffinityPluginLoader + WineFix (optional enhancement)
+        if [ "$product" = "Affinity" ] || [ "$product" = "Add" ]; then
+            echo ""
+            print_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            print_info "Optional Enhancement: AffinityPluginLoader + WineFix"
+            print_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            print_info "${BOLD}What is AffinityPluginLoader + WineFix?${NC}"
+            echo ""
+            print_info "This is a community-made patch (by Noah C3) that provides runtime fixes for"
+            print_info "Affinity when running on Linux under Wine. It uses Harmony library for"
+            print_info "dynamic code patching without modifying DLL files on disk."
+            echo ""
+            print_info "${BOLD}What does it fix?${NC}"
+            echo ""
+            print_success "  ✓ Preferences and settings will now save correctly on Linux"
+            print_info "  • Plugin loading support enabled (for custom plugins)"
+            print_info "  • Dynamic patch injection at runtime (no DLL modifications needed)"
+            echo ""
+            print_warning "${BOLD}Important Notes:${NC}"
+            echo ""
+            print_warning "  • This is a community patch, NOT official from Canva/Serif"
+            print_warning "  • Currently disables the Canva sign-in dialog (temporary fix)"
+            print_warning "  • If you update Affinity, you may need to reinstall this patch"
+            print_warning "  • Updates to Affinity may overwrite the launcher files"
+            echo ""
+            print_info "For more information, visit:"
+            print_info "  https://github.com/noahc3/AffinityPluginLoader"
+            echo ""
+            read -p "Would you like to install AffinityPluginLoader + WineFix? (y/n): " -n 1 -r
+            echo ""
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                install_affinity_plugin_loader "$product"
+            else
+                print_info "Skipping AffinityPluginLoader installation"
+                print_info "You can install it later if needed"
+            fi
+        fi
     else
         print_warning "$product installation may not have completed successfully."
         print_info "The executable was not found at: $check_exe"
         print_info "Please verify the installation completed in the installer window."
     fi
+    
+    return 0
+}
+
+install_affinity_plugin_loader() {
+    local product=$1
+    print_header "Installing AffinityPluginLoader + WineFix"
+    
+    local prefix=$(get_wine_prefix)
+    local affinity_dir=""
+    
+    case $product in
+        "Affinity"|"Add")
+            affinity_dir="$prefix/drive_c/Program Files/Affinity/Affinity"
+            ;;
+        "Photo")
+            affinity_dir="$prefix/drive_c/Program Files/Affinity/Photo 2"
+            ;;
+        "Designer")
+            affinity_dir="$prefix/drive_c/Program Files/Affinity/Designer 2"
+            ;;
+        "Publisher")
+            affinity_dir="$prefix/drive_c/Program Files/Affinity/Publisher 2"
+            ;;
+        *)
+            print_error "Unknown product: $product"
+            return 1
+            ;;
+    esac
+    
+    if [ ! -d "$affinity_dir" ]; then
+        print_error "Affinity installation directory not found: $affinity_dir"
+        return 1
+    fi
+    
+    # Check if already installed
+    if [ -f "$affinity_dir/AffinityHook.exe" ] && [ -f "$affinity_dir/Affinity.real.exe" ]; then
+        print_success "AffinityPluginLoader + WineFix appears to be already installed"
+        return 0
+    fi
+    
+    local tmp_dir="/tmp"
+    local bundle_url="https://github.com/noahc3/AffinityPluginLoader/releases/latest/download/affinitypluginloader-plus-winefix.tar.xz"
+    local bundle_file="$tmp_dir/affinitypluginloader-plus-winefix.tar.xz"
+    
+    print_step "Downloading AffinityPluginLoader + WineFix bundle..."
+    if download_file "$bundle_url" "$bundle_file" "AffinityPluginLoader + WineFix"; then
+        print_success "Bundle downloaded successfully"
+    else
+        print_error "Failed to download AffinityPluginLoader + WineFix bundle"
+        print_info "You can download it manually from:"
+        print_info "  https://github.com/noahc3/AffinityPluginLoader/releases/latest"
+        return 1
+    fi
+    
+    print_step "Extracting bundle to Affinity directory..."
+    cd "$affinity_dir" || {
+        print_error "Failed to change to Affinity directory"
+        return 1
+    }
+    
+    if tar -xf "$bundle_file" 2>/dev/null; then
+        print_success "Bundle extracted successfully"
+    else
+        print_error "Failed to extract bundle"
+        rm -f "$bundle_file"
+        return 1
+    fi
+    
+    # Replace launcher for compatibility
+    if [ -f "$affinity_dir/Affinity.exe" ] && [ -f "$affinity_dir/AffinityHook.exe" ]; then
+        print_step "Replacing launcher for compatibility..."
+        if [ ! -f "$affinity_dir/Affinity.real.exe" ]; then
+            mv "$affinity_dir/Affinity.exe" "$affinity_dir/Affinity.real.exe" || {
+                print_error "Failed to rename Affinity.exe"
+                return 1
+            }
+        fi
+        mv "$affinity_dir/AffinityHook.exe" "$affinity_dir/Affinity.exe" || {
+            print_error "Failed to rename AffinityHook.exe"
+            return 1
+        }
+        print_success "Launcher replaced - AffinityPluginLoader will load automatically"
+    else
+        print_warning "Expected files not found after extraction"
+    fi
+    
+    # Clean up
+    rm -f "$bundle_file"
+    
+    print_success "AffinityPluginLoader + WineFix installed successfully!"
+    echo ""
+    print_info "${BOLD}What's been fixed:${NC}"
+    print_success "  ✓ Preferences and settings will now save correctly on Linux"
+    print_info "  • Plugin loading support is now enabled"
+    print_info "  • Canva sign-in dialog is temporarily disabled (until browser redirect is fixed)"
+    echo ""
+    print_warning "${BOLD}Important:${NC}"
+    print_warning "  • If you update Affinity, you may need to reinstall this patch"
+    print_warning "  • Updates may overwrite the launcher files"
+    print_warning "  • Always download from official releases:"
+    print_info "    https://github.com/noahc3/AffinityPluginLoader/releases"
+    echo ""
+    print_info "You can now launch Affinity normally - the patch will load automatically!"
     
     return 0
 }

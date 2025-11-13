@@ -7,16 +7,34 @@ A comprehensive solution for running [Affinity software](https://www.affinity.st
 
 ## Features
 
-- **Full OpenCL Support** - Hardware acceleration enabled out of the box
+- **Full OpenCL Support** - Hardware acceleration enabled out of the box (with Stable Wine)
+- **Wine Version Selection** - Choose between Stable Wine (9.14) or Wine-TKG-Affinity during setup
 - **Automated Installation** - Streamlined setup process with dependency management
 - **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
 - **Desktop Integration** - Automatic desktop entry and shortcut creation
 - **Wine Configuration** - Pre-configured Wine environment optimized for Affinity applications
 - **Settings Save now** - Affinity v3 Settings will save.
 
+## Wine Version Selection
+
+<div align="center">
+
+### ⚠️ **WARNING: Wine-TKG-Affinity is WIP (Work In Progress)** ⚠️
+
+**Wine-TKG-Affinity is currently experimental and may have issues. Use at your own risk.**
+
+</div>
+
+During the one-click setup, you'll be presented with a choice of Wine versions:
+
+- **Stable Wine (9.14)** - The official Wine release, extensively tested and recommended for most users. Full OpenCL support is available with this version.
+- **Wine-TKG-Affinity** - A custom Wine build optimized specifically for Affinity applications with additional patches and performance enhancements. **⚠️ WIP - Work In Progress** **Note:** OpenCL support could not be made to work with this build. This build is experimental and may have stability issues.
+
+Your selection is saved and all Affinity desktop entries will automatically use the chosen Wine version.
+
 ## OpenCL Hardware Acceleration
 
-OpenCL support is fully functional, enabling GPU acceleration for improved performance in Affinity applications.
+OpenCL support is fully functional with Stable Wine (9.14), enabling GPU acceleration for improved performance in Affinity applications. **Note:** OpenCL is not available when using Wine-TKG-Affinity.
 
 <img width="2559" height="1441" alt="OpenCL Hardware Acceleration" src="https://github.com/user-attachments/assets/b5350cbf-09a3-4ba2-9e98-aec86a73986b" />
 
@@ -74,15 +92,18 @@ sudo apt install python3-pyqt6.qtsvg
 A modern PyQt6-based graphical user interface for the Affinity Linux Installer, providing a clean and professional installation experience with a VS Code-inspired dark theme.
 
 **Features:**
-- **One-Click Full Setup** - Automatically detects your distribution, installs dependencies, sets up Wine, and configures everything
+- **One-Click Full Setup** - Automatically detects your distribution, installs dependencies, lets you choose your Wine version, sets up Wine, and configures everything
+- **Wine Version Selection** - Choose between Stable Wine (9.14) with full OpenCL support, or Wine-TKG-Affinity optimized build (OpenCL not available)
 - **System Setup Tools** - Download Affinity installers and install custom Windows applications using the Wine environment
 - **Update Affinity Applications** - Update existing installations without creating new desktop entries or reinstalling dependencies
 - **Automatic WebView2 Runtime Installation** - Automatically detects and installs Microsoft Edge WebView2 Runtime for Affinity v3 to enable Help > View Help functionality
+- **Automatic Patcher File Management** - Automatically downloads AffinityPatcher files from GitHub if not found locally, ensuring settings fix functionality always works
 - **Enhanced Status Detection** - Real-time status display showing:
   - System dependencies (wine, winetricks, wget, curl, etc.)
   - Winetricks dependencies (.NET Framework, Visual C++, MSXML, fonts, Vulkan renderer)
   - WebView2 Runtime installation status
   - Affinity application installation status
+  - Current Wine version in use
 - **DPI Scaling Configuration** - Adjust DPI scaling for Affinity applications with an intuitive slider (96-480 DPI range) to optimize UI size for different displays
 - **Troubleshooting Tools**:
   - Open Wine Configuration (winecfg)
@@ -121,14 +142,17 @@ python AffinityScripts/AffinityLinuxInstaller.py
 **Usage:**
 1. Run the installer - it will automatically attempt to install PyQt6 if needed
 2. Click **"One-Click Full Setup"** for automatic configuration
-3. Once Wine is set up, use **"Update Affinity Applications"** to install or update Affinity apps
+3. **Select your Wine version** - You'll be presented with a dialog to choose between:
+   - **Stable Wine (9.14)** - Recommended for most users, includes full OpenCL support
+   - **Wine-TKG-Affinity** - Optimized build for Affinity, but OpenCL is not available
+4. Once Wine is set up, use **"Update Affinity Applications"** to install or update Affinity apps
    - For Affinity v3 (Unified), WebView2 Runtime will be automatically installed if missing
-4. Use **"Troubleshooting"** tools to:
+5. Use **"Troubleshooting"** tools to:
    - Configure Wine settings and renderers
    - Adjust DPI scaling for better UI visibility
    - Reinstall WinMetadata if needed
    - Completely uninstall Affinity Linux if desired
-5. Check the status log on startup to see what's installed and what's missing
+6. Check the status log on startup to see what's installed and what's missing
 
 **📖 Need Help?** Check out the [GUI Installer Guide](Guide/GUI-Installer-Guide.md) for detailed step-by-step instructions, button explanations, and troubleshooting tips.
 
@@ -238,16 +262,33 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 
 ### Required Dependencies
 
-- Wine (ElementalWarriorWine provided automatically)
+- Wine (provided automatically - choose between Stable Wine 9.14 or Wine-TKG-Affinity during setup)
 - winetricks
 - wget
 - curl
 - p7zip or 7z
 - tar
 - jq
-- zstd
+- zstd (required for Wine-TKG-Affinity extraction)
 
 **Note:** These dependencies are automatically installed by the GUI installer during "One-Click Full Setup". For legacy scripts, you may need to install them manually using your distribution's package manager.
+
+### Wine Versions
+
+<div align="center">
+
+### ⚠️ **WARNING: Wine-TKG-Affinity is WIP (Work In Progress)** ⚠️
+
+**Wine-TKG-Affinity is currently experimental and may have issues. Use at your own risk.**
+
+</div>
+
+The installer provides two Wine options:
+
+- **Stable Wine (9.14)** - Official Wine release, stable and extensively tested. Recommended for most users. **Full OpenCL support available.**
+- **Wine-TKG-Affinity** - Custom build optimized for Affinity applications with additional patches. May offer improved performance for Affinity software. **⚠️ WIP - Work In Progress** **OpenCL support is not available with this build.** This build is experimental and may have stability issues.
+
+Your Wine version selection is saved in `~/.AffinityLinux/.wine_type` and all desktop entries automatically use the selected version.
 
 </details>
 
