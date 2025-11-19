@@ -3162,6 +3162,11 @@ class AffinityInstallerGUI(QMainWindow):
         
         return gpus
     
+    def has_amd_gpu(self):
+        """Check if system has an AMD GPU"""
+        gpus = self.detect_gpus()
+        return any(gpu["type"] == "amd" for gpu in gpus)
+    
     def get_gpu_env_vars(self, gpu_id=None):
         """Get environment variables for GPU selection"""
         if gpu_id is None:
@@ -3535,6 +3540,21 @@ class AffinityInstallerGUI(QMainWindow):
             if opencl_reply == "Yes":
                 self.enable_opencl = True
                 self.log("OpenCL support will be enabled", "info")
+                
+                # Check if AMD GPU is detected and on Fedora - install additional dependencies
+                if self.distro == "fedora" and self.has_amd_gpu():
+                    self.log("AMD GPU detected on Fedora - installing additional OpenCL dependencies...", "info")
+                    amd_deps = ["rocm-opencl", "apr", "apr-util", "zlib", "libxcrypt-compat", "libcurl", "libcurl-devel", "mesa-libGLU"]
+                    self.log(f"Installing: {', '.join(amd_deps)}", "info")
+                    
+                    install_cmd = ["sudo", "dnf", "install", "-y"] + amd_deps
+                    success, stdout, stderr = self.run_command(install_cmd)
+                    
+                    if success:
+                        self.log("AMD OpenCL dependencies installed successfully", "success")
+                    else:
+                        self.log(f"Warning: Failed to install some AMD OpenCL dependencies: {stderr}", "warning")
+                        self.log("OpenCL may still work, but some features might be limited", "warning")
             else:
                 self.enable_opencl = False
                 self.log("OpenCL support will be disabled", "info")
