@@ -4,6 +4,9 @@ A comprehensive solution for running [Affinity software](https://www.affinity.st
 
 <img width="1276" height="1328" alt="image" src="https://github.com/user-attachments/assets/99ee6679-7048-4714-b852-316e0efade69" />
 
+## Warning About Wine 10.17 method
+
+it has major bugs and issues it's why we don't use it.
 
 ## Features
 
