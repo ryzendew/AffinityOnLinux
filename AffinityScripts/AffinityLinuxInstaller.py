@@ -207,7 +207,6 @@ class AffinityInstallerGUI(QMainWindow):
     install_application_signal = pyqtSignal(str)  # Signal to install an application
     show_spinner_signal = pyqtSignal(object)  # button -> show spinner
     hide_spinner_signal = pyqtSignal(object)  # button -> hide spinner
-    wine_selection_signal = pyqtSignal()  # Signal to show Wine selection dialog
     
     def __init__(self):
         super().__init__()
@@ -234,8 +233,6 @@ class AffinityInstallerGUI(QMainWindow):
         self.waiting_for_response = False  # Whether we're waiting for user response
         self.question_dialog_response = None  # Response from question dialogs
         self.waiting_for_question_response = False  # Whether waiting for question dialog response
-        self.wine_selection_response = None  # Response from Wine selection dialog
-        self.waiting_for_wine_selection = False  # Whether waiting for Wine selection
         self.dark_mode = True  # Track current theme mode
         self.icon_buttons = []  # Store buttons with icons for theme updates
         self.enable_opencl = False  # OpenCL support preference
@@ -265,7 +262,6 @@ class AffinityInstallerGUI(QMainWindow):
         self.install_application_signal.connect(self.install_application)
         self.show_spinner_signal.connect(self._show_spinner_safe)
         self.hide_spinner_signal.connect(self._hide_spinner_safe)
-        self.wine_selection_signal.connect(self._show_wine_selection_dialog_safe)
         
         # Load Affinity icon
         self.load_affinity_icon()
@@ -317,27 +313,15 @@ class AffinityInstallerGUI(QMainWindow):
         # Update system status indicator
         if hasattr(self, 'system_status_label'):
             if wine_exists:
-                wine_type = self.get_wine_type()
-                wine_type_names = {
-                    "stable": "Stable Wine (9.14)",
-                    "wine-tkg-affinity": "Wine-TKG-Affinity"
-                }
-                wine_name = wine_type_names.get(wine_type, "Wine")
                 self.system_status_label.setStyleSheet("font-size: 14px; color: #4ec9b0; padding: 0 5px;")
-                self.system_status_label.setToolTip(f"System Status: Ready - {wine_name} is installed")
+                self.system_status_label.setToolTip("System Status: Ready - Wine 10.4 is installed")
             else:
                 self.system_status_label.setStyleSheet("font-size: 14px; color: #f48771; padding: 0 5px;")
                 self.system_status_label.setToolTip("System Status: Not Ready - Wine needs to be installed")
         
         # Log Wine status
         if wine_exists:
-            wine_type = self.get_wine_type()
-            wine_type_names = {
-                "stable": "Stable Wine (9.14)",
-                "wine-tkg-affinity": "Wine-TKG-Affinity"
-            }
-            wine_name = wine_type_names.get(wine_type, "Wine")
-            self.log(f"Wine: ✓ Installed ({wine_name})", "success")
+            self.log("Wine: ✓ Installed (Wine 10.4)", "success")
         else:
             self.log("Wine: ✗ Not installed", "error")
         
@@ -389,12 +373,17 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  {dep}: ✗ Not installed", "error")
                 deps_installed = False
         
-        # Check zstd
+        # Check zstd (optional - only needed for some archives)
         if self.check_command("unzstd") or self.check_command("zstd"):
             self.log(f"  zstd: ✓ Installed", "success")
         else:
-            self.log(f"  zstd: ✗ Not installed", "error")
-            deps_installed = False
+            self.log(f"  zstd: ✗ Not installed (optional)", "warning")
+        
+        # Check xz (optional - Python's lzma can handle .xz, but xz command is useful as fallback)
+        if self.check_command("xz") or self.check_command("unxz"):
+            self.log(f"  xz: ✓ Installed", "success")
+        else:
+            self.log(f"  xz: ✗ Not installed (optional - Python lzma will be used)", "warning")
         
         # Check .NET SDK
         if self.check_dotnet_sdk():
@@ -412,12 +401,13 @@ class AffinityInstallerGUI(QMainWindow):
             
             # List of winetricks components to check
             winetricks_components = [
-                ("dotnet35", ".NET Framework 3.5"),
+                ("dotnet35sp1", ".NET Framework 3.5 SP1"),
                 ("dotnet48", ".NET Framework 4.8"),
                 ("corefonts", "Windows Core Fonts"),
                 ("vcrun2022", "Visual C++ Redistributables 2022"),
                 ("msxml3", "MSXML 3.0"),
                 ("msxml6", "MSXML 6.0"),
+                ("crypt32", "Cryptographic API 32"),
             ]
             
             for component, description in winetricks_components:
@@ -617,6 +607,130 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Update progress label
         self._update_progress_label_style()
+    
+    def get_dialog_stylesheet(self):
+        """Get the appropriate stylesheet for dialogs based on current theme"""
+        if self.dark_mode:
+            return """
+                QDialog {
+                    background-color: #252526;
+                    color: #dcdcdc;
+                    border-radius: 12px;
+                }
+                QLabel {
+                    color: #dcdcdc;
+                }
+                QLineEdit {
+                    background-color: #3c3c3c;
+                    color: #dcdcdc;
+                    border: 1px solid #555555;
+                    border-radius: 4px;
+                    padding: 6px;
+                }
+                QLineEdit:focus {
+                    border: 1px solid #007acc;
+                }
+                QDialogButtonBox QPushButton {
+                    background-color: #3c3c3c;
+                    color: #f0f0f0;
+                    border: 1px solid #555555;
+                    border-radius: 8px;
+                    min-width: 80px;
+                    padding: 8px 16px;
+                }
+                QDialogButtonBox QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border-color: #6a6a6a;
+                }
+                QDialogButtonBox QPushButton:pressed {
+                    background-color: #2d2d2d;
+                }
+            """
+        else:
+            return """
+                QDialog {
+                    background-color: #ffffff;
+                    color: #2d2d2d;
+                    border-radius: 12px;
+                }
+                QLabel {
+                    color: #2d2d2d;
+                }
+                QLineEdit {
+                    background-color: #ffffff;
+                    color: #2d2d2d;
+                    border: 1px solid #c0c0c0;
+                    border-radius: 4px;
+                    padding: 6px;
+                }
+                QLineEdit:focus {
+                    border: 1px solid #4caf50;
+                }
+                QDialogButtonBox QPushButton {
+                    background-color: #e0e0e0;
+                    color: #2d2d2d;
+                    border: 1px solid #c0c0c0;
+                    border-radius: 8px;
+                    min-width: 80px;
+                    padding: 8px 16px;
+                }
+                QDialogButtonBox QPushButton:hover {
+                    background-color: #d0d0d0;
+                    border-color: #a0a0a0;
+                }
+                QDialogButtonBox QPushButton:pressed {
+                    background-color: #c0c0c0;
+                }
+            """
+    
+    def get_messagebox_stylesheet(self):
+        """Get the appropriate stylesheet for message boxes based on current theme"""
+        if self.dark_mode:
+            return """
+                QMessageBox {
+                    background-color: #252526;
+                    color: #dcdcdc;
+                    border-radius: 12px;
+                }
+                QMessageBox QLabel {
+                    color: #dcdcdc;
+                }
+                QMessageBox QPushButton {
+                    background-color: #3c3c3c;
+                    color: #f0f0f0;
+                    border: 1px solid #555555;
+                    border-radius: 8px;
+                    min-width: 80px;
+                    padding: 8px 16px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border-color: #6a6a6a;
+                }
+            """
+        else:
+            return """
+                QMessageBox {
+                    background-color: #ffffff;
+                    color: #2d2d2d;
+                    border-radius: 12px;
+                }
+                QMessageBox QLabel {
+                    color: #2d2d2d;
+                }
+                QMessageBox QPushButton {
+                    background-color: #e0e0e0;
+                    color: #2d2d2d;
+                    border: 1px solid #c0c0c0;
+                    border-radius: 8px;
+                    min-width: 80px;
+                    padding: 8px 16px;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #d0d0d0;
+                    border-color: #a0a0a0;
+                }
+            """
     
     def apply_theme(self):
         """Apply current theme (dark or light)"""
@@ -1786,20 +1900,31 @@ class AffinityInstallerGUI(QMainWindow):
     
     def _show_message_safe(self, title, message, msg_type="info"):
         """Thread-safe message box handler (called from main thread)"""
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStyleSheet(self.get_messagebox_stylesheet())
+        
         if msg_type == "error":
-            QMessageBox.critical(self, title, message)
+            msg_box.setIcon(QMessageBox.Icon.Critical)
         elif msg_type == "warning":
-            QMessageBox.warning(self, title, message)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
         else:
-            QMessageBox.information(self, title, message)
+            msg_box.setIcon(QMessageBox.Icon.Information)
+        
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
     
     def _request_sudo_password_safe(self):
         """Request sudo password from user (called from main thread)"""
-        dialog = QDialog(self)
+        # Create dialog without parent to avoid threading issues
+        dialog = QDialog()
         dialog.setWindowTitle("Administrator Authentication Required")
         dialog.setMinimumWidth(400)
         dialog.setModal(True)  # Ensure dialog is modal
         dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)  # Keep on top
+        # Apply theme stylesheet
+        dialog.setStyleSheet(self.get_dialog_stylesheet())
         
         layout = QVBoxLayout(dialog)
         
@@ -2013,7 +2138,13 @@ class AffinityInstallerGUI(QMainWindow):
             elif btn == "Cancel":
                 qbuttons |= QMessageBox.StandardButton.Cancel
         
-        reply = QMessageBox.question(self, title, message, qbuttons)
+        # Create message box and apply theme
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStandardButtons(qbuttons)
+        msg_box.setStyleSheet(self.get_messagebox_stylesheet())
+        reply = msg_box.exec()
         
         # Store response
         if reply == QMessageBox.StandardButton.Yes:
@@ -2044,343 +2175,13 @@ class AffinityInstallerGUI(QMainWindow):
         
         return self.question_dialog_response or "Cancel"
     
-    def get_wine_type(self):
-        """Get the selected Wine type from config file"""
-        wine_config_file = Path(self.directory) / ".wine_type"
-        if wine_config_file.exists():
-            try:
-                with open(wine_config_file, 'r') as f:
-                    wine_type = f.read().strip()
-                    # Handle legacy names
-                    if wine_type == "archbuilt":
-                        wine_type = "wine-tkg-affinity"
-                    if wine_type in ["stable", "wine-tkg-affinity"]:
-                        return wine_type
-            except Exception:
-                pass
-        return "stable"  # Default to stable
-    
-    def save_wine_type(self, wine_type):
-        """Save the selected Wine type to config file"""
-        wine_config_file = Path(self.directory) / ".wine_type"
-        try:
-            Path(self.directory).mkdir(parents=True, exist_ok=True)
-            with open(wine_config_file, 'w') as f:
-                f.write(wine_type)
-        except Exception as e:
-            self.log(f"Failed to save Wine type: {e}", "warning")
-    
     def get_wine_dir(self):
-        """Get the Wine directory path based on the selected Wine type"""
-        wine_type = self.get_wine_type()
-        
-        if wine_type == "stable":
-            wine_dir = Path(self.directory) / "ElementalWarriorWine"
-        elif wine_type == "wine-tkg-affinity":
-            wine_dir = Path(self.directory) / "wine-tkg-affinity"
-        else:
-            wine_dir = Path(self.directory) / "ElementalWarriorWine"  # Fallback
-        
-        return wine_dir
+        """Get the Wine directory path"""
+        return Path(self.directory) / "ElementalWarriorWine"
     
     def get_wine_path(self, binary="wine"):
-        """Get the path to a Wine binary based on the selected Wine type"""
+        """Get the path to a Wine binary"""
         return self.get_wine_dir() / "bin" / binary
-    
-    def show_wine_selection_dialog(self):
-        """Show dialog to select Wine version"""
-        self.wine_selection_response = None
-        self.waiting_for_wine_selection = True
-        self.wine_selection_signal.emit()
-        
-        # Wait for response with timeout
-        max_wait = 300  # 30 seconds
-        waited = 0
-        while self.waiting_for_wine_selection and waited < max_wait:
-            time.sleep(0.1)
-            waited += 1
-        
-        return self.wine_selection_response
-    
-    def _show_wine_selection_dialog_safe(self):
-        """Show Wine selection dialog (called from main thread)"""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Select Wine Version")
-        dialog.setModal(True)
-        dialog.resize(800, 650)
-        dialog.setMinimumSize(750, 550)
-        
-        # Main layout with proper spacing
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(20)
-        layout.setContentsMargins(30, 30, 30, 25)
-        
-        # Header section with title and description
-        header_widget = QWidget()
-        header_layout = QVBoxLayout(header_widget)
-        header_layout.setSpacing(8)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Title with icon-like styling
-        title_label = QLabel("Select Wine Version")
-        title_label.setStyleSheet("""
-            QLabel {
-                font-size: 22px; 
-                font-weight: bold; 
-                color: #ffffff;
-                padding: 0;
-                margin: 0;
-            }
-        """)
-        header_layout.addWidget(title_label)
-        
-        # Subtitle
-        subtitle_label = QLabel("Choose the Wine version that best suits your needs for running Affinity applications")
-        subtitle_label.setStyleSheet("""
-            QLabel {
-                font-size: 13px; 
-                color: #aaaaaa;
-                padding: 0;
-                margin: 0;
-            }
-        """)
-        subtitle_label.setWordWrap(True)
-        header_layout.addWidget(subtitle_label)
-        
-        layout.addWidget(header_widget)
-        
-        # Scroll area for options
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("""
-            QScrollArea {
-                border: none; 
-                background: transparent;
-            }
-            QScrollBar:vertical {
-                border: none;
-                background: #1e1e1e;
-                width: 10px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background: #444;
-                border-radius: 5px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #555;
-            }
-        """)
-        
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setSpacing(18)
-        scroll_layout.setContentsMargins(5, 5, 15, 5)
-        
-        # Wine options
-        wine_options = [
-            {
-                "type": "stable",
-                "name": "Stable Wine (9.14)",
-                "badge": "Recommended",
-                "description": "Official Wine release, version 9.14. This is the stable and extensively tested version that offers broad compatibility with a wide range of Windows applications. It's tried and tested, ensuring reliability and consistent performance. Recommended for most users."
-            },
-            {
-                "type": "wine-tkg-affinity",
-                "name": "Wine-TKG-Affinity",
-                "badge": "WIP",
-                "description": "⚠️ WARNING: This is a Work In Progress (WIP) experimental build. Custom Wine build optimized for Affinity applications with additional patches and performance enhancements. This build is experimental and may have stability issues. Use at your own risk. Note: OpenCL support could not be made to work with this build."
-            }
-        ]
-        
-        button_group = QButtonGroup()
-        radio_buttons = {}
-        
-        for idx, option in enumerate(wine_options):
-            # Container for each option with modern rounded design
-            option_frame = QFrame()
-            option_frame.setFrameShape(QFrame.Shape.NoFrame)
-            option_frame.setStyleSheet("""
-                QFrame { 
-                    background-color: #252525;
-                    border-radius: 12px;
-                    padding: 0;
-                }
-            """)
-            option_layout = QVBoxLayout(option_frame)
-            option_layout.setSpacing(0)
-            option_layout.setContentsMargins(0, 0, 0, 0)
-            
-            # Inner container for content
-            content_widget = QWidget()
-            content_widget.setStyleSheet("""
-                QWidget {
-                    background-color: #252525;
-                    border-radius: 12px;
-                }
-            """)
-            content_layout = QVBoxLayout(content_widget)
-            content_layout.setSpacing(14)
-            content_layout.setContentsMargins(20, 20, 20, 20)
-            
-            # Header row with radio button, name, and badge
-            header_row = QHBoxLayout()
-            header_row.setSpacing(12)
-            header_row.setContentsMargins(0, 0, 0, 0)
-            
-            # Radio button with custom styling
-            radio = QRadioButton()
-            radio.setStyleSheet("""
-                QRadioButton {
-                    padding: 0;
-                }
-                QRadioButton::indicator {
-                    width: 22px;
-                    height: 22px;
-                    border-radius: 11px;
-                    border: 2px solid #666;
-                    background-color: #1e1e1e;
-                }
-                QRadioButton::indicator:hover {
-                    border-color: #888;
-                }
-                QRadioButton::indicator:checked {
-                    border-color: #4a9eff;
-                    background-color: #4a9eff;
-                }
-                QRadioButton::indicator:checked::after {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 4px;
-                    background-color: #ffffff;
-                }
-            """)
-            button_group.addButton(radio, idx)
-            radio_buttons[idx] = option["type"]
-            header_row.addWidget(radio)
-            
-            # Name label
-            name_label = QLabel(option["name"])
-            name_label.setStyleSheet("""
-                QLabel {
-                    font-weight: bold; 
-                    font-size: 16px;
-                    color: #ffffff;
-                    padding: 0;
-                }
-            """)
-            header_row.addWidget(name_label)
-            
-            header_row.addStretch()
-            
-            # Badge
-            badge_label = QLabel(option["badge"])
-            badge_label.setStyleSheet("""
-                QLabel {
-                    background-color: #4a9eff;
-                    color: #ffffff;
-                    font-size: 11px;
-                    font-weight: bold;
-                    padding: 4px 10px;
-                    border-radius: 10px;
-                }
-            """)
-            header_row.addWidget(badge_label)
-            
-            content_layout.addLayout(header_row)
-            
-            # Description
-            desc = QLabel(option["description"])
-            desc.setWordWrap(True)
-            desc.setStyleSheet("""
-                QLabel {
-                    padding: 0; 
-                    color: #bbbbbb;
-                    font-size: 13px;
-                    line-height: 1.6;
-                }
-            """)
-            desc.setMinimumHeight(70)
-            content_layout.addWidget(desc)
-            
-            # Select button
-            select_button = QPushButton("Select This Option")
-            select_button.setStyleSheet("""
-                QPushButton {
-                    padding: 12px 24px;
-                    font-size: 13px;
-                    font-weight: 600;
-                    background-color: #4a9eff;
-                    color: #ffffff;
-                    border: none;
-                    border-radius: 8px;
-                    min-width: 160px;
-                }
-                QPushButton:hover {
-                    background-color: #5aaeff;
-                }
-                QPushButton:pressed {
-                    background-color: #3a8eef;
-                }
-            """)
-            select_button.clicked.connect(lambda checked, opt_type=option["type"]: self._select_wine_option(dialog, opt_type))
-            
-            button_layout = QHBoxLayout()
-            button_layout.setContentsMargins(0, 4, 0, 0)
-            button_layout.addStretch()
-            button_layout.addWidget(select_button)
-            content_layout.addLayout(button_layout)
-            
-            option_layout.addWidget(content_widget)
-            scroll_layout.addWidget(option_frame)
-            
-            # Set first option as default
-            if idx == 0:
-                radio.setChecked(True)
-        
-        scroll_layout.addStretch()
-        scroll.setWidget(scroll_content)
-        layout.addWidget(scroll)
-        
-        # Footer with cancel button
-        footer_layout = QHBoxLayout()
-        footer_layout.setContentsMargins(0, 10, 0, 0)
-        footer_layout.addStretch()
-        
-        cancel_button = QPushButton("Cancel")
-        cancel_button.setStyleSheet("""
-            QPushButton {
-                padding: 10px 24px;
-                font-size: 13px;
-                font-weight: 500;
-                background-color: #3a3a3a;
-                color: #ffffff;
-                border: none;
-                border-radius: 8px;
-                min-width: 100px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
-            }
-        """)
-        cancel_button.clicked.connect(lambda: self._select_wine_option(dialog, None))
-        footer_layout.addWidget(cancel_button)
-        
-        layout.addLayout(footer_layout)
-        
-        dialog.exec()
-    
-    def _select_wine_option(self, dialog, wine_type):
-        """Handle Wine selection"""
-        self.wine_selection_response = wine_type
-        self.waiting_for_wine_selection = False
-        dialog.accept()
     
     def _register_process(self, proc):
         """Track a running subprocess for potential cancellation."""
@@ -2807,11 +2608,28 @@ class AffinityInstallerGUI(QMainWindow):
         1) Try 'wine start /wait /unix <file>'
         2) If it exits too quickly or returns non-zero with no activity, try 'wine <file>'
         3) After launch, wait on 'wineserver -w' to ensure child processes finish (cancellable)
+        
+        For Affinity v3, uses system wine instead of patched wine.
         """
-        wine = self.get_wine_path("wine")
+        # Check if this is Affinity v3 or WebView2 installer (use system wine)
+        installer_name = installer_file.name.lower()
+        is_affinity_v3 = "affinity" in installer_name and ("x64" in installer_name or "affinity-x64" in installer_name)
+        is_webview2 = "webview" in installer_name or "edge" in installer_name
+        
+        if is_affinity_v3 or is_webview2:
+            # Use system wine for Affinity v3 and WebView2
+            wine = "wine"
+            if is_affinity_v3:
+                self.log("Using system Wine for Affinity v3 installation", "info")
+            else:
+                self.log("Using system Wine for WebView2 installation", "info")
+        else:
+            # Use patched wine for other installers
+            wine = self.get_wine_path("wine")
+        
         attempts = [
-            [str(wine), "start", "/wait", "/unix", str(installer_file)],
-            [str(wine), str(installer_file)],
+            [wine, "start", "/wait", "/unix", str(installer_file)],
+            [wine, str(installer_file)],
         ]
         for idx, cmd in enumerate(attempts, start=1):
             try:
@@ -2843,6 +2661,7 @@ class AffinityInstallerGUI(QMainWindow):
                     # Extended wait; cancellable via run_command loop
                     env_wait = env.copy() if env else os.environ.copy()
                     env_wait["WINEPREFIX"] = self.directory
+                    # Use system wineserver (always use system wineserver, not patched one)
                     self.run_command(["wineserver", "-w"], check=False, capture=False, env=env_wait)
                     return True
                 if self.check_cancelled():
@@ -3231,10 +3050,11 @@ class AffinityInstallerGUI(QMainWindow):
             except Exception:
                 pass
         
-        # Create dialog for GPU selection
-        dialog = QDialog(self)
+        # Create dialog for GPU selection (without parent to avoid threading issues)
+        dialog = QDialog()
         dialog.setWindowTitle("GPU Selection for Affinity Applications")
         dialog.setMinimumWidth(500)
+        dialog.setStyleSheet(self.get_dialog_stylesheet())
         layout = QVBoxLayout(dialog)
         
         label = QLabel(
@@ -3496,11 +3316,15 @@ class AffinityInstallerGUI(QMainWindow):
         if not self.check_dependencies():
             return
         
-        # Setup Wine
-        self.update_progress(0.5)
-        self.setup_wine()
+        # Check if Wine is already set up
+        wine = self.get_wine_path("wine")
+        if wine.exists():
+            self.log("Wine is already set up", "success")
+        else:
+            self.log("Wine is not set up. Use 'Setup Wine Environment' to install it.", "info")
         
-        # Show main menu
+        # Show main menu (Wine setup can be done manually if needed)
+        self.update_progress(1.0)
         QTimer.singleShot(0, self.show_main_menu)
     
     def one_click_setup(self):
@@ -3624,44 +3448,20 @@ class AffinityInstallerGUI(QMainWindow):
         if self.check_cancelled():
             return
         
-        # Step 3: Select Wine version (if not already selected)
-        wine_config_file = Path(self.directory) / ".wine_type"
-        if not wine_config_file.exists():
-            self.update_progress_text("Step 3/5: Selecting Wine version...")
-            self.update_progress(0.35)
-            
-            if self.check_cancelled():
-                return
-            
-            wine_type = self.show_wine_selection_dialog()
-            if wine_type is None:
-                self.log("Wine selection cancelled", "warning")
-                self.update_progress_text("Ready")
-                self.end_operation()
-                return
-            
-            self.save_wine_type(wine_type)
-            wine_type_names = {
-                "stable": "Stable Wine (9.14)",
-                "wine-tkg-affinity": "Wine-TKG-Affinity"
-            }
-            self.log(f"Selected: {wine_type_names.get(wine_type, wine_type)}", "info")
-        
-        # Step 4: Setup Wine environment (this includes winetricks dependencies via configure_wine)
-        self.update_progress_text("Step 4/5: Setting up Wine environment...")
+        # Step 3: Setup Wine environment (this includes winetricks dependencies via configure_wine)
+        self.update_progress_text("Step 3/4: Setting up Wine environment...")
         self.update_progress(0.40)
         
         if self.check_cancelled():
             return
         
-        wine_type = self.get_wine_type()
-        self.setup_wine(wine_type)
+        self.setup_wine()
         
         if self.check_cancelled():
             return
         
-        # Step 5: Install Affinity v3 settings to enable settings saving
-        self.update_progress_text("Step 5/5: Installing Affinity v3 settings...")
+        # Step 4: Install Affinity v3 settings to enable settings saving
+        self.update_progress_text("Step 4/4: Installing Affinity v3 settings...")
         self.update_progress(0.90)
         
         if self.check_cancelled():
@@ -3698,10 +3498,11 @@ class AffinityInstallerGUI(QMainWindow):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            # Show a dialog to select which app
-            dialog = QDialog(self)
+            # Show a dialog to select which app (without parent to avoid threading issues)
+            dialog = QDialog()
             dialog.setWindowTitle("Select Affinity Application")
             dialog.setModal(True)
+            dialog.setStyleSheet(self.get_dialog_stylesheet())
             
             layout = QVBoxLayout(dialog)
             label = QLabel("Which Affinity application would you like to install?")
@@ -3752,10 +3553,11 @@ class AffinityInstallerGUI(QMainWindow):
             self.show_message("Wine Not Found", "Wine is not set up yet. Please run 'Setup Wine Environment' first.", "error")
             return
         
-        # Ask user if they want to download or provide their own exe
-        dialog = QDialog(self)
+        # Ask user if they want to download or provide their own exe (without parent to avoid threading issues)
+        dialog = QDialog()
         dialog.setWindowTitle(f"Install {display_name}")
         dialog.setModal(True)
+        dialog.setStyleSheet(self.get_dialog_stylesheet())
         dialog.setMinimumWidth(400)
         
         layout = QVBoxLayout(dialog)
@@ -4338,23 +4140,11 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("All dependencies installed for Pop!_OS", "success")
         return True
     
-    def setup_wine(self, wine_type=None):
-        """Setup Wine environment
-        
-        Args:
-            wine_type: Wine type to install ("stable", "archbuilt", "fedorabuilt")
-                       If None, uses saved preference or defaults to "stable"
-        """
+    def setup_wine(self):
+        """Setup Wine environment - installs Wine 10.4 with AMD GPU and OpenCL patches"""
         self.start_operation("Setting up Wine environment")
         
         try:
-            # Determine Wine type
-            if wine_type is None:
-                wine_type = self.get_wine_type()
-            
-            # Save Wine type preference
-            self.save_wine_type(wine_type)
-            
             # Check if cancelled at start
             if self.check_cancelled():
                 return False
@@ -4363,25 +4153,13 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Wine Binary Setup", "info")
             self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
             
-            # Determine Wine URLs and directory names based on type
-            if wine_type == "stable":
-                wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
-                wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"
-                archive_format = "gz"
-                wine_display_name = "Stable Wine (9.14)"
-            elif wine_type == "wine-tkg-affinity":
-                wine_url = "https://github.com/daegalus/wine-tkg-affinity/releases/download/25O11.309/wine-tkg-affinity-archbuilt.tar.zst"
-                wine_file_name = "wine-tkg-affinity-archbuilt.tar.zst"
-                wine_dir_name = "wine-tkg-affinity"
-                wine_dir_pattern = "wine-tkg-affinity*"
-                archive_format = "zst"
-                wine_display_name = "Wine-TKG-Affinity"
-            else:
-                self.log(f"Unknown Wine type: {wine_type}", "error")
-                self.update_progress_text("Ready")
-                return False
+            # Wine 10.4 with AMD GPU and OpenCL patches
+            wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
+            wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
+            wine_dir_name = "ElementalWarriorWine"
+            wine_dir_pattern = "ElementalWarriorWine*"
+            archive_format = "xz"
+            wine_display_name = "Wine 10.4 (with AMD GPU and OpenCL patches)"
             
             self.log(f"Installing: {wine_display_name}", "info")
         
@@ -4426,10 +4204,40 @@ class AffinityInstallerGUI(QMainWindow):
                     # Extract .tar.gz
                     with tarfile.open(wine_file, "r:gz") as tar:
                         tar.extractall(self.directory, filter='data')
+                elif archive_format == "xz":
+                    # Extract .tar.xz using Python's lzma module or xz command
+                    try:
+                        # Try using Python's built-in lzma support
+                        import lzma
+                        with lzma.open(wine_file, 'rb') as xz_file:
+                            with tarfile.open(fileobj=xz_file, mode='r') as tar:
+                                tar.extractall(self.directory, filter='data')
+                    except ImportError:
+                        # Fallback to xz command if lzma module not available
+                        if not self.check_command("xz") and not self.check_command("unxz"):
+                            self.log("xz or unxz is required to extract Wine archive. Please install xz.", "error")
+                            self.update_progress_text("Ready")
+                            return False
+                        
+                        # First decompress with xz, then extract with tar
+                        tar_file = wine_file.with_suffix('.tar')
+                        xz_cmd = "xz" if self.check_command("xz") else "unxz"
+                        success, _, _ = self.run_command([xz_cmd, "-d", "-k", str(wine_file)], check=True)
+                        if not success:
+                            self.log("Failed to decompress Wine archive", "error")
+                            self.update_progress_text("Ready")
+                            return False
+                        
+                        # Extract the tar file
+                        with tarfile.open(tar_file, "r") as tar:
+                            tar.extractall(self.directory, filter='data')
+                        
+                        # Clean up intermediate tar file
+                        tar_file.unlink()
                 elif archive_format == "zst":
                     # Extract .tar.zst using zstd
                     if not self.check_command("zstd"):
-                        self.log("zstd is required to extract wine-tkg-affinity archives. Please install zstd.", "error")
+                        self.log("zstd is required to extract archives. Please install zstd.", "error")
                         self.update_progress_text("Ready")
                         return False
                     
@@ -4441,52 +4249,12 @@ class AffinityInstallerGUI(QMainWindow):
                         self.update_progress_text("Ready")
                         return False
                     
-                    # Extract the tar file to a temporary location first
-                    temp_extract_dir = Path(self.directory) / "temp_extract"
-                    temp_extract_dir.mkdir(exist_ok=True)
+                    # Extract the tar file
                     with tarfile.open(tar_file, "r") as tar:
-                        tar.extractall(temp_extract_dir, filter='data')
+                        tar.extractall(self.directory, filter='data')
                     
                     # Clean up intermediate tar file
                     tar_file.unlink()
-                    
-                    # For wine-tkg builds, find usr folder and reorganize
-                    usr_folder = None
-                    for path in temp_extract_dir.rglob("usr"):
-                        if path.is_dir():
-                            usr_folder = path
-                            break
-                    
-                    if usr_folder and usr_folder.exists():
-                        # Create the target directory
-                        target_wine_dir = Path(self.directory) / "ElementalWarriorWine-x86_64"
-                        target_wine_dir.mkdir(exist_ok=True)
-                        
-                        # Move contents from usr folder to target directory
-                        self.log("Reorganizing wine-tkg structure...", "info")
-                        for item in usr_folder.iterdir():
-                            dest = target_wine_dir / item.name
-                            if dest.exists() or dest.is_symlink():
-                                if dest.is_dir():
-                                    shutil.rmtree(dest)
-                                else:
-                                    dest.unlink()
-                            shutil.move(str(item), str(dest))
-                        
-                        # Clean up temporary extraction directory
-                        shutil.rmtree(temp_extract_dir)
-                        self.log("Wine-tkg structure reorganized", "success")
-                    else:
-                        # Fallback: if no usr folder found, try to find the extracted directory
-                        self.log("Warning: usr folder not found, using fallback extraction", "warning")
-                        # Move everything from temp_extract to the expected location
-                        found_dirs = list(temp_extract_dir.iterdir())
-                        if found_dirs:
-                            target_wine_dir = Path(self.directory) / "ElementalWarriorWine-x86_64"
-                            if target_wine_dir.exists():
-                                shutil.rmtree(target_wine_dir)
-                            shutil.move(str(found_dirs[0]), str(target_wine_dir))
-                        shutil.rmtree(temp_extract_dir)
                 
                 wine_file.unlink()
                 self.log("Wine binary extracted", "success")
@@ -4498,34 +4266,18 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Find and link Wine directory (for stable Wine, handle legacy naming)
+            # Find and link Wine directory (handle legacy naming)
             self.update_progress(0.55)
-            if wine_type == "stable":
-                wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
-                if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
-                    target = Path(self.directory) / wine_dir_name
-                    if target.exists() or target.is_symlink():
+            wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
+            if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
+                target = Path(self.directory) / wine_dir_name
+                if target.exists() or target.is_symlink():
+                    if target.is_symlink():
                         target.unlink()
-                    target.symlink_to(wine_dir)
-                    self.log("Wine symlink created", "success")
-            else:
-                # For tkg builds, they should now be in ElementalWarriorWine-x86_64
-                # Create symlink to the expected name
-                source_dir = Path(self.directory) / "ElementalWarriorWine-x86_64"
-                target_dir = Path(self.directory) / wine_dir_name
-                
-                if source_dir.exists() and source_dir.is_dir():
-                    if target_dir.exists() or target_dir.is_symlink():
-                        if target_dir.is_symlink():
-                            target_dir.unlink()
-                        elif target_dir.is_dir():
-                            shutil.rmtree(target_dir)
-                    
-                    # Create symlink from wine_dir_name to ElementalWarriorWine-x86_64
-                    target_dir.symlink_to(source_dir)
-                    self.log(f"Wine directory linked: {wine_dir_name} -> ElementalWarriorWine-x86_64", "success")
-                else:
-                    self.log(f"Warning: ElementalWarriorWine-x86_64 not found after extraction", "warning")
+                    elif target.is_dir():
+                        shutil.rmtree(target)
+                target.symlink_to(wine_dir)
+                self.log("Wine symlink created", "success")
             
             # Verify Wine binary
             self.update_progress(0.60)
@@ -4789,8 +4541,8 @@ class AffinityInstallerGUI(QMainWindow):
         wine_cfg = self.get_wine_path("winecfg")
         
         components = [
-            "dotnet35", "dotnet48", "corefonts", "vcrun2022", 
-            "msxml3", "msxml6", "tahoma", "renderer=vulkan"
+            "dotnet35sp1", "dotnet48", "corefonts", "vcrun2022", 
+            "msxml3", "msxml6", "tahoma", "renderer=vulkan", "crypt32"
         ]
         
         self.log("Installing Wine components (this may take several minutes)...", "info")
@@ -4938,7 +4690,7 @@ class AffinityInstallerGUI(QMainWindow):
             env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
             
             components = [
-                ("dotnet35", ".NET Framework 3.5"),
+                ("dotnet35sp1", ".NET Framework 3.5 SP1"),
                 ("dotnet48", ".NET Framework 4.8"),
                 ("corefonts", "Windows Core Fonts"),
                 ("vcrun2022", "Visual C++ Redistributables 2022"),
@@ -5351,8 +5103,8 @@ class AffinityInstallerGUI(QMainWindow):
         """Check if a winetricks component is installed"""
         try:
             # Different checks for different components
-            if component == "dotnet35":
-                # Check for .NET 3.5 in registry
+            if component == "dotnet35sp1" or component == "dotnet35":
+                # Check for .NET 3.5 in registry (dotnet35sp1 installs .NET 3.5 SP1)
                 success, stdout, _ = self.run_command(
                     [str(wine), "reg", "query", "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\NET Framework Setup\\NDP\\v3.5", "/v", "Install"],
                     check=False,
@@ -5412,15 +5164,8 @@ class AffinityInstallerGUI(QMainWindow):
         return False
     
     def check_webview2_installed(self):
-        """Check if WebView2 Runtime is already installed"""
-        wine = self.get_wine_path("wine")
-        if not wine.exists():
-            return False
-        
-        env = os.environ.copy()
-        env["WINEPREFIX"] = self.directory
-        
-        # Check for WebView2 installation directory
+        """Check if WebView2 Runtime is already installed (fast check - file paths only)"""
+        # Fast check: only check file paths, skip slow registry query
         webview2_paths = [
             Path(self.directory) / "drive_c" / "Program Files (x86)" / "Microsoft" / "EdgeWebView" / "Application",
             Path(self.directory) / "drive_c" / "Program Files" / "Microsoft" / "EdgeWebView" / "Application",
@@ -5433,18 +5178,10 @@ class AffinityInstallerGUI(QMainWindow):
                 if msedgewebview2_exe.exists():
                     return True
         
-        # Also check registry for WebView2 installation
-        try:
-            success, stdout, _ = self.run_command(
-                [str(wine), "reg", "query", "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"],
-                check=False,
-                env=env,
-                capture=True
-            )
-            if success:
-                return True
-        except Exception:
-            pass
+        # If file check fails, do a registry check (only if file check failed)
+        # Skip registry check to make it faster - file check is usually sufficient
+        # Registry check can be slow and may hang, so we skip it for speed
+        return False
         
         return False
     
@@ -5580,14 +5317,20 @@ class AffinityInstallerGUI(QMainWindow):
             
             self.log("WebView2 Runtime downloaded", "success")
             
-            # Step 3: Install WebView2 Runtime
+            # Step 3: Install WebView2 Runtime using system wine (like Affinity v3)
             self.log("Installing Microsoft Edge WebView2 Runtime...", "info")
             self.log("This may take a few minutes...", "info")
+            self.log("Using system Wine for WebView2 installation", "info")
             env["WINEDEBUG"] = "-all"
-            self.run_command([str(wine), str(webview2_file)], check=False, env=env, capture=False)
             
-            # Wait for installation to complete
-            time.sleep(5)
+            # Use system wine for WebView2 installer (like Affinity v3)
+            # Use the installer capture method which has better timeout handling
+            success = self._run_installer_and_capture(webview2_file, env, label="WebView2 installer")
+            if not success:
+                self.log("WebView2 installer may have completed despite non-zero exit code", "warning")
+            
+            # Wait a moment for files to be written
+            time.sleep(3)
             self.log("WebView2 Runtime installation completed", "success")
             
             # Step 4: Disable Microsoft Edge Update services
@@ -7172,10 +6915,11 @@ class AffinityInstallerGUI(QMainWindow):
             self.end_operation()
             return
         
-        # Ask user to choose renderer
-        dialog = QDialog(self)
+        # Ask user to choose renderer (without parent to avoid threading issues)
+        dialog = QDialog()
         dialog.setWindowTitle("Select Renderer")
         dialog.setMinimumWidth(300)
+        dialog.setStyleSheet(self.get_dialog_stylesheet())
         layout = QVBoxLayout(dialog)
         
         label = QLabel("Choose a renderer for troubleshooting:")
@@ -7509,10 +7253,11 @@ class AffinityInstallerGUI(QMainWindow):
         except:
             pass  # Use default if reading fails
         
-        # Create dialog
-        dialog = QDialog(self)
+        # Create dialog (without parent to avoid threading issues)
+        dialog = QDialog()
         dialog.setWindowTitle("Set DPI Scaling")
         dialog.setMinimumWidth(400)
+        dialog.setStyleSheet(self.get_dialog_stylesheet())
         layout = QVBoxLayout(dialog)
         
         # Info label
@@ -7856,8 +7601,9 @@ class AffinityInstallerGUI(QMainWindow):
     
     def show_thanks(self):
         """Show special thanks window"""
-        thanks = QMessageBox(self)
+        thanks = QMessageBox()  # No parent to avoid threading issues
         thanks.setWindowTitle("Special Thanks")
+        thanks.setStyleSheet(self.get_messagebox_stylesheet())
         thanks.setText("Special Thanks\n\n"
                       "Ardishco (github.com/raidenovich)\n"
                       "Deviaze\n"
