@@ -2657,12 +2657,66 @@ class AffinityInstallerGUI(QMainWindow):
                     if any(m in txt for m in error_markers):
                         ok = False
                 if ok:
-                    self.log("Waiting for Wine processes to finish (wineserver -w)...", "info")
-                    # Extended wait; cancellable via run_command loop
-                    env_wait = env.copy() if env else os.environ.copy()
-                    env_wait["WINEPREFIX"] = self.directory
-                    # Use system wineserver (always use system wineserver, not patched one)
-                    self.run_command(["wineserver", "-w"], check=False, capture=False, env=env_wait)
+                    # For WebView2, use polling with timeout instead of indefinite wineserver wait
+                    if is_webview2:
+                        self.log("Waiting for WebView2 installer to complete (polling with timeout)...", "info")
+                        max_wait_time = 600  # 10 minutes max
+                        poll_interval = 2  # Check every 2 seconds
+                        start_time = time.time()
+                        
+                        while time.time() - start_time < max_wait_time:
+                            if self.check_cancelled():
+                                return False
+                            
+                            # Check if installer process/window is still active
+                            if not self._has_installer_activity(installer_file):
+                                # No installer activity - wait a bit more to ensure it's really done
+                                time.sleep(3)
+                                # Double-check it's still inactive
+                                if not self._has_installer_activity(installer_file):
+                                    # Also verify WebView2 was actually installed
+                                    webview2_paths = [
+                                        Path(self.directory) / "drive_c" / "Program Files (x86)" / "Microsoft" / "EdgeWebView" / "Application",
+                                        Path(self.directory) / "drive_c" / "Program Files" / "Microsoft" / "EdgeWebView" / "Application",
+                                    ]
+                                    installed = any(
+                                        (path / "msedgewebview2.exe").exists() 
+                                        for path in webview2_paths
+                                    )
+                                    if installed:
+                                        self.log("WebView2 installer completed and files detected", "success")
+                                    else:
+                                        self.log("WebView2 installer appears to have completed (files not yet detected)", "info")
+                                    break
+                            
+                            time.sleep(poll_interval)
+                        else:
+                            self.log("WebView2 installer timeout reached - proceeding anyway", "warning")
+                        
+                        # Final wineserver wait with short timeout
+                        env_wait = env.copy() if env else os.environ.copy()
+                        env_wait["WINEPREFIX"] = self.directory
+                        try:
+                            # Use timeout for wineserver wait (30 seconds max)
+                            process = subprocess.Popen(
+                                ["wineserver", "-w"],
+                                env=env_wait,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE
+                            )
+                            process.wait(timeout=30)
+                        except subprocess.TimeoutExpired:
+                            self.log("Wineserver wait timed out - installer may have finished", "warning")
+                            process.kill()
+                        except Exception as e:
+                            self.log(f"Wineserver wait error (non-critical): {e}", "warning")
+                    else:
+                        self.log("Waiting for Wine processes to finish (wineserver -w)...", "info")
+                        # Extended wait; cancellable via run_command loop
+                        env_wait = env.copy() if env else os.environ.copy()
+                        env_wait["WINEPREFIX"] = self.directory
+                        # Use system wineserver (always use system wineserver, not patched one)
+                        self.run_command(["wineserver", "-w"], check=False, capture=False, env=env_wait)
                     return True
                 if self.check_cancelled():
                     return False
@@ -3365,20 +3419,48 @@ class AffinityInstallerGUI(QMainWindow):
                 self.enable_opencl = True
                 self.log("OpenCL support will be enabled", "info")
                 
-                # Check if AMD GPU is detected and on Fedora - install additional dependencies
-                if self.distro == "fedora" and self.has_amd_gpu():
-                    self.log("AMD GPU detected on Fedora - installing additional OpenCL dependencies...", "info")
-                    amd_deps = ["rocm-opencl", "apr", "apr-util", "zlib", "libxcrypt-compat", "libcurl", "libcurl-devel", "mesa-libGLU"]
-                    self.log(f"Installing: {', '.join(amd_deps)}", "info")
+                # Check if AMD GPU is detected and install additional dependencies based on distribution
+                if self.has_amd_gpu():
+                    self.log("AMD GPU detected - installing additional OpenCL dependencies...", "info")
                     
-                    install_cmd = ["sudo", "dnf", "install", "-y"] + amd_deps
-                    success, stdout, stderr = self.run_command(install_cmd)
+                    amd_deps = []
+                    install_cmd = None
                     
-                    if success:
-                        self.log("AMD OpenCL dependencies installed successfully", "success")
-                    else:
-                        self.log(f"Warning: Failed to install some AMD OpenCL dependencies: {stderr}", "warning")
-                        self.log("OpenCL may still work, but some features might be limited", "warning")
+                    # Fedora
+                    if self.distro == "fedora":
+                        # Check if Fedora 43 - use different dependencies
+                        if self.distro_version == "43":
+                            amd_deps = ["mesa-opencl-icd", "ocl-icd", "rocm-opencl", "rocm-hip", "wine-opencl"]
+                            self.log("Fedora 43 detected - installing Fedora 43 specific AMD OpenCL dependencies...", "info")
+                        else:
+                            # Use older dependencies for other Fedora versions
+                            amd_deps = ["rocm-opencl", "apr", "apr-util", "zlib", "libxcrypt-compat", "libcurl", "libcurl-devel", "mesa-libGLU"]
+                        install_cmd = ["sudo", "dnf", "install", "-y"] + amd_deps
+                    
+                    # Arch-based distributions (Arch, CachyOS, EndeavourOS, XeroLinux)
+                    elif self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+                        # Arch uses different package names than Fedora
+                        amd_deps = ["opencl-mesa", "ocl-icd", "rocm-opencl-runtime", "rocm-hip", "wine-opencl"]
+                        self.log(f"{self.format_distro_name()} detected - installing Arch-based AMD OpenCL dependencies...", "info")
+                        install_cmd = ["sudo", "pacman", "-S", "--needed", "--noconfirm"] + amd_deps
+                    
+                    # PikaOS (Ubuntu/Debian-based)
+                    elif self.distro == "pikaos":
+                        # PikaOS uses Debian/Ubuntu package names
+                        amd_deps = ["mesa-opencl-icd", "ocl-icd-libopencl1", "rocm-opencl-runtime", "rocm-hip-runtime"]
+                        self.log("PikaOS detected - installing Debian/Ubuntu-based AMD OpenCL dependencies...", "info")
+                        install_cmd = ["sudo", "apt", "install", "-y"] + amd_deps
+                    
+                    # Install dependencies if we have a command
+                    if install_cmd and amd_deps:
+                        self.log(f"Installing: {', '.join(amd_deps)}", "info")
+                        success, stdout, stderr = self.run_command(install_cmd)
+                        
+                        if success:
+                            self.log("AMD OpenCL dependencies installed successfully", "success")
+                        else:
+                            self.log(f"Warning: Failed to install some AMD OpenCL dependencies: {stderr}", "warning")
+                            self.log("OpenCL may still work, but some features might be limited", "warning")
             else:
                 self.enable_opencl = False
                 self.log("OpenCL support will be disabled", "info")
@@ -5191,15 +5273,17 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Installing Microsoft Edge WebView2 Runtime (Affinity v3)", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        # Check if Wine is set up
-        wine_binary = self.get_wine_path("wine")
-        if not wine_binary.exists():
-            self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
+        # Check if system Wine is available (WebView2 uses system wine, not patched wine)
+        if not shutil.which("wine"):
+            self.log("System Wine is not installed. Please install Wine first.", "error")
             QMessageBox.warning(
                 self,
-                "Wine Not Ready",
-                "Wine setup must complete before installing WebView2 Runtime.\n"
-                "Please setup Wine environment first."
+                "Wine Not Installed",
+                "System Wine is required for WebView2 Runtime installation.\n\n"
+                "Please install Wine using your distribution's package manager:\n"
+                "  • Arch/CachyOS/EndeavourOS/XeroLinux: sudo pacman -S wine\n"
+                "  • Fedora/Nobara: sudo dnf install wine\n"
+                "  • PikaOS: sudo apt install wine"
             )
             return
         
@@ -5216,19 +5300,21 @@ class AffinityInstallerGUI(QMainWindow):
 
     def _install_webview2_runtime_thread(self):
         """Install Microsoft Edge WebView2 Runtime in background thread"""
-        # Check if Wine is set up
-        wine_binary = self.get_wine_path("wine")
-        if not wine_binary.exists():
-            self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
+        # Check if system Wine is available (WebView2 uses system wine, not patched wine)
+        if not shutil.which("wine"):
+            self.log("System Wine is not installed. Please install Wine first.", "error")
+            self.log("You can install Wine using your distribution's package manager.", "info")
             return False
         
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
         
-        # Use system wine's winecfg for WebView2 (since installation uses system wine)
+        # Use system wine tools for WebView2 (not patched wine)
         wine_cfg = "winecfg"
-        regedit = self.get_wine_path("regedit")
-        wine = self.get_wine_path("wine")
+        regedit = "regedit"
+        wine = "wine"
+        
+        self.log(f"Using system Wine for WebView2 installation (WINEPREFIX={self.directory})", "info")
         
         # Check if WebView2 Runtime is already installed
         self.log("Checking if WebView2 Runtime is already installed...", "info")
