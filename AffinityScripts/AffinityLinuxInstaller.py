@@ -5225,7 +5225,8 @@ class AffinityInstallerGUI(QMainWindow):
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
         
-        wine_cfg = self.get_wine_path("winecfg")
+        # Use system wine's winecfg for WebView2 (since installation uses system wine)
+        wine_cfg = "winecfg"
         regedit = self.get_wine_path("regedit")
         wine = self.get_wine_path("wine")
         
@@ -5752,7 +5753,18 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Installer {original_filename} copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
             
             # Set Windows version
-            wine_cfg = self.get_wine_path("winecfg")
+            # Check if this is Affinity v3 (use system wine for winecfg too)
+            installer_name = installer_file.name.lower()
+            is_affinity_v3 = "affinity" in installer_name and ("x64" in installer_name or "affinity-x64" in installer_name)
+            
+            if is_affinity_v3:
+                # Use system wine's winecfg for Affinity v3
+                wine_cfg = "winecfg"
+                self.log("Using system Wine's winecfg for Affinity v3 configuration", "info")
+            else:
+                # Use patched wine's winecfg for other installers
+                wine_cfg = self.get_wine_path("winecfg")
+            
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
@@ -6164,7 +6176,19 @@ class AffinityInstallerGUI(QMainWindow):
             # Set Windows version
             self.update_progress_text("Configuring Wine...")
             self.update_progress(0.2)
-            wine_cfg = self.get_wine_path("winecfg")
+            # Check if this is Affinity v3 (use system wine for winecfg too)
+            installer_name = installer_file.name.lower()
+            is_affinity_v3 = (app_name == "Add" or app_name == "Affinity (Unified)") or \
+                            ("affinity" in installer_name and ("x64" in installer_name or "affinity-x64" in installer_name))
+            
+            if is_affinity_v3:
+                # Use system wine's winecfg for Affinity v3
+                wine_cfg = "winecfg"
+                self.log("Using system Wine's winecfg for Affinity v3 configuration", "info")
+            else:
+                # Use patched wine's winecfg for other installers
+                wine_cfg = self.get_wine_path("winecfg")
+            
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
