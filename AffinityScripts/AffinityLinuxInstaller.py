@@ -236,6 +236,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.setup_complete = False
         self.installer_file = None
         self.update_buttons = {}  # Store references to update buttons
+        self.switch_backend_button = None  # Store reference to switch backend button
         self.log_font_size = 11  # Initial font size for log area
         self.operation_cancelled = False  # Flag to track if operation was cancelled
         self.current_operation = None  # Track current operation name
@@ -366,6 +367,8 @@ class AffinityInstallerGUI(QMainWindow):
         threading.Thread(target=run_background_tasks, daemon=True).start()
     
     def check_installation_status(self):
+        # Update switch backend button text when checking status
+        self.update_switch_backend_button()
         """Check if Wine and Affinity applications are installed, and update button states"""
         # Check if Wine is set up
         wine = self.get_wine_path("wine")
@@ -1585,7 +1588,7 @@ class AffinityInstallerGUI(QMainWindow):
                 ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", "wand"),
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", "windows"),
                 ("GPU Selection", self.configure_gpu_selection, "Select which GPU to use for dual GPU setups", "display"),
-                ("Switch to DXVK", self.switch_to_dxvk, "Remove vkd3d and switch to DXVK for graphics acceleration", "lightning"),
+                (self.get_switch_backend_button_text(), self.switch_graphics_backend, self.get_switch_backend_tooltip(), "lightning"),
                 ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", "loop"),
                 ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", "chrome"),
                 ("Fix Settings (v3)", self.fix_affinity_settings, "Patch Affinity v3 DLL to enable settings saving", "cog"),
@@ -1663,6 +1666,10 @@ class AffinityInstallerGUI(QMainWindow):
             # Store button reference if requested
             if button_refs is not None and button_keys is not None and idx < len(button_keys):
                 button_refs[button_keys[idx]] = btn
+            
+            # Store switch backend button reference
+            if text.startswith("Switch to"):
+                self.switch_backend_button = btn
         
         return group
     
@@ -3699,6 +3706,32 @@ class AffinityInstallerGUI(QMainWindow):
             return " ".join(env_vars) + " "
         return ""
     
+    def get_current_backend(self):
+        """Detect which graphics backend is currently being used (dxvk or vkd3d)"""
+        # Check if AMD GPU (always uses DXVK)
+        if self.has_amd_gpu():
+            return "dxvk"
+        
+        # Check NVIDIA preference
+        if self.has_nvidia_gpu():
+            preference = self.get_dxvk_vkd3d_preference()
+            if preference == "dxvk":
+                return "dxvk"
+            elif preference == "vkd3d":
+                return "vkd3d"
+            # If no preference set, check if vkd3d DLLs exist (default to vkd3d if found)
+            wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+            if wine_lib_dir.exists() and (wine_lib_dir / "d3d12.dll").exists():
+                return "vkd3d"
+            return "dxvk"  # Default to DXVK if no preference and no vkd3d found
+        
+        # For other GPUs, check if vkd3d exists
+        wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+        if wine_lib_dir.exists() and (wine_lib_dir / "d3d12.dll").exists():
+            return "vkd3d"
+        
+        return "dxvk"  # Default to DXVK
+    
     def get_dxvk_env_vars(self):
         """Get DXVK environment variables for AMD GPU or NVIDIA GPU with DXVK preference"""
         if self.has_amd_gpu():
@@ -3803,6 +3836,202 @@ class AffinityInstallerGUI(QMainWindow):
                 except Exception as e:
                     self.log(f"Failed to save GPU selection: {e}", "error")
     
+    def get_switch_backend_button_text(self):
+        """Get the text for the switch backend button based on current backend"""
+        current = self.get_current_backend()
+        if current == "dxvk":
+            return "Switch to VKD3D"
+        else:
+            return "Switch to DXVK"
+    
+    def get_switch_backend_tooltip(self):
+        """Get the tooltip for the switch backend button based on current backend"""
+        current = self.get_current_backend()
+        if current == "dxvk":
+            return "Switch from DXVK to VKD3D (includes OpenCL support)"
+        else:
+            return "Switch from VKD3D to DXVK for graphics acceleration"
+    
+    def update_switch_backend_button(self):
+        """Update the switch backend button text and tooltip"""
+        if self.switch_backend_button:
+            self.switch_backend_button.setText(self.get_switch_backend_button_text())
+            self.switch_backend_button.setToolTip(self.get_switch_backend_tooltip())
+    
+    def switch_graphics_backend(self):
+        """Switch between DXVK and VKD3D based on current backend"""
+        current = self.get_current_backend()
+        if current == "dxvk":
+            self.switch_to_vkd3d()
+        else:
+            self.switch_to_dxvk()
+    
+    def switch_to_vkd3d(self):
+        """Switch from DXVK to VKD3D, installing vkd3d-proton"""
+        # Confirm with user
+        reply = QMessageBox.question(
+            self,
+            "Switch to VKD3D",
+            "This will:\n\n"
+            "• Install vkd3d-proton for OpenCL support\n"
+            "• Install d3d12.dll and d3d12core.dll\n"
+            "• Set preference to use VKD3D\n"
+            "• Update all desktop entries to remove DXVK environment variables\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Switching to VKD3D", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        try:
+            # 1. Install vkd3d-proton (full setup)
+            self.log("Installing vkd3d-proton...", "info")
+            self.setup_vkd3d()
+            
+            # 2. Set preference to VKD3D
+            self.set_dxvk_vkd3d_preference("vkd3d")
+            self.log("Set preference to VKD3D", "success")
+            
+            # 3. Copy DLLs to application directories
+            self.log("Copying d3d12 DLLs to application directories...", "info")
+            wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+            vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
+            
+            app_dirs = {
+                "Photo": "Photo 2",
+                "Designer": "Designer 2",
+                "Publisher": "Publisher 2",
+                "Add": "Affinity"
+            }
+            
+            for app_name, app_dir_name in app_dirs.items():
+                app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / app_dir_name
+                if app_dir.exists():
+                    for dll in ["d3d12.dll", "d3d12core.dll"]:
+                        for source in [wine_lib_dir / dll, vkd3d_temp / dll]:
+                            if source.exists():
+                                shutil.copy2(source, app_dir / dll)
+                                self.log(f"Copied {dll} to {app_dir_name}", "success")
+                                break
+            
+            # 4. Update all desktop entries (remove DXVK env vars)
+            self.log("Updating desktop entries (removing DXVK environment variables)...", "info")
+            desktop_dir = Path.home() / ".local" / "share" / "applications"
+            if not desktop_dir.exists():
+                self.log("Desktop directory not found", "warning")
+            else:
+                affinity_desktop_files = [
+                    desktop_dir / "AffinityPhoto.desktop",
+                    desktop_dir / "AffinityDesigner.desktop",
+                    desktop_dir / "AffinityPublisher.desktop",
+                    desktop_dir / "Affinity.desktop"
+                ]
+                
+                updated_count = 0
+                for desktop_file in affinity_desktop_files:
+                    if not desktop_file.exists():
+                        continue
+                    
+                    try:
+                        # Read the desktop file
+                        with open(desktop_file, 'r') as f:
+                            lines = f.readlines()
+                        
+                        # Find and update the Exec line
+                        new_lines = []
+                        exec_updated = False
+                        
+                        for line in lines:
+                            if line.startswith("Exec="):
+                                # Parse the existing Exec line
+                                exec_content = line[5:].strip()
+                                
+                                # Extract app path
+                                quoted_path_match = re.search(r'wine\s+"([^"]+)"', exec_content)
+                                if quoted_path_match:
+                                    app_path = quoted_path_match.group(1)
+                                else:
+                                    exe_match = re.search(r'wine\s+([^\s]+\.exe[^\s]*)', exec_content)
+                                    if exe_match:
+                                        app_path = exe_match.group(1)
+                                    else:
+                                        exe_match = re.search(r'([^\s]+\.exe[^\s]*)', exec_content)
+                                        if exe_match:
+                                            app_path = exe_match.group(1).strip('"')
+                                        else:
+                                            parts = exec_content.split()
+                                            for part in reversed(parts):
+                                                if ".exe" in part or "drive_c" in part:
+                                                    app_path = part.strip('"')
+                                                    break
+                                            else:
+                                                app_path = None
+                                
+                                # Get wine path
+                                wine = self.get_wine_path("wine")
+                                wine_path = str(wine)
+                                
+                                # Get GPU environment variables (but NOT DXVK)
+                                gpu_env = self.get_gpu_env_vars()
+                                directory_str = str(self.directory).rstrip("/")
+                                
+                                # Rebuild Exec line WITHOUT DXVK env vars
+                                exec_line = f'Exec=env WINEPREFIX={directory_str}'
+                                if gpu_env:
+                                    exec_line += f' {gpu_env}'
+                                exec_line += f' {wine_path}'
+                                if app_path:
+                                    if ' ' in app_path or not app_path.startswith('/'):
+                                        exec_line += f' "{app_path}"'
+                                    else:
+                                        exec_line += f' {app_path}'
+                                
+                                new_lines.append(exec_line + "\n")
+                                exec_updated = True
+                            else:
+                                new_lines.append(line)
+                        
+                        # Write back if Exec line was updated
+                        if exec_updated:
+                            with open(desktop_file, 'w') as f:
+                                f.writelines(new_lines)
+                            updated_count += 1
+                            self.log(f"Updated desktop entry: {desktop_file.name}", "success")
+                    
+                    except Exception as e:
+                        self.log(f"Failed to update {desktop_file.name}: {e}", "warning")
+                
+                if updated_count > 0:
+                    self.log(f"Updated {updated_count} desktop entry/entries", "success")
+            
+            # Update button text
+            self.update_switch_backend_button()
+            
+            self.show_message(
+                "Switch to VKD3D Complete",
+                f"Successfully switched to VKD3D!\n\n"
+                f"• Installed vkd3d-proton with OpenCL support\n"
+                f"• Installed d3d12.dll and d3d12core.dll\n"
+                f"• Set up DLL overrides in Wine registry\n"
+                f"• Updated {updated_count} desktop entry/entries\n"
+                f"• All Affinity applications will now use VKD3D with OpenCL support",
+                "info"
+            )
+            
+        except Exception as e:
+            self.log(f"Error switching to VKD3D: {e}", "error")
+            self.show_message(
+                "Error",
+                f"An error occurred while switching to VKD3D:\n\n{e}",
+                "error"
+            )
+    
     def switch_to_dxvk(self):
         """Remove vkd3d and switch to DXVK, updating all desktop entries"""
         # Confirm with user
@@ -3811,6 +4040,7 @@ class AffinityInstallerGUI(QMainWindow):
             "Switch to DXVK",
             "This will:\n\n"
             "• Remove vkd3d-proton DLLs from Wine and application directories\n"
+            "• Reinstall d3d12.dll and d3d12core.dll (required for compatibility)\n"
             "• Set preference to use DXVK instead\n"
             "• Update all desktop entries to use DXVK environment variables\n\n"
             "Continue?",
@@ -3873,25 +4103,31 @@ class AffinityInstallerGUI(QMainWindow):
                             dll_path.unlink()
                             self.log(f"Removed {dll} from {app_dir_name}", "success")
             
-            # 4. Remove DLL overrides from registry
-            self.log("Removing vkd3d DLL overrides from Wine registry...", "info")
-            wine = self.get_wine_path("wine")
-            reg_env = os.environ.copy()
-            reg_env["WINEPREFIX"] = str(self.directory)
-            
-            try:
-                # Remove d3d12 and d3d12core DLL overrides
-                self.run_command([str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", "d3d12", "/f"], check=False, env=reg_env, capture=True)
-                self.run_command([str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", "d3d12core", "/f"], check=False, env=reg_env, capture=True)
-                self.log("Removed vkd3d DLL overrides from registry", "success")
-            except Exception as e:
-                self.log(f"Warning: Could not remove DLL overrides from registry: {e}", "warning")
-            
-            # 5. Set preference to DXVK
+            # 4. Set preference to DXVK
             self.set_dxvk_vkd3d_preference("dxvk")
             self.log("Set preference to DXVK", "success")
             
-            # 6. Update all desktop entries
+            # 5. Reinstall d3d12 DLLs and overrides (needed even with DXVK)
+            self.log("Reinstalling d3d12 DLLs and setting up DLL overrides...", "info")
+            self.install_d3d12_dlls()
+            
+            # 6. Copy DLLs back to application directories
+            self.log("Copying d3d12 DLLs to application directories...", "info")
+            wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+            vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
+            
+            for app_name, app_dir_name in app_dirs.items():
+                app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / app_dir_name
+                if app_dir.exists():
+                    for dll in ["d3d12.dll", "d3d12core.dll"]:
+                        # Try wine library first, then temp directory
+                        for source in [wine_lib_dir / dll, vkd3d_temp / dll]:
+                            if source.exists():
+                                shutil.copy2(source, app_dir / dll)
+                                self.log(f"Copied {dll} to {app_dir_name}", "success")
+                                break
+            
+            # 7. Update all desktop entries
             self.log("Updating desktop entries with DXVK environment variables...", "info")
             desktop_dir = Path.home() / ".local" / "share" / "applications"
             if not desktop_dir.exists():
@@ -3984,10 +4220,15 @@ class AffinityInstallerGUI(QMainWindow):
                 if updated_count > 0:
                     self.log(f"Updated {updated_count} desktop entry/entries with DXVK configuration", "success")
             
+            # Update button text
+            self.update_switch_backend_button()
+            
             self.show_message(
                 "Switch to DXVK Complete",
                 f"Successfully switched to DXVK!\n\n"
                 f"• Removed vkd3d-proton DLLs\n"
+                f"• Reinstalled d3d12.dll and d3d12core.dll (required for compatibility)\n"
+                f"• Set up DLL overrides in Wine registry\n"
                 f"• Updated {updated_count} desktop entry/entries\n"
                 f"• All Affinity applications will now use DXVK for graphics acceleration",
                 "info"
@@ -5278,16 +5519,18 @@ class AffinityInstallerGUI(QMainWindow):
             # Setup vkd3d-proton (only if OpenCL is enabled and not AMD GPU)
             if self.is_opencl_enabled():
                 if self.has_amd_gpu():
-                    self.update_progress_text("AMD GPU detected - skipping vkd3d-proton, using DXVK instead...")
+                    self.update_progress_text("AMD GPU detected - installing d3d12 DLLs for DXVK...")
                     self.update_progress(0.80)
-                    self.log("AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead", "info")
+                    self.log("AMD GPU detected - installing d3d12 DLLs and setting up DLL overrides", "info")
+                    self.install_d3d12_dlls()
                 elif self.has_nvidia_gpu():
                     # Ask NVIDIA users to choose between DXVK and vkd3d
                     preference = self.ask_nvidia_dxvk_vkd3d_choice()
                     if preference == "dxvk":
-                        self.update_progress_text("NVIDIA GPU with DXVK preference - skipping vkd3d-proton...")
+                        self.update_progress_text("NVIDIA GPU with DXVK preference - installing d3d12 DLLs...")
                         self.update_progress(0.80)
-                        self.log("NVIDIA GPU with DXVK preference - skipping vkd3d-proton installation", "info")
+                        self.log("NVIDIA GPU with DXVK preference - installing d3d12 DLLs and setting up DLL overrides", "info")
+                        self.install_d3d12_dlls()
                     else:
                         self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
                         self.update_progress(0.80)
@@ -5297,9 +5540,10 @@ class AffinityInstallerGUI(QMainWindow):
                     self.update_progress(0.80)
                     self.setup_vkd3d()
             else:
-                self.update_progress_text("Skipping OpenCL setup...")
+                self.update_progress_text("Installing d3d12 DLLs...")
                 self.update_progress(0.80)
-                self.log("OpenCL support is disabled, skipping vkd3d-proton setup", "info")
+                self.log("OpenCL support is disabled, but installing d3d12 DLLs for compatibility", "info")
+                self.install_d3d12_dlls()
             
             if self.check_cancelled():
                 return False
@@ -5438,11 +5682,90 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("\n✓ WinMetadata reinstallation completed!", "success")
     
+    def install_d3d12_dlls(self):
+        """Install d3d12.dll and d3d12core.dll from vkd3d-proton and set up DLL overrides"""
+        self.log("Installing d3d12.dll and d3d12core.dll...", "info")
+        
+        vkd3d_url = "https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
+        vkd3d_file = Path(self.directory) / "vkd3d-proton-2.14.1.tar.zst"
+        vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
+        vkd3d_temp.mkdir(exist_ok=True)
+        
+        # Check if DLLs already exist
+        wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+        if wine_lib_dir.exists() and (wine_lib_dir / "d3d12.dll").exists() and (wine_lib_dir / "d3d12core.dll").exists():
+            self.log("d3d12 DLLs already installed", "info")
+            self.setup_d3d12_overrides()
+            return
+        
+        self.log("Downloading vkd3d-proton for d3d12 DLLs...", "info")
+        if not self.download_file(vkd3d_url, str(vkd3d_file), "vkd3d-proton"):
+            self.log("Failed to download vkd3d-proton", "error")
+            return
+        
+        # Extract vkd3d-proton
+        self.log("Extracting vkd3d-proton...", "info")
+        if self.check_command("unzstd"):
+            tar_file = Path(self.directory) / "vkd3d-proton.tar"
+            success, _, _ = self.run_command(["unzstd", "-f", str(vkd3d_file), "-o", str(tar_file)])
+            if success:
+                with tarfile.open(tar_file, "r") as tar:
+                    tar.extractall(self.directory, filter='data')
+                tar_file.unlink()
+                self.log("vkd3d-proton extracted", "success")
+        
+        vkd3d_file.unlink()
+        
+        # Copy DLLs
+        vkd3d_dir = next(Path(self.directory).glob("vkd3d-proton-*"), None)
+        if vkd3d_dir:
+            wine_lib_dir.mkdir(parents=True, exist_ok=True)
+            
+            for dll in ["d3d12.dll", "d3d12core.dll"]:
+                for source_dir in [vkd3d_dir / "x64", vkd3d_dir]:
+                    src = source_dir / dll
+                    if src.exists():
+                        shutil.copy2(src, vkd3d_temp / dll)
+                        shutil.copy2(src, wine_lib_dir / dll)
+                        self.log(f"Installed {dll}", "success")
+                        break
+            
+            shutil.rmtree(vkd3d_dir)
+            self.log("d3d12 DLLs installed", "success")
+        
+        # Set up DLL overrides
+        self.setup_d3d12_overrides()
+    
+    def setup_d3d12_overrides(self):
+        """Set up DLL overrides for d3d12.dll and d3d12core.dll"""
+        self.log("Setting up DLL overrides for d3d12...", "info")
+        
+        reg_file = Path(self.directory) / "dll_overrides.reg"
+        with open(reg_file, "w") as f:
+            f.write("REGEDIT4\n")
+            f.write("[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]\n")
+            f.write('"d3d12"="native"\n')
+            f.write('"d3d12core"="native"\n')
+        
+        regedit = self.get_wine_path("regedit")
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        
+        success, _, stderr = self.run_command([str(regedit), str(reg_file)], check=False, env=env, capture=True)
+        reg_file.unlink()
+        
+        if success:
+            self.log("DLL overrides configured for d3d12", "success")
+        else:
+            self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
+    
     def setup_vkd3d(self):
         """Setup vkd3d-proton for OpenCL"""
         # Skip vkd3d installation if AMD GPU is detected (use DXVK instead)
         if self.has_amd_gpu():
             self.log("AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead", "info")
+            # Still install d3d12 DLLs and overrides
+            self.install_d3d12_dlls()
             return
         
         # Check NVIDIA GPU preference
@@ -5450,6 +5773,8 @@ class AffinityInstallerGUI(QMainWindow):
             preference = self.get_dxvk_vkd3d_preference()
             if preference == "dxvk":
                 self.log("NVIDIA GPU with DXVK preference - skipping vkd3d-proton installation", "info")
+                # Still install d3d12 DLLs and overrides
+                self.install_d3d12_dlls()
                 return
         
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -5498,6 +5823,9 @@ class AffinityInstallerGUI(QMainWindow):
             
             shutil.rmtree(vkd3d_dir)
             self.log("vkd3d-proton setup completed", "success")
+        
+        # Set up DLL overrides
+        self.setup_d3d12_overrides()
     
     def configure_wine(self):
         """Configure Wine with winetricks"""
@@ -5688,6 +6016,7 @@ class AffinityInstallerGUI(QMainWindow):
                 ("vcrun2022", "Visual C++ Redistributables 2022"),
                 ("msxml3", "MSXML 3.0"),
                 ("msxml6", "MSXML 6.0"),
+                ("crypt32", "Cryptographic API 32"),
                 ("tahoma", "Tahoma Font"),
                 ("renderer=vulkan", "Vulkan Renderer")
             ]
@@ -6150,6 +6479,15 @@ class AffinityInstallerGUI(QMainWindow):
                 msxml6_path = Path(self.directory) / "drive_c" / "windows" / "system32" / "msxml6.dll"
                 if msxml6_path.exists():
                     return True
+            elif component == "crypt32":
+                # Check for Cryptographic API 32 (crypt32.dll)
+                crypt32_paths = [
+                    Path(self.directory) / "drive_c" / "windows" / "system32" / "crypt32.dll",
+                    Path(self.directory) / "drive_c" / "windows" / "syswow64" / "crypt32.dll",
+                ]
+                for crypt32_path in crypt32_paths:
+                    if crypt32_path.exists():
+                        return True
         except Exception:
             pass
         
@@ -6304,8 +6642,8 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Windows 7 compatibility mode set", "success")
             
             # Step 2: Download Microsoft Edge WebView2 Runtime
-            self.log("Downloading Microsoft Edge WebView2 Runtime (v109.0.1518.78)...", "info")
-            webview2_url = "https://archive.org/download/microsoft-edge-web-view-2-runtime-installer-v109.0.1518.78/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+            self.log("Downloading Microsoft Edge WebView2 Runtime...", "info")
+            webview2_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
             webview2_file = Path(self.directory) / "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
             
             if not self.download_file(webview2_url, str(webview2_file), "WebView2 Runtime"):
@@ -6368,7 +6706,7 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("WebView2 installer file removed", "success")
             
             self.log("\n✓ Microsoft Edge WebView2 Runtime installation completed!", "success")
-            self.log("WebView2 Runtime v109.0.1518.78 has been installed for Affinity v3.", "info")
+            self.log("WebView2 Runtime has been installed for Affinity v3.", "info")
             self.log("Help > View Help should now work in Affinity v3.", "info")
             return True
             
@@ -7099,18 +7437,8 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Installing fresh WinMetadata...", "info")
             self.setup_winmetadata()
             
-            # For Affinity v3 (Unified), check and install WebView2 Runtime if needed, then reinstall settings files
+            # For Affinity v3 (Unified), reinstall settings files
             if display_name and ("Unified" in display_name or display_name == "Affinity (Unified)"):
-                # Check if WebView2 Runtime is installed, install if missing
-                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                self.log("Checking WebView2 Runtime for Affinity v3...", "info")
-                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-                if not self.check_webview2_installed():
-                    self.log("WebView2 Runtime not found. Installing automatically...", "info")
-                    self._install_webview2_runtime_thread()  # Install synchronously in this thread
-                else:
-                    self.log("WebView2 Runtime is already installed.", "success")
-                
                 # Reinstall settings files
                 self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 self.log("Reinstalling Affinity v3 settings files...", "info")
@@ -7225,19 +7553,8 @@ class AffinityInstallerGUI(QMainWindow):
             else:
                 self.log("OpenCL support is disabled, skipping configuration", "info")
             
-            # For Affinity v3 (Unified), check and install WebView2 Runtime if needed
+            # For Affinity v3 (Unified), patch the DLL to fix settings saving
             if app_name == "Add" or app_name == "Affinity (Unified)":
-                self.update_progress_text("Checking WebView2 Runtime...")
-                self.update_progress(0.8)
-                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                self.log("Checking WebView2 Runtime for Affinity v3...", "info")
-                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-                if not self.check_webview2_installed():
-                    self.log("WebView2 Runtime not found. Installing automatically...", "info")
-                    self._install_webview2_runtime_thread()  # Install synchronously in this thread
-                else:
-                    self.log("WebView2 Runtime is already installed.", "success")
-                
                 # Patch the DLL to fix settings saving
                 self.update_progress_text("Patching DLL for settings fix...")
                 self.update_progress(0.85)
@@ -7343,12 +7660,7 @@ class AffinityInstallerGUI(QMainWindow):
             return "vulkan"  # Default to vulkan on error
     
     def configure_opencl(self, app_name):
-        """Configure OpenCL for application"""
-        # Only configure if OpenCL is enabled
-        if not self.is_opencl_enabled():
-            self.log("OpenCL support is disabled, skipping configuration", "info")
-            return
-        
+        """Configure d3d12 DLLs for application (needed even when using DXVK)"""
         app_dirs = {
             "Photo": "Photo 2",
             "Designer": "Designer 2",
@@ -7366,31 +7678,25 @@ class AffinityInstallerGUI(QMainWindow):
         wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
         vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
         
+        # Ensure DLLs are installed in Wine library first
+        if not wine_lib_dir.exists() or not (wine_lib_dir / "d3d12.dll").exists():
+            self.log("d3d12 DLLs not found in Wine library, installing...", "info")
+            self.install_d3d12_dlls()
+        
         dlls_copied = 0
         for dll in ["d3d12.dll", "d3d12core.dll"]:
             for source in [vkd3d_temp / dll, wine_lib_dir / dll]:
                 if source.exists():
                     shutil.copy2(source, app_dir / dll)
-                    self.log(f"Copied {dll}", "success")
+                    self.log(f"Copied {dll} to {app_dir_name}", "success")
                     dlls_copied += 1
                     break
         
-        # Configure DLL overrides
-        reg_file = Path(self.directory) / "dll_overrides.reg"
-        with open(reg_file, "w") as f:
-            f.write("REGEDIT4\n")
-            f.write("[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]\n")
-            f.write('"d3d12"="native"\n')
-            f.write('"d3d12core"="native"\n')
-        
-        regedit = self.get_wine_path("regedit")
-        env = os.environ.copy()
-        env["WINEPREFIX"] = self.directory
-        self.run_command([str(regedit), str(reg_file)], check=False, env=env)
-        reg_file.unlink()
+        # Ensure DLL overrides are set up
+        self.setup_d3d12_overrides()
         
         if dlls_copied > 0:
-            self.log("OpenCL support configured", "success")
+            self.log(f"d3d12 DLLs configured for {app_dir_name}", "success")
     
     def _parse_version(self, version_str):
         """Parse version string and return tuple of (major, minor, patch) for comparison"""
