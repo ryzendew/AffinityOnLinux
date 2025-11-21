@@ -605,6 +605,20 @@ download_helper_files() {
 install_opencl_support() {
     print_header "Installing OpenCL Support (vkd3d-proton)"
     
+    # Check for AMD GPU
+    local has_amd_gpu=false
+    if command -v lspci &> /dev/null; then
+        if lspci | grep -qiE "(amd|radeon|amd/ati).*vga\|3d\|display"; then
+            has_amd_gpu=true
+        fi
+    fi
+    
+    if [ "$has_amd_gpu" = true ]; then
+        print_info "AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead"
+        print_info "DXVK will be configured in desktop shortcuts"
+        return 0
+    fi
+    
     print_info "Installing vkd3d-proton for hardware acceleration and OpenCL support..."
     print_info "This enables GPU acceleration features in Affinity applications"
     

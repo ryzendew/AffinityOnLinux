@@ -539,15 +539,28 @@ setup_wine() {
         print_info "Installation will continue, but some Windows metadata features may not work"
     fi
     
-    # Download and install vkd3d-proton for OpenCL support
+    # Download and install vkd3d-proton for OpenCL support (skip if AMD GPU detected)
     print_header "OpenCL Support Setup"
-    print_info "Installing vkd3d-proton for hardware acceleration and OpenCL support..."
-    print_info "This enables GPU acceleration features in Affinity applications"
     
-    local vkd3d_url="https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
-    local vkd3d_filename="vkd3d-proton-2.14.1.tar.zst"
+    # Check for AMD GPU
+    has_amd_gpu=false
+    if command -v lspci &> /dev/null; then
+        if lspci | grep -qiE "(amd|radeon|amd/ati).*vga\|3d\|display"; then
+            has_amd_gpu=true
+        fi
+    fi
     
-    print_step "Downloading vkd3d-proton v2.14.1 from GitHub..."
+    if [ "$has_amd_gpu" = true ]; then
+        print_info "AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead"
+        print_info "DXVK will be configured in desktop shortcuts"
+    else
+        print_info "Installing vkd3d-proton for hardware acceleration and OpenCL support..."
+        print_info "This enables GPU acceleration features in Affinity applications"
+        
+        local vkd3d_url="https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
+        local vkd3d_filename="vkd3d-proton-2.14.1.tar.zst"
+        
+        print_step "Downloading vkd3d-proton v2.14.1 from GitHub..."
     if download_file "$vkd3d_url" "$directory/$vkd3d_filename" "vkd3d-proton"; then
         print_success "vkd3d-proton downloaded successfully"
     else
@@ -577,6 +590,10 @@ setup_wine() {
         print_error "Cannot extract .tar.zst file. Please install zstd (e.g., sudo pacman -S zstd)"
         print_warning "Skipping vkd3d-proton installation. OpenCL will not work!"
         rm -f "$directory/$vkd3d_filename"
+    elif [ "$has_amd_gpu" = true ]; then
+        # Skip vkd3d installation for AMD GPU, clean up if downloaded
+        rm -f "$directory/$vkd3d_filename"
+        print_info "AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead"
     else
         rm -f "$directory/$vkd3d_filename"
         
@@ -767,12 +784,20 @@ create_desktop_entry() {
         app_path="$directory/drive_c/$app_path"
     fi
     
+    # Check for AMD GPU for DXVK configuration
+    local dxvk_env=""
+    if command -v lspci &> /dev/null; then
+        if lspci | grep -qiE "(amd|radeon|amd/ati).*vga\|3d\|display"; then
+            dxvk_env='DXVK_ASYNC=0 DXVK_CONFIG="d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1" '
+        fi
+    fi
+    
     echo "[Desktop Entry]" > "$desktop_file"
     echo "Name=Affinity $app_name" >> "$desktop_file"
     echo "Comment=A powerful $app_name software." >> "$desktop_file"
     echo "Icon=$icon_path" >> "$desktop_file"
     echo "Path=$directory" >> "$desktop_file"
-    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$app_path\"" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory ${dxvk_env}$directory/ElementalWarriorWine/bin/wine \"$app_path\"" >> "$desktop_file"
     echo "Terminal=false" >> "$desktop_file"
     echo "NoDisplay=false" >> "$desktop_file"
     echo "StartupWMClass=${app_name,,}.exe" >> "$desktop_file"
@@ -789,12 +814,20 @@ create_all_in_one_desktop_entry() {
     # Normalize directory path (remove trailing slash if present)
     directory="${directory%/}"
     
+    # Check for AMD GPU for DXVK configuration
+    local dxvk_env=""
+    if command -v lspci &> /dev/null; then
+        if lspci | grep -qiE "(amd|radeon|amd/ati).*vga\|3d\|display"; then
+            dxvk_env='DXVK_ASYNC=0 DXVK_CONFIG="d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1" '
+        fi
+    fi
+    
     echo "[Desktop Entry]" > "$desktop_file"
     echo "Name=Affinity" >> "$desktop_file"
     echo "Comment=The unified Affinity application for photo editing, design, and publishing" >> "$desktop_file"
     echo "Icon=$icon_path" >> "$desktop_file"
     echo "Path=$directory" >> "$desktop_file"
-    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Affinity/Affinity.exe\"" >> "$desktop_file"
+    echo "Exec=env WINEPREFIX=$directory ${dxvk_env}$directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Affinity/Affinity.exe\"" >> "$desktop_file"
     echo "Terminal=false" >> "$desktop_file"
     echo "NoDisplay=false" >> "$desktop_file"
     echo "Type=Application" >> "$desktop_file"

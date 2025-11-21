@@ -610,13 +610,21 @@ mkdir -p "$HOME/.local/share/applications"
 # Normalize directory path (remove trailing slash if present)
 directory="${directory%/}"
 
+# Check for AMD GPU for DXVK configuration
+dxvk_env=""
+if command -v lspci &> /dev/null; then
+    if lspci | grep -qiE "(amd|radeon|amd/ati).*vga\|3d\|display"; then
+        dxvk_env='DXVK_ASYNC=0 DXVK_CONFIG="d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1" '
+    fi
+fi
+
 {
     echo "[Desktop Entry]"
     echo "Name=Affinity Designer"
     echo "Comment=Affinity Designer is a graphic designing and UX solution that helps businesses create concept art, logos, icons, UI designs, print projects and mock-ups, among other illustrations."
     echo "Icon=/home/$USER/.local/share/icons/AffinityDesigner.svg"
     echo "Path=$directory"
-    echo "Exec=env WINEPREFIX=$directory $directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Designer 2/Designer.exe\""
+    echo "Exec=env WINEPREFIX=$directory ${dxvk_env}$directory/ElementalWarriorWine/bin/wine \"$directory/drive_c/Program Files/Affinity/Designer 2/Designer.exe\""
     echo "Terminal=false"
     echo "NoDisplay=false"
     echo "StartupWMClass=designer.exe"

@@ -3579,6 +3579,12 @@ class AffinityInstallerGUI(QMainWindow):
             return " ".join(env_vars) + " "
         return ""
     
+    def get_dxvk_env_vars(self):
+        """Get DXVK environment variables for AMD GPU"""
+        if self.has_amd_gpu():
+            return "DXVK_ASYNC=0 DXVK_CONFIG=\"d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1\" "
+        return ""
+    
     def configure_gpu_selection(self):
         """Configure GPU selection for dual GPU setups"""
         gpus = self.detect_gpus()
@@ -3681,6 +3687,8 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Get current GPU environment variables
         gpu_env = self.get_gpu_env_vars()
+        # Get DXVK environment variables if AMD GPU is detected
+        dxvk_env = self.get_dxvk_env_vars()
         directory_str = str(self.directory).rstrip("/")
         
         # Find all Affinity desktop entries
@@ -3741,6 +3749,8 @@ class AffinityInstallerGUI(QMainWindow):
                         exec_line = f'Exec=env WINEPREFIX={directory_str}'
                         if gpu_env:
                             exec_line += f' {gpu_env}'
+                        if dxvk_env:
+                            exec_line += f' {dxvk_env}'
                         exec_line += f' {wine_path}'
                         if app_path:
                             # Quote the app path if it contains spaces or special characters
@@ -4943,11 +4953,16 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Setup vkd3d-proton (only if OpenCL is enabled)
+            # Setup vkd3d-proton (only if OpenCL is enabled and not AMD GPU)
             if self.is_opencl_enabled():
-                self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
-                self.update_progress(0.80)
-                self.setup_vkd3d()
+                if self.has_amd_gpu():
+                    self.update_progress_text("AMD GPU detected - skipping vkd3d-proton, using DXVK instead...")
+                    self.update_progress(0.80)
+                    self.log("AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead", "info")
+                else:
+                    self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
+                    self.update_progress(0.80)
+                    self.setup_vkd3d()
             else:
                 self.update_progress_text("Skipping OpenCL setup...")
                 self.update_progress(0.80)
@@ -5092,6 +5107,11 @@ class AffinityInstallerGUI(QMainWindow):
     
     def setup_vkd3d(self):
         """Setup vkd3d-proton for OpenCL"""
+        # Skip vkd3d installation if AMD GPU is detected (use DXVK instead)
+        if self.has_amd_gpu():
+            self.log("AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead", "info")
+            return
+        
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("OpenCL Support Setup", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -6541,6 +6561,8 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Get GPU environment variables if configured
         gpu_env = self.get_gpu_env_vars()
+        # Get DXVK environment variables if AMD GPU is detected
+        dxvk_env = self.get_dxvk_env_vars()
         
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
@@ -6555,6 +6577,8 @@ class AffinityInstallerGUI(QMainWindow):
             exec_line = f'Exec=env WINEPREFIX={directory_str}'
             if gpu_env:
                 exec_line += f' {gpu_env}'
+            if dxvk_env:
+                exec_line += f' {dxvk_env}'
             exec_line += f' {wine_str} "{exe_path_normalized}"'
             f.write(f'{exec_line}\n')
             f.write("Terminal=false\n")
@@ -7428,6 +7452,8 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Get GPU environment variables if configured
         gpu_env = self.get_gpu_env_vars()
+        # Get DXVK environment variables if AMD GPU is detected
+        dxvk_env = self.get_dxvk_env_vars()
         
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
@@ -7440,6 +7466,8 @@ class AffinityInstallerGUI(QMainWindow):
             exec_line = f'Exec=env WINEPREFIX={directory_str}'
             if gpu_env:
                 exec_line += f' {gpu_env}'
+            if dxvk_env:
+                exec_line += f' {dxvk_env}'
             exec_line += f' {wine_str} "{app_path_str}"'
             f.write(f'{exec_line}\n')
             f.write("Terminal=false\n")
