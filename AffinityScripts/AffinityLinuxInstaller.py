@@ -84,7 +84,7 @@ try:
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
         QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-        QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit
+        QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit, QSizePolicy
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
     from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent, QPainter, QPen
@@ -98,7 +98,7 @@ except ImportError:
                 QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                 QPushButton, QLabel, QFileDialog, QMessageBox, QTextEdit, QFrame,
                 QProgressBar, QGroupBox, QScrollArea, QDialog, QDialogButtonBox,
-                QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit
+                QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit, QSizePolicy
             )
             from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
             from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
@@ -310,18 +310,38 @@ class AffinityInstallerGUI(QMainWindow):
         wine = self.get_wine_path("wine")
         wine_exists = wine.exists()
         
+        # Detect Wine version if installed
+        wine_version_display = "Wine"
+        if wine_exists:
+            try:
+                # Try to get Wine version
+                success, stdout, _ = self.run_command([str(wine), "--version"], check=False, capture=True)
+                if success and stdout:
+                    # Extract version number (e.g., "wine-10.4" or "wine-9.14")
+                    version_match = re.search(r'wine-(\d+\.\d+)', stdout)
+                    if version_match:
+                        wine_version_display = f"Wine {version_match.group(1)}"
+                    else:
+                        # Fallback: check if it's the 10.4 archive or legacy
+                        wine_dir = Path(self.directory) / "ElementalWarriorWine"
+                        if (wine_dir / "bin" / "wine").exists():
+                            # Check archive name in directory or use default
+                            wine_version_display = "Wine (patched)"
+            except Exception:
+                wine_version_display = "Wine (patched)"
+        
         # Update system status indicator
         if hasattr(self, 'system_status_label'):
             if wine_exists:
                 self.system_status_label.setStyleSheet("font-size: 14px; color: #4ec9b0; padding: 0 5px;")
-                self.system_status_label.setToolTip("System Status: Ready - Wine 10.4 is installed")
+                self.system_status_label.setToolTip(f"System Status: Ready - {wine_version_display} is installed")
             else:
                 self.system_status_label.setStyleSheet("font-size: 14px; color: #f48771; padding: 0 5px;")
                 self.system_status_label.setToolTip("System Status: Not Ready - Wine needs to be installed")
         
         # Log Wine status
         if wine_exists:
-            self.log("Wine: ✓ Installed (Wine 10.4)", "success")
+            self.log(f"Wine: ✓ Installed ({wine_version_display})", "success")
         else:
             self.log("Wine: ✗ Not installed", "error")
         
@@ -2124,8 +2144,430 @@ class AffinityInstallerGUI(QMainWindow):
         
         return self.interactive_response or "\n"
     
+    def _show_wine_version_dialog_safe(self):
+        """Show professional Wine version selection dialog (called from main thread)"""
+        dialog = QDialog()
+        dialog.setWindowTitle("Choose Wine Version")
+        dialog.setModal(True)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
+        # Responsive sizing - smaller minimums for small displays, but still usable
+        # Get screen size to adjust minimums
+        screen = dialog.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        # Adaptive minimum sizes based on screen size
+        if screen_width < 800 or screen_height < 600:
+            # Small screen - use smaller minimums
+            min_width = min(400, int(screen_width * 0.9))
+            min_height = min(300, int(screen_height * 0.8))
+            default_width = min(500, int(screen_width * 0.85))
+            default_height = min(380, int(screen_height * 0.75))
+        else:
+            # Normal screen
+            min_width = 450
+            min_height = 320
+            default_width = 600
+            default_height = 400
+        
+        dialog.setMinimumWidth(min_width)
+        dialog.setMinimumHeight(min_height)
+        dialog.resize(default_width, default_height)
+        
+        # Make dialog resizable
+        dialog.setSizeGripEnabled(True)
+        
+        # Apply theme stylesheet
+        if self.dark_mode:
+            dialog_style = """
+                QDialog {
+                    background-color: #252526;
+                    color: #dcdcdc;
+                }
+                QLabel {
+                    color: #dcdcdc;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4ec9b0;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #cccccc;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
+                }
+                QLabel#versionTitle {
+                    font-size: 15px;
+                    font-weight: bold;
+                    color: #dcdcdc;
+                    padding: 8px 0px 4px 0px;
+                }
+                QLabel#versionDescription {
+                    font-size: 12px;
+                    color: #b0b0b0;
+                    padding: 0px 0px 12px 20px;
+                    line-height: 1.5;
+                }
+                QLabel#recommendedBadge {
+                    background-color: #4ec9b0;
+                    color: #1e1e1e;
+                    font-size: 10px;
+                    font-weight: bold;
+                    padding: 2px 6px;
+                    border-radius: 8px;
+                    margin-left: 6px;
+                    max-width: 120px;
+                }
+                QLabel#legacyBadge {
+                    background-color: #f48771;
+                    color: #1e1e1e;
+                    font-size: 10px;
+                    font-weight: bold;
+                    padding: 2px 6px;
+                    border-radius: 8px;
+                    margin-left: 6px;
+                    max-width: 80px;
+                }
+                QRadioButton {
+                    font-size: 14px;
+                    color: #dcdcdc;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #555555;
+                    background-color: #3c3c3c;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #6a6a6a;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4ec9b0;
+                    border-color: #4ec9b0;
+                }
+                QRadioButton::indicator:checked::after {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background-color: #252526;
+                    margin: 3px;
+                }
+                QPushButton {
+                    background-color: #3c3c3c;
+                    color: #f0f0f0;
+                    border: 1px solid #555555;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border-color: #6a6a6a;
+                }
+                QPushButton:pressed {
+                    background-color: #2d2d2d;
+                }
+                QPushButton#installButton {
+                    background-color: #4ec9b0;
+                    color: #1e1e1e;
+                    border: 1px solid #4ec9b0;
+                    font-weight: bold;
+                }
+                QPushButton#installButton:hover {
+                    background-color: #5dd9c0;
+                    border-color: #5dd9c0;
+                }
+                QPushButton#installButton:pressed {
+                    background-color: #3db9a0;
+                }
+            """
+        else:
+            dialog_style = """
+                QDialog {
+                    background-color: #ffffff;
+                    color: #2d2d2d;
+                }
+                QLabel {
+                    color: #2d2d2d;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4caf50;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #555555;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
+                }
+                QLabel#versionTitle {
+                    font-size: 15px;
+                    font-weight: bold;
+                    color: #2d2d2d;
+                    padding: 8px 0px 4px 0px;
+                }
+                QLabel#versionDescription {
+                    font-size: 12px;
+                    color: #666666;
+                    padding: 0px 0px 12px 20px;
+                    line-height: 1.5;
+                }
+                QLabel#recommendedBadge {
+                    background-color: #4caf50;
+                    color: #ffffff;
+                    font-size: 10px;
+                    font-weight: bold;
+                    padding: 2px 6px;
+                    border-radius: 8px;
+                    margin-left: 6px;
+                    max-width: 120px;
+                }
+                QLabel#legacyBadge {
+                    background-color: #ff9800;
+                    color: #ffffff;
+                    font-size: 10px;
+                    font-weight: bold;
+                    padding: 2px 6px;
+                    border-radius: 8px;
+                    margin-left: 6px;
+                    max-width: 80px;
+                }
+                QRadioButton {
+                    font-size: 14px;
+                    color: #2d2d2d;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #c0c0c0;
+                    background-color: #ffffff;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #a0a0a0;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4caf50;
+                    border-color: #4caf50;
+                }
+                QRadioButton::indicator:checked::after {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background-color: #ffffff;
+                    margin: 3px;
+                }
+                QPushButton {
+                    background-color: #e0e0e0;
+                    color: #2d2d2d;
+                    border: 1px solid #c0c0c0;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #d0d0d0;
+                    border-color: #a0a0a0;
+                }
+                QPushButton:pressed {
+                    background-color: #c0c0c0;
+                }
+                QPushButton#installButton {
+                    background-color: #4caf50;
+                    color: #ffffff;
+                    border: 1px solid #4caf50;
+                    font-weight: bold;
+                }
+                QPushButton#installButton:hover {
+                    background-color: #45a049;
+                    border-color: #45a049;
+                }
+                QPushButton#installButton:pressed {
+                    background-color: #3d8b40;
+                }
+            """
+        
+        dialog.setStyleSheet(dialog_style)
+        
+        # Main layout with responsive margins
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+        # Responsive margins - smaller on small screens
+        margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+        main_layout.setContentsMargins(margin, margin, margin, margin)
+        
+        # Title
+        title_label = QLabel("Choose Wine Version")
+        title_label.setObjectName("titleLabel")
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(title_label)
+        
+        # Description
+        desc_label = QLabel(
+            "Select which Wine version you would like to install. "
+            "You can switch versions later by running 'Setup Wine Environment' again."
+        )
+        desc_label.setObjectName("descriptionLabel")
+        desc_label.setWordWrap(True)
+        desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(desc_label)
+        
+        # Scrollable area for options (in case content doesn't fit)
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # Wine version options container
+        options_container = QFrame()
+        options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        options_layout = QVBoxLayout(options_container)
+        options_layout.setSpacing(10)
+        # Responsive margins
+        options_margin = 12 if (screen_width >= 800 and screen_height >= 600) else 8
+        options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        # Wine 10.4 option
+        wine_104_container = QFrame()
+        wine_104_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_104_layout = QVBoxLayout(wine_104_container)
+        wine_104_layout.setContentsMargins(0, 0, 0, 0)
+        wine_104_layout.setSpacing(4)
+        
+        wine_104_header = QHBoxLayout()
+        wine_104_header.setSpacing(8)
+        wine_104_radio = QRadioButton("Wine 10.4")
+        wine_104_radio.setChecked(True)  # Default selection
+        wine_104_radio.setObjectName("wine104Radio")
+        wine_104_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        wine_104_header.addWidget(wine_104_radio)
+        
+        recommended_badge = QLabel("RECOMMENDED")
+        recommended_badge.setObjectName("recommendedBadge")
+        recommended_badge.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        recommended_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        wine_104_header.addWidget(recommended_badge)
+        wine_104_header.addStretch()
+        
+        wine_104_layout.addLayout(wine_104_header)
+        
+        wine_104_desc = QLabel(
+            "Latest version with AMD GPU and OpenCL patches. "
+            "Recommended for most users and provides the best compatibility."
+        )
+        wine_104_desc.setObjectName("versionDescription")
+        wine_104_desc.setWordWrap(True)
+        wine_104_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_104_layout.addWidget(wine_104_desc)
+        
+        options_layout.addWidget(wine_104_container)
+        
+        # Wine 9.14 option
+        wine_914_container = QFrame()
+        wine_914_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_914_layout = QVBoxLayout(wine_914_container)
+        wine_914_layout.setContentsMargins(0, 0, 0, 0)
+        wine_914_layout.setSpacing(4)
+        
+        wine_914_header = QHBoxLayout()
+        wine_914_header.setSpacing(8)
+        wine_914_radio = QRadioButton("Wine 9.14")
+        wine_914_radio.setObjectName("wine914Radio")
+        wine_914_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        wine_914_header.addWidget(wine_914_radio)
+        
+        legacy_badge = QLabel("LEGACY")
+        legacy_badge.setObjectName("legacyBadge")
+        legacy_badge.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        legacy_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        wine_914_header.addWidget(legacy_badge)
+        wine_914_header.addStretch()
+        
+        wine_914_layout.addLayout(wine_914_header)
+        
+        wine_914_desc = QLabel(
+            "Legacy version with AMD GPU and OpenCL patches. "
+            "Use this if you encounter issues with Wine 10.4."
+        )
+        wine_914_desc.setObjectName("versionDescription")
+        wine_914_desc.setWordWrap(True)
+        wine_914_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_914_layout.addWidget(wine_914_desc)
+        
+        options_layout.addWidget(wine_914_container)
+        
+        # Set the scroll area widget
+        scroll_area.setWidget(options_container)
+        main_layout.addWidget(scroll_area, 1)  # Stretch factor 1 to make it expandable
+        
+        # Buttons - fixed at bottom, responsive sizing
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        install_btn = QPushButton("Continue")
+        install_btn.setObjectName("installButton")
+        install_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        install_btn.setDefault(True)
+        install_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(install_btn)
+        
+        main_layout.addLayout(button_layout)
+        
+        # Show dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        
+        # Get result
+        result = dialog.exec()
+        if result == QDialog.DialogCode.Accepted:
+            if wine_104_radio.isChecked():
+                self.question_dialog_response = "Wine 10.4 (Recommended)"
+            else:
+                self.question_dialog_response = "Wine 9.14 (Legacy)"
+        else:
+            # User cancelled - return "Cancel" to match expected format
+            self.question_dialog_response = "Cancel"
+        
+        self.waiting_for_question_response = False
+    
     def _show_question_dialog_safe(self, title, message, buttons):
         """Show question dialog (called from main thread)"""
+        # Check if this is a Wine version selection dialog
+        is_wine_version_dialog = (
+            "Wine Version" in title or "Wine version" in title or
+            any("Wine 10.4" in btn or "Wine 9.14" in btn for btn in buttons)
+        )
+        if is_wine_version_dialog:
+            self._show_wine_version_dialog_safe()
+            return
+        
         # Convert button list to QMessageBox buttons
         qbuttons = QMessageBox.StandardButton.NoButton
         for btn in buttons:
@@ -3537,7 +3979,25 @@ class AffinityInstallerGUI(QMainWindow):
         if self.check_cancelled():
             return
         
-        self.setup_wine()
+        # Ask user to choose Wine version
+        wine_version = self.show_question_dialog(
+            "Choose Wine Version",
+            "Which Wine version would you like to install?\n\n"
+            "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
+            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
+            "Note: You can switch versions later by running 'Setup Wine Environment' again.",
+            ["Wine 10.4 (Recommended)", "Wine 9.14 (Legacy)"]
+        )
+        
+        if wine_version == "Wine 10.4 (Recommended)":
+            wine_version_choice = "10.4"
+        elif wine_version == "Wine 9.14 (Legacy)":
+            wine_version_choice = "9.14"
+        else:
+            self.log("Wine setup cancelled", "warning")
+            return
+        
+        self.setup_wine(wine_version_choice)
         
         if self.check_cancelled():
             return
@@ -4222,8 +4682,12 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("All dependencies installed for Pop!_OS", "success")
         return True
     
-    def setup_wine(self):
-        """Setup Wine environment - installs Wine 10.4 with AMD GPU and OpenCL patches"""
+    def setup_wine(self, wine_version="10.4"):
+        """Setup Wine environment - installs Wine 10.4 or 9.14 with AMD GPU and OpenCL patches
+        
+        Args:
+            wine_version: "10.4" for Wine 10.4 (recommended) or "9.14" for Wine 9.14 (legacy)
+        """
         self.start_operation("Setting up Wine environment")
         
         try:
@@ -4235,13 +4699,23 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Wine Binary Setup", "info")
             self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
             
-            # Wine 10.4 with AMD GPU and OpenCL patches
-            wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
-            wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
-            wine_dir_name = "ElementalWarriorWine"
-            wine_dir_pattern = "ElementalWarriorWine*"
-            archive_format = "xz"
-            wine_display_name = "Wine 10.4 (with AMD GPU and OpenCL patches)"
+            # Configure Wine version based on choice
+            if wine_version == "9.14":
+                # Wine 9.14 (Legacy)
+                wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
+                wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarriorWine*"
+                archive_format = "gz"
+                wine_display_name = "Wine 9.14 (Legacy - with AMD GPU and OpenCL patches)"
+            else:
+                # Wine 10.4 with AMD GPU and OpenCL patches (default)
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
+                wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarriorWine*"
+                archive_format = "xz"
+                wine_display_name = "Wine 10.4 (with AMD GPU and OpenCL patches)"
             
             self.log(f"Installing: {wine_display_name}", "info")
         
@@ -4686,7 +5160,26 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Setup Wine Environment", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-        threading.Thread(target=self.setup_wine, daemon=True).start()
+        
+        # Ask user to choose Wine version
+        wine_version = self.show_question_dialog(
+            "Choose Wine Version",
+            "Which Wine version would you like to install?\n\n"
+            "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
+            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
+            "Note: You can switch versions later by running this setup again.",
+            ["Wine 10.4 (Recommended)", "Wine 9.14 (Legacy)"]
+        )
+        
+        if wine_version == "Wine 10.4 (Recommended)":
+            wine_version_choice = "10.4"
+        elif wine_version == "Wine 9.14 (Legacy)":
+            wine_version_choice = "9.14"
+        else:
+            self.log("Wine setup cancelled", "warning")
+            return
+        
+        threading.Thread(target=self.setup_wine, args=(wine_version_choice,), daemon=True).start()
     
     def install_winetricks_deps(self):
         """Install winetricks dependencies - wrapper for button"""
