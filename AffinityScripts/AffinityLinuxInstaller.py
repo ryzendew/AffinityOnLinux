@@ -203,6 +203,7 @@ class AffinityInstallerGUI(QMainWindow):
     sudo_password_dialog_signal = pyqtSignal()  # Signal to request sudo password
     interactive_prompt_signal = pyqtSignal(str, str)  # prompt_text, default_response
     question_dialog_signal = pyqtSignal(str, str, list)  # title, message, buttons
+    nvidia_dxvk_vkd3d_choice_signal = pyqtSignal()  # Signal to show NVIDIA DXVK/vkd3d choice dialog
     prompt_affinity_install_signal = pyqtSignal()  # Signal to prompt for Affinity installation
     install_application_signal = pyqtSignal(str)  # Signal to install an application
     show_spinner_signal = pyqtSignal(object)  # button -> show spinner
@@ -245,6 +246,8 @@ class AffinityInstallerGUI(QMainWindow):
         self.waiting_for_response = False  # Whether we're waiting for user response
         self.question_dialog_response = None  # Response from question dialogs
         self.waiting_for_question_response = False  # Whether waiting for question dialog response
+        self.nvidia_dxvk_vkd3d_choice_response = None  # Response from NVIDIA DXVK/vkd3d choice dialog
+        self.waiting_for_nvidia_choice = False  # Whether waiting for NVIDIA choice dialog response
         self.dark_mode = True  # Track current theme mode
         self.icon_buttons = []  # Store buttons with icons for theme updates
         self.enable_opencl = False  # OpenCL support preference
@@ -271,6 +274,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.sudo_password_dialog_signal.connect(self._request_sudo_password_safe)
         self.interactive_prompt_signal.connect(self._request_interactive_response_safe)
         self.question_dialog_signal.connect(self._show_question_dialog_safe)
+        self.nvidia_dxvk_vkd3d_choice_signal.connect(self._show_nvidia_dxvk_vkd3d_choice_safe)
         self.prompt_affinity_install_signal.connect(self._prompt_affinity_install)
         self.install_application_signal.connect(self.install_application)
         self.show_spinner_signal.connect(self._show_spinner_safe)
@@ -1581,6 +1585,7 @@ class AffinityInstallerGUI(QMainWindow):
                 ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", "wand"),
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", "windows"),
                 ("GPU Selection", self.configure_gpu_selection, "Select which GPU to use for dual GPU setups", "display"),
+                ("Switch to DXVK", self.switch_to_dxvk, "Remove vkd3d and switch to DXVK for graphics acceleration", "lightning"),
                 ("Reinstall WinMetadata", self.reinstall_winmetadata, "Fix corrupted Windows metadata files", "loop"),
                 ("WebView2 Runtime (v3)", self.install_webview2_runtime, "Install WebView2 for Affinity V3 Help system", "chrome"),
                 ("Fix Settings (v3)", self.fix_affinity_settings, "Patch Affinity v3 DLL to enable settings saving", "cog"),
@@ -3539,6 +3544,121 @@ class AffinityInstallerGUI(QMainWindow):
         gpus = self.detect_gpus()
         return any(gpu["type"] == "amd" for gpu in gpus)
     
+    def has_nvidia_gpu(self):
+        """Check if system has an NVIDIA GPU"""
+        gpus = self.detect_gpus()
+        return any(gpu["type"] == "nvidia" for gpu in gpus)
+    
+    def get_dxvk_vkd3d_preference(self):
+        """Get DXVK/vkd3d preference for NVIDIA users"""
+        pref_file = Path(self.directory) / ".dxvk_vkd3d_preference"
+        if pref_file.exists():
+            try:
+                with open(pref_file, 'r') as f:
+                    return f.read().strip()
+            except Exception:
+                return None
+        return None
+    
+    def set_dxvk_vkd3d_preference(self, preference):
+        """Set DXVK/vkd3d preference for NVIDIA users (either 'dxvk' or 'vkd3d')"""
+        pref_file = Path(self.directory) / ".dxvk_vkd3d_preference"
+        try:
+            with open(pref_file, 'w') as f:
+                f.write(preference)
+            return True
+        except Exception as e:
+            self.log(f"Failed to save DXVK/vkd3d preference: {e}", "error")
+            return False
+    
+    def _show_nvidia_dxvk_vkd3d_choice_safe(self):
+        """Show NVIDIA DXVK/vkd3d choice dialog (called from main thread)"""
+        # Check if preference already exists
+        existing_pref = self.get_dxvk_vkd3d_preference()
+        if existing_pref in ["dxvk", "vkd3d"]:
+            self.nvidia_dxvk_vkd3d_choice_response = existing_pref
+            self.waiting_for_nvidia_choice = False
+            return
+        
+        # Create a custom dialog
+        dialog = QDialog()
+        dialog.setWindowTitle("Choose Graphics Backend for NVIDIA GPU")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout()
+        dialog.setLayout(layout)
+        
+        # Title and description
+        title_label = QLabel("NVIDIA GPU Detected")
+        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title_label)
+        
+        desc_label = QLabel(
+            "Please choose your preferred graphics backend:\n\n"
+            "• <b>vkd3d</b> - Includes OpenCL support for hardware acceleration\n"
+            "• <b>DXVK</b> - Hardware accelerated, uses the GPU (no OpenCL)\n\n"
+            "Note: You can change this later if needed."
+        )
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+        
+        # Radio buttons
+        button_group = QButtonGroup()
+        vkd3d_radio = QRadioButton("vkd3d (with OpenCL support)")
+        dxvk_radio = QRadioButton("DXVK (hardware accelerated, no OpenCL)")
+        
+        # Default to vkd3d
+        vkd3d_radio.setChecked(True)
+        
+        button_group.addButton(vkd3d_radio, 0)
+        button_group.addButton(dxvk_radio, 1)
+        
+        layout.addWidget(vkd3d_radio)
+        layout.addWidget(dxvk_radio)
+        
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show dialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if vkd3d_radio.isChecked():
+                preference = "vkd3d"
+            else:
+                preference = "dxvk"
+            
+            self.set_dxvk_vkd3d_preference(preference)
+            self.nvidia_dxvk_vkd3d_choice_response = preference
+        else:
+            # User cancelled - default to vkd3d
+            self.set_dxvk_vkd3d_preference("vkd3d")
+            self.nvidia_dxvk_vkd3d_choice_response = "vkd3d"
+        
+        self.waiting_for_nvidia_choice = False
+    
+    def ask_nvidia_dxvk_vkd3d_choice(self):
+        """Ask NVIDIA users to choose between DXVK and vkd3d (thread-safe)"""
+        # Check if preference already exists
+        existing_pref = self.get_dxvk_vkd3d_preference()
+        if existing_pref in ["dxvk", "vkd3d"]:
+            return existing_pref
+        
+        # Show dialog using signal (thread-safe)
+        self.nvidia_dxvk_vkd3d_choice_response = None
+        self.waiting_for_nvidia_choice = True
+        self.nvidia_dxvk_vkd3d_choice_signal.emit()
+        
+        # Wait for response with timeout
+        max_wait = 300  # 30 seconds
+        waited = 0
+        while self.waiting_for_nvidia_choice and waited < max_wait:
+            time.sleep(0.1)
+            waited += 1
+        
+        return self.nvidia_dxvk_vkd3d_choice_response or "vkd3d"
+    
     def get_gpu_env_vars(self, gpu_id=None):
         """Get environment variables for GPU selection"""
         if gpu_id is None:
@@ -3580,9 +3700,13 @@ class AffinityInstallerGUI(QMainWindow):
         return ""
     
     def get_dxvk_env_vars(self):
-        """Get DXVK environment variables for AMD GPU"""
+        """Get DXVK environment variables for AMD GPU or NVIDIA GPU with DXVK preference"""
         if self.has_amd_gpu():
             return "DXVK_ASYNC=0 DXVK_CONFIG=\"d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1\" "
+        elif self.has_nvidia_gpu():
+            preference = self.get_dxvk_vkd3d_preference()
+            if preference == "dxvk":
+                return "DXVK_ASYNC=0 DXVK_CONFIG=\"d3d9.deferSurfaceCreation = True; d3d9.shaderModel = 1\" "
         return ""
     
     def configure_gpu_selection(self):
@@ -3678,6 +3802,204 @@ class AffinityInstallerGUI(QMainWindow):
                     )
                 except Exception as e:
                     self.log(f"Failed to save GPU selection: {e}", "error")
+    
+    def switch_to_dxvk(self):
+        """Remove vkd3d and switch to DXVK, updating all desktop entries"""
+        # Confirm with user
+        reply = QMessageBox.question(
+            self,
+            "Switch to DXVK",
+            "This will:\n\n"
+            "• Remove vkd3d-proton DLLs from Wine and application directories\n"
+            "• Set preference to use DXVK instead\n"
+            "• Update all desktop entries to use DXVK environment variables\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Switching to DXVK", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        try:
+            # 1. Remove vkd3d DLLs from Wine library directory
+            wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
+            if wine_lib_dir.exists():
+                self.log("Removing vkd3d DLLs from Wine library directory...", "info")
+                for dll in ["d3d12.dll", "d3d12core.dll", "dxgi.dll"]:
+                    dll_path = wine_lib_dir / dll
+                    if dll_path.exists():
+                        dll_path.unlink()
+                        self.log(f"Removed {dll} from Wine library", "success")
+                
+                # Try to remove parent directories if empty
+                try:
+                    if wine_lib_dir.exists() and not any(wine_lib_dir.iterdir()):
+                        wine_lib_dir.rmdir()
+                    parent = wine_lib_dir.parent
+                    if parent.exists() and not any(parent.iterdir()):
+                        parent.rmdir()
+                except Exception:
+                    pass  # Ignore errors removing directories
+            
+            # 2. Remove vkd3d_dlls directory
+            vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
+            if vkd3d_temp.exists():
+                self.log("Removing vkd3d_dlls directory...", "info")
+                try:
+                    shutil.rmtree(vkd3d_temp)
+                    self.log("Removed vkd3d_dlls directory", "success")
+                except Exception as e:
+                    self.log(f"Warning: Could not remove vkd3d_dlls directory: {e}", "warning")
+            
+            # 3. Remove vkd3d DLLs from application directories
+            app_dirs = {
+                "Photo": "Photo 2",
+                "Designer": "Designer 2",
+                "Publisher": "Publisher 2",
+                "Add": "Affinity"
+            }
+            
+            for app_name, app_dir_name in app_dirs.items():
+                app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / app_dir_name
+                if app_dir.exists():
+                    for dll in ["d3d12.dll", "d3d12core.dll"]:
+                        dll_path = app_dir / dll
+                        if dll_path.exists():
+                            dll_path.unlink()
+                            self.log(f"Removed {dll} from {app_dir_name}", "success")
+            
+            # 4. Remove DLL overrides from registry
+            self.log("Removing vkd3d DLL overrides from Wine registry...", "info")
+            wine = self.get_wine_path("wine")
+            reg_env = os.environ.copy()
+            reg_env["WINEPREFIX"] = str(self.directory)
+            
+            try:
+                # Remove d3d12 and d3d12core DLL overrides
+                self.run_command([str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", "d3d12", "/f"], check=False, env=reg_env, capture=True)
+                self.run_command([str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", "d3d12core", "/f"], check=False, env=reg_env, capture=True)
+                self.log("Removed vkd3d DLL overrides from registry", "success")
+            except Exception as e:
+                self.log(f"Warning: Could not remove DLL overrides from registry: {e}", "warning")
+            
+            # 5. Set preference to DXVK
+            self.set_dxvk_vkd3d_preference("dxvk")
+            self.log("Set preference to DXVK", "success")
+            
+            # 6. Update all desktop entries
+            self.log("Updating desktop entries with DXVK environment variables...", "info")
+            desktop_dir = Path.home() / ".local" / "share" / "applications"
+            if not desktop_dir.exists():
+                self.log("Desktop directory not found", "warning")
+            else:
+                affinity_desktop_files = [
+                    desktop_dir / "AffinityPhoto.desktop",
+                    desktop_dir / "AffinityDesigner.desktop",
+                    desktop_dir / "AffinityPublisher.desktop",
+                    desktop_dir / "Affinity.desktop"
+                ]
+                
+                updated_count = 0
+                for desktop_file in affinity_desktop_files:
+                    if not desktop_file.exists():
+                        continue
+                    
+                    try:
+                        # Read the desktop file
+                        with open(desktop_file, 'r') as f:
+                            lines = f.readlines()
+                        
+                        # Find and update the Exec line
+                        new_lines = []
+                        exec_updated = False
+                        
+                        for line in lines:
+                            if line.startswith("Exec="):
+                                # Parse the existing Exec line
+                                exec_content = line[5:].strip()  # Remove "Exec=" prefix
+                                
+                                # Extract app path
+                                quoted_path_match = re.search(r'wine\s+"([^"]+)"', exec_content)
+                                if quoted_path_match:
+                                    app_path = quoted_path_match.group(1)
+                                else:
+                                    exe_match = re.search(r'wine\s+([^\s]+\.exe[^\s]*)', exec_content)
+                                    if exe_match:
+                                        app_path = exe_match.group(1)
+                                    else:
+                                        exe_match = re.search(r'([^\s]+\.exe[^\s]*)', exec_content)
+                                        if exe_match:
+                                            app_path = exe_match.group(1).strip('"')
+                                        else:
+                                            parts = exec_content.split()
+                                            for part in reversed(parts):
+                                                if ".exe" in part or "drive_c" in part:
+                                                    app_path = part.strip('"')
+                                                    break
+                                            else:
+                                                app_path = None
+                                
+                                # Get wine path
+                                wine = self.get_wine_path("wine")
+                                wine_path = str(wine)
+                                
+                                # Get GPU and DXVK environment variables
+                                gpu_env = self.get_gpu_env_vars()
+                                dxvk_env = self.get_dxvk_env_vars()
+                                directory_str = str(self.directory).rstrip("/")
+                                
+                                # Rebuild Exec line with DXVK env vars
+                                exec_line = f'Exec=env WINEPREFIX={directory_str}'
+                                if gpu_env:
+                                    exec_line += f' {gpu_env}'
+                                if dxvk_env:
+                                    exec_line += f' {dxvk_env}'
+                                exec_line += f' {wine_path}'
+                                if app_path:
+                                    if ' ' in app_path or not app_path.startswith('/'):
+                                        exec_line += f' "{app_path}"'
+                                    else:
+                                        exec_line += f' {app_path}'
+                                
+                                new_lines.append(exec_line + "\n")
+                                exec_updated = True
+                            else:
+                                new_lines.append(line)
+                        
+                        # Write back if Exec line was updated
+                        if exec_updated:
+                            with open(desktop_file, 'w') as f:
+                                f.writelines(new_lines)
+                            updated_count += 1
+                            self.log(f"Updated desktop entry: {desktop_file.name}", "success")
+                    
+                    except Exception as e:
+                        self.log(f"Failed to update {desktop_file.name}: {e}", "warning")
+                
+                if updated_count > 0:
+                    self.log(f"Updated {updated_count} desktop entry/entries with DXVK configuration", "success")
+            
+            self.show_message(
+                "Switch to DXVK Complete",
+                f"Successfully switched to DXVK!\n\n"
+                f"• Removed vkd3d-proton DLLs\n"
+                f"• Updated {updated_count} desktop entry/entries\n"
+                f"• All Affinity applications will now use DXVK for graphics acceleration",
+                "info"
+            )
+            
+        except Exception as e:
+            self.log(f"Error switching to DXVK: {e}", "error")
+            self.show_message(
+                "Error",
+                f"An error occurred while switching to DXVK:\n\n{e}",
+                "error"
+            )
     
     def update_existing_desktop_entries(self):
         """Update existing desktop entries with current GPU configuration"""
@@ -4959,6 +5281,17 @@ class AffinityInstallerGUI(QMainWindow):
                     self.update_progress_text("AMD GPU detected - skipping vkd3d-proton, using DXVK instead...")
                     self.update_progress(0.80)
                     self.log("AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead", "info")
+                elif self.has_nvidia_gpu():
+                    # Ask NVIDIA users to choose between DXVK and vkd3d
+                    preference = self.ask_nvidia_dxvk_vkd3d_choice()
+                    if preference == "dxvk":
+                        self.update_progress_text("NVIDIA GPU with DXVK preference - skipping vkd3d-proton...")
+                        self.update_progress(0.80)
+                        self.log("NVIDIA GPU with DXVK preference - skipping vkd3d-proton installation", "info")
+                    else:
+                        self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
+                        self.update_progress(0.80)
+                        self.setup_vkd3d()
                 else:
                     self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
                     self.update_progress(0.80)
@@ -5111,6 +5444,13 @@ class AffinityInstallerGUI(QMainWindow):
         if self.has_amd_gpu():
             self.log("AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead", "info")
             return
+        
+        # Check NVIDIA GPU preference
+        if self.has_nvidia_gpu():
+            preference = self.get_dxvk_vkd3d_preference()
+            if preference == "dxvk":
+                self.log("NVIDIA GPU with DXVK preference - skipping vkd3d-proton installation", "info")
+                return
         
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("OpenCL Support Setup", "info")

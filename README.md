@@ -17,6 +17,67 @@ it has major bugs and issues it's why we don't use it.
 - **Desktop Integration** - Automatic desktop entry and shortcut creation
 - **Wine Configuration** - Pre-configured Wine environment optimized for Affinity applications
 - **Settings Save now** - Affinity v3 Settings will save.
+- **AppImage Release** - Portable standalone AppImage available for easy distribution and use
+
+## AppImage Release
+
+A portable **AppImage** version of the Affinity Linux Installer is now available! The AppImage is a self-contained application that includes everything needed to run the installer without requiring system-wide dependencies.
+
+### What is an AppImage?
+
+An AppImage is a portable application format for Linux that:
+- **No Installation Required** - Just download, make executable, and run
+- **Self-Contained** - Includes all dependencies bundled within the file
+- **Portable** - Can be run from any location (USB drive, Downloads folder, etc.)
+- **Distribution Independent** - Works on most modern Linux distributions without modification
+- **No Root Access Needed** - Runs without administrator privileges
+
+### Download and Usage
+
+The AppImage is available from the [GitHub Releases page](https://github.com/ryzendew/AffinityOnLinux/releases/tag/10.4-Wine-Affinity).
+
+**Quick Start:**
+
+1. Download the AppImage file from the releases page
+2. Make it executable:
+   ```bash
+   chmod +x AffinityLinuxInstaller-*.AppImage
+   ```
+3. Run it:
+   ```bash
+   ./AffinityLinuxInstaller-*.AppImage
+   ```
+
+### AppImage Features
+
+The AppImage includes:
+- ✅ Full GUI installer functionality
+- ✅ Wine 10.4 with patches for AMD GPU fixes
+- ✅ DXVK support for better graphics performance (NVIDIA and AMD GPUs)
+- ✅ Automated dependency management
+- ✅ All installer features (One-Click Setup, Wine Configuration, etc.)
+
+### Important Notes
+
+- **OpenCL/vkd3d**: The AppImage does **not** include OpenCL/vkd3d support. For full OpenCL hardware acceleration, use the Python GUI installer or shell scripts which will download and configure vkd3d-proton separately.
+- **Graphics Backend**: The AppImage uses DXVK by default for both NVIDIA and AMD GPUs, providing excellent hardware acceleration without requiring OpenCL.
+- **Performance**: DXVK offers excellent performance for most use cases. If you specifically need OpenCL features, use the standard installer methods.
+
+### When to Use AppImage vs. Standard Installer
+
+**Use the AppImage if:**
+- You want a portable, self-contained installer
+- You prefer not to install Python/PyQt6 system-wide
+- You're testing or trying the installer on a new system
+- You need a quick, no-setup solution
+
+**Use the Python GUI Installer if:**
+- You need full OpenCL/vkd3d support
+- You want the latest features and updates
+- You prefer running from source
+- You're doing a permanent installation
+
+For more information, see the [release notes](https://github.com/ryzendew/AffinityOnLinux/releases/tag/10.4-Wine-Affinity).
 
 ## Wine Version
 
@@ -86,6 +147,10 @@ sudo apt install python3-pyqt6.qtsvg
 **Recommended - Modern graphical interface with one-click setup**
 
 A modern PyQt6-based graphical user interface for the Affinity Linux Installer, providing a clean and professional installation experience with a VS Code-inspired dark theme.
+
+**Alternative: AppImage Version**
+
+A portable AppImage version is also available - see the [AppImage Release](#appimage-release) section below for details. The AppImage is self-contained and doesn't require Python/PyQt6 to be installed system-wide.
 
 **Features:**
 - **One-Click Full Setup** - Automatically detects your distribution, installs dependencies, sets up Wine 10.4 (patched for OpenCL and AMD GPU fixes), and configures everything
