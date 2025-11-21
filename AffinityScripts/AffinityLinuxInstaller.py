@@ -209,12 +209,24 @@ class AffinityInstallerGUI(QMainWindow):
     hide_spinner_signal = pyqtSignal(object)  # button -> hide spinner
     
     def __init__(self):
+        import time as time_module
+        startup_start = time_module.time()
+        timing_log = []
+        
+        def log_timing(step_name, start_time):
+            elapsed = time_module.time() - start_time
+            timing_log.append((step_name, elapsed))
+            return time_module.time()
+        
+        step_start = time_module.time()
         super().__init__()
+        step_start = log_timing("QMainWindow.__init__", step_start)
         
         self.setWindowTitle("Affinity Linux Installer")
         # Use a more reasonable initial size that fits smaller screens
         self.setMinimumSize(800, 600)
         self.resize(1000, 700)
+        step_start = log_timing("Window setup", step_start)
         
         # Variables
         self.distro = None
@@ -249,6 +261,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.log_file_path = Path.home() / "AffinitySetup.log"
         self.log_file = None
         self._init_log_file()
+        step_start = log_timing("Log file init", step_start)
         
         # Connect signals
         self.log_signal.connect(self._log_safe)
@@ -262,47 +275,91 @@ class AffinityInstallerGUI(QMainWindow):
         self.install_application_signal.connect(self.install_application)
         self.show_spinner_signal.connect(self._show_spinner_safe)
         self.hide_spinner_signal.connect(self._hide_spinner_safe)
+        step_start = log_timing("Signal connections", step_start)
         
         # Load Affinity icon
         self.load_affinity_icon()
+        step_start = log_timing("Load icon", step_start)
         
         # Setup UI
         self.create_ui()
+        step_start = log_timing("Create UI", step_start)
         
         # Ensure icons directory exists (download from GitHub if needed)
         # Do this after UI is created so we can log messages
         self._ensure_icons_directory()
+        step_start = log_timing("Ensure icons directory", step_start)
         
         # Apply dark theme (default)
         self.apply_theme()
+        step_start = log_timing("Apply theme", step_start)
         
         # Setup zoom functionality
         self.setup_zoom()
+        step_start = log_timing("Setup zoom", step_start)
         
         # Center window
         self.center_window()
+        step_start = log_timing("Center window", step_start)
         
         # Don't auto-start initialization - user will click button
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Affinity Linux Installer - Ready", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        # Ensure patcher files are available (silently)
-        self.ensure_patcher_files(silent=True)
+        # Defer slow operations to background threads after window is shown
+        # This allows the window to appear immediately
+        step_start = log_timing("Defer slow operations", step_start)
         
-        self.log("System Detection:", "info")
+        # Log startup timing
+        total_time = time_module.time() - startup_start
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
+        self.log("Startup Performance:", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
+        for step_name, elapsed in timing_log:
+            percentage = (elapsed / total_time * 100) if total_time > 0 else 0
+            self.log(f"  {step_name:.<30} {elapsed:>6.3f}s ({percentage:>5.1f}%)", "info")
+        self.log(f"  {'TOTAL STARTUP TIME':.<30} {total_time:>6.3f}s", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
         
-        # Check installation status and update button states
-        self.check_installation_status()
-        
-        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
         self.log("Welcome! Please use the buttons on the right to get started.", "info")
-        wine_path = self.get_wine_path("wine")
-        if not wine_path.exists():
-            self.log("Click 'Setup Wine Environment' or 'One-Click Full Setup' to begin.", "info")
-        else:
-            self.log("Wine is set up. Use 'Update Affinity Applications' to install or update apps.", "info")
+        
+        # Start background tasks after window is shown
+        # Use QTimer to defer these operations until after the window is displayed
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._deferred_startup_tasks)
+    
+    def _deferred_startup_tasks(self):
+        """Run slow startup tasks in background after window is shown"""
+        def run_background_tasks():
+            import time as time_module
+            bg_start = time_module.time()
+            
+            # Ensure patcher files are available (silently) - might download from network
+            patcher_start = time_module.time()
+            self.ensure_patcher_files(silent=True)
+            patcher_time = time_module.time() - patcher_start
+            
+            # Check installation status and update button states - might run commands
+            status_start = time_module.time()
+            self.check_installation_status()
+            status_time = time_module.time() - status_start
+            
+            total_bg_time = time_module.time() - bg_start
+            
+            # Log timing in GUI (thread-safe via signal)
+            if patcher_time > 0.1 or status_time > 0.1:
+                self.log(f"Background tasks completed: patcher={patcher_time:.3f}s, status={status_time:.3f}s, total={total_bg_time:.3f}s", "info")
+            
+            # Update welcome message based on Wine status
+            wine_path = self.get_wine_path("wine")
+            if not wine_path.exists():
+                self.log("Click 'Setup Wine Environment' or 'One-Click Full Setup' to begin.", "info")
+            else:
+                self.log("Wine is set up. Use 'Update Affinity Applications' to install or update apps.", "info")
+        
+        # Run in background thread to avoid blocking UI
+        threading.Thread(target=run_background_tasks, daemon=True).start()
     
     def check_installation_status(self):
         """Check if Wine and Affinity applications are installed, and update button states"""
@@ -8220,6 +8277,9 @@ class AffinityInstallerGUI(QMainWindow):
 
 def main():
     """Main entry point"""
+    import time as time_module
+    total_start_time = time_module.time()
+    
     if platform.system() != "Linux":
         app = QApplication(sys.argv)
         QMessageBox.critical(
@@ -8229,9 +8289,26 @@ def main():
         )
         return
     
+    app_init_start = time_module.time()
     app = QApplication(sys.argv)
+    app_init_time = time_module.time() - app_init_start
+    
+    window_init_start = time_module.time()
     window = AffinityInstallerGUI()
+    window_init_time = time_module.time() - window_init_start
+    
+    # Show window immediately - slow operations will run in background
     window.show()
+    
+    # Process events to ensure window is displayed before background tasks start
+    app.processEvents()
+    
+    total_init_time = time_module.time() - total_start_time
+    print(f"\n[Startup Timing] QApplication init: {app_init_time:.3f}s")
+    print(f"[Startup Timing] Window init: {window_init_time:.3f}s")
+    print(f"[Startup Timing] Total startup: {total_init_time:.3f}s")
+    print(f"[Startup Timing] Window shown immediately - background tasks running...\n")
+    
     sys.exit(app.exec())
 
 
