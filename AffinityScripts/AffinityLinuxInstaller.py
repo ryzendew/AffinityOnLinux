@@ -727,34 +727,112 @@ class AffinityInstallerGUI(QMainWindow):
         self._update_progress_label_style()
     
     def get_dialog_stylesheet(self):
-        """Get the appropriate stylesheet for dialogs based on current theme"""
+        """Get the appropriate stylesheet for dialogs based on current theme - clean modern style"""
         if self.dark_mode:
             return """
                 QDialog {
                     background-color: #252526;
                     color: #dcdcdc;
-                    border-radius: 12px;
                 }
                 QLabel {
                     color: #dcdcdc;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4ec9b0;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #cccccc;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
                 }
                 QLineEdit {
                     background-color: #3c3c3c;
                     color: #dcdcdc;
                     border: 1px solid #555555;
-                    border-radius: 4px;
-                    padding: 6px;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    font-size: 13px;
                 }
                 QLineEdit:focus {
-                    border: 1px solid #007acc;
+                    border: 1px solid #4ec9b0;
+                    background-color: #3d3d3d;
+                }
+                QFrame#optionFrame {
+                    background-color: #2d2d2d;
+                    border: 1px solid #3c3c3c;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #4a4a4a;
+                    background-color: #323232;
+                }
+                QRadioButton {
+                    font-size: 16px;
+                    color: #dcdcdc;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                    font-weight: 500;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #555555;
+                    background-color: #3c3c3c;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #6a6a6a;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4ec9b0;
+                    border-color: #4ec9b0;
+                }
+                QPushButton {
+                    background-color: #3c3c3c;
+                    color: #f0f0f0;
+                    border: 1px solid #555555;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border-color: #6a6a6a;
+                }
+                QPushButton:pressed {
+                    background-color: #2d2d2d;
+                }
+                QPushButton#okButton, QPushButton#primaryButton {
+                    background-color: #4ec9b0;
+                    color: #1e1e1e;
+                    border: 1px solid #4ec9b0;
+                    font-weight: bold;
+                }
+                QPushButton#okButton:hover, QPushButton#primaryButton:hover {
+                    background-color: #5dd9c0;
+                    border-color: #5dd9c0;
+                }
+                QPushButton#okButton:pressed, QPushButton#primaryButton:pressed {
+                    background-color: #3db9a0;
                 }
                 QDialogButtonBox QPushButton {
                     background-color: #3c3c3c;
                     color: #f0f0f0;
                     border: 1px solid #555555;
                     border-radius: 8px;
-                    min-width: 80px;
-                    padding: 8px 16px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
                 }
                 QDialogButtonBox QPushButton:hover {
                     background-color: #4a4a4a;
@@ -763,34 +841,134 @@ class AffinityInstallerGUI(QMainWindow):
                 QDialogButtonBox QPushButton:pressed {
                     background-color: #2d2d2d;
                 }
+                QSlider::groove:horizontal {
+                    background-color: #3c3c3c;
+                    height: 6px;
+                    border-radius: 3px;
+                }
+                QSlider::handle:horizontal {
+                    background-color: #4ec9b0;
+                    width: 18px;
+                    height: 18px;
+                    margin: -6px 0;
+                    border-radius: 9px;
+                }
+                QSlider::handle:horizontal:hover {
+                    background-color: #5dd9c0;
+                }
+                QSlider::sub-page:horizontal {
+                    background-color: #4ec9b0;
+                    border-radius: 3px;
+                }
+                QSlider::add-page:horizontal {
+                    background-color: #3c3c3c;
+                    border-radius: 3px;
+                }
             """
         else:
             return """
                 QDialog {
                     background-color: #ffffff;
                     color: #2d2d2d;
-                    border-radius: 12px;
                 }
                 QLabel {
                     color: #2d2d2d;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4caf50;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #555555;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
                 }
                 QLineEdit {
                     background-color: #ffffff;
                     color: #2d2d2d;
                     border: 1px solid #c0c0c0;
-                    border-radius: 4px;
-                    padding: 6px;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    font-size: 13px;
                 }
                 QLineEdit:focus {
                     border: 1px solid #4caf50;
+                    background-color: #fafafa;
+                }
+                QFrame#optionFrame {
+                    background-color: #f5f5f5;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #c0c0c0;
+                    background-color: #fafafa;
+                }
+                QRadioButton {
+                    font-size: 14px;
+                    color: #2d2d2d;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #c0c0c0;
+                    background-color: #ffffff;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #a0a0a0;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4caf50;
+                    border-color: #4caf50;
+                }
+                QPushButton {
+                    background-color: #e0e0e0;
+                    color: #2d2d2d;
+                    border: 1px solid #c0c0c0;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #d0d0d0;
+                    border-color: #a0a0a0;
+                }
+                QPushButton:pressed {
+                    background-color: #c0c0c0;
+                }
+                QPushButton#okButton, QPushButton#primaryButton {
+                    background-color: #4caf50;
+                    color: #ffffff;
+                    border: 1px solid #4caf50;
+                    font-weight: bold;
+                }
+                QPushButton#okButton:hover, QPushButton#primaryButton:hover {
+                    background-color: #45a049;
+                    border-color: #45a049;
+                }
+                QPushButton#okButton:pressed, QPushButton#primaryButton:pressed {
+                    background-color: #3d8b40;
                 }
                 QDialogButtonBox QPushButton {
                     background-color: #e0e0e0;
                     color: #2d2d2d;
                     border: 1px solid #c0c0c0;
                     border-radius: 8px;
-                    min-width: 80px;
-                    padding: 8px 16px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
                 }
                 QDialogButtonBox QPushButton:hover {
                     background-color: #d0d0d0;
@@ -799,31 +977,74 @@ class AffinityInstallerGUI(QMainWindow):
                 QDialogButtonBox QPushButton:pressed {
                     background-color: #c0c0c0;
                 }
+                QSlider::groove:horizontal {
+                    background-color: #e0e0e0;
+                    height: 6px;
+                    border-radius: 3px;
+                }
+                QSlider::handle:horizontal {
+                    background-color: #4caf50;
+                    width: 18px;
+                    height: 18px;
+                    margin: -6px 0;
+                    border-radius: 9px;
+                }
+                QSlider::handle:horizontal:hover {
+                    background-color: #45a049;
+                }
+                QSlider::sub-page:horizontal {
+                    background-color: #4caf50;
+                    border-radius: 3px;
+                }
+                QSlider::add-page:horizontal {
+                    background-color: #e0e0e0;
+                    border-radius: 3px;
+                }
             """
     
     def get_messagebox_stylesheet(self):
-        """Get the appropriate stylesheet for message boxes based on current theme"""
+        """Get the appropriate stylesheet for message boxes based on current theme - clean modern style"""
         if self.dark_mode:
             return """
                 QMessageBox {
                     background-color: #252526;
                     color: #dcdcdc;
-                    border-radius: 12px;
                 }
                 QMessageBox QLabel {
                     color: #dcdcdc;
+                    background-color: transparent;
+                    font-size: 13px;
+                    line-height: 1.4;
                 }
                 QMessageBox QPushButton {
                     background-color: #3c3c3c;
                     color: #f0f0f0;
                     border: 1px solid #555555;
                     border-radius: 8px;
-                    min-width: 80px;
-                    padding: 8px 16px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
                 }
                 QMessageBox QPushButton:hover {
                     background-color: #4a4a4a;
                     border-color: #6a6a6a;
+                }
+                QMessageBox QPushButton:pressed {
+                    background-color: #2d2d2d;
+                }
+                QMessageBox QPushButton[default="true"] {
+                    background-color: #4ec9b0;
+                    color: #1e1e1e;
+                    border: 1px solid #4ec9b0;
+                    font-weight: bold;
+                }
+                QMessageBox QPushButton[default="true"]:hover {
+                    background-color: #5dd9c0;
+                    border-color: #5dd9c0;
+                }
+                QMessageBox QPushButton[default="true"]:pressed {
+                    background-color: #3db9a0;
                 }
             """
         else:
@@ -831,22 +1052,42 @@ class AffinityInstallerGUI(QMainWindow):
                 QMessageBox {
                     background-color: #ffffff;
                     color: #2d2d2d;
-                    border-radius: 12px;
                 }
                 QMessageBox QLabel {
                     color: #2d2d2d;
+                    background-color: transparent;
+                    font-size: 13px;
+                    line-height: 1.4;
                 }
                 QMessageBox QPushButton {
                     background-color: #e0e0e0;
                     color: #2d2d2d;
                     border: 1px solid #c0c0c0;
                     border-radius: 8px;
-                    min-width: 80px;
-                    padding: 8px 16px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
                 }
                 QMessageBox QPushButton:hover {
                     background-color: #d0d0d0;
                     border-color: #a0a0a0;
+                }
+                QMessageBox QPushButton:pressed {
+                    background-color: #c0c0c0;
+                }
+                QMessageBox QPushButton[default="true"] {
+                    background-color: #4caf50;
+                    color: #ffffff;
+                    border: 1px solid #4caf50;
+                    font-weight: bold;
+                }
+                QMessageBox QPushButton[default="true"]:hover {
+                    background-color: #45a049;
+                    border-color: #45a049;
+                }
+                QMessageBox QPushButton[default="true"]:pressed {
+                    background-color: #3d8b40;
                 }
             """
     
@@ -2260,39 +2501,83 @@ class AffinityInstallerGUI(QMainWindow):
         # Create dialog without parent to avoid threading issues
         dialog = QDialog()
         dialog.setWindowTitle("Administrator Authentication Required")
-        dialog.setMinimumWidth(400)
-        dialog.setModal(True)  # Ensure dialog is modal
-        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)  # Keep on top
+        dialog.setModal(True)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
+        # Responsive sizing
+        screen = dialog.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        if screen_width < 800 or screen_height < 600:
+            min_width = min(350, int(screen_width * 0.9))
+            min_height = min(200, int(screen_height * 0.8))
+            default_width = min(450, int(screen_width * 0.85))
+            default_height = min(220, int(screen_height * 0.7))
+        else:
+            min_width = 400
+            min_height = 200
+            default_width = 500
+            default_height = 240
+        
+        dialog.setMinimumWidth(min_width)
+        dialog.setMinimumHeight(min_height)
+        dialog.resize(default_width, default_height)
+        dialog.setSizeGripEnabled(True)
+        
         # Apply theme stylesheet
         dialog.setStyleSheet(self.get_dialog_stylesheet())
         
-        layout = QVBoxLayout(dialog)
+        # Main layout with responsive margins
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+        margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+        main_layout.setContentsMargins(margin, margin, margin, margin)
         
-        # Add explanation label
-        label = QLabel(
-            "This operation requires administrator privileges.\n\n"
-            "Please enter your password to continue:"
-        )
-        layout.addWidget(label)
+        # Title
+        title_label = QLabel("Administrator Authentication Required")
+        title_label.setObjectName("titleLabel")
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(title_label)
         
-        # Add password input
+        # Description
+        desc_label = QLabel("This operation requires administrator privileges.\n\nPlease enter your password to continue:")
+        desc_label.setObjectName("descriptionLabel")
+        desc_label.setWordWrap(True)
+        desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(desc_label)
+        
+        # Password input
         password_input = QLineEdit()
         password_input.setEchoMode(QLineEdit.EchoMode.Password)
         password_input.setPlaceholderText("Enter your password")
-        layout.addWidget(password_input)
+        password_input.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(password_input)
         
-        # Add buttons
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("Continue")
+        ok_btn.setObjectName("okButton")
+        ok_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
         
         # Allow Enter key to submit
         password_input.returnPressed.connect(dialog.accept)
         
-        # Ensure dialog is visible and raised
+        # Show dialog
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
@@ -2521,23 +2806,11 @@ class AffinityInstallerGUI(QMainWindow):
                     padding: 5px 0px 15px 0px;
                     line-height: 1.4;
                 }
-                QLabel#versionTitle {
-                    font-size: 15px;
-                    font-weight: bold;
-                    color: #dcdcdc;
-                    padding: 8px 0px 4px 0px;
-                }
-                QLabel#versionDescription {
-                    font-size: 12px;
+                QLabel#optionDescription {
+                    font-size: 13px;
                     color: #b0b0b0;
-                    padding: 4px 0px 8px 28px;
-                    line-height: 1.4;
-                }
-                QLabel#cpuInfoLabel {
-                    font-size: 11px;
-                    color: #888888;
-                    padding: 4px 0px 0px 28px;
-                    font-style: italic;
+                    padding: 4px 0px 0px 0px;
+                    line-height: 1.5;
                 }
                 QFrame#optionFrame {
                     background-color: #2d2d2d;
@@ -2550,38 +2823,12 @@ class AffinityInstallerGUI(QMainWindow):
                     border-color: #4a4a4a;
                     background-color: #323232;
                 }
-                QLabel#recommendedBadge {
-                    background-color: #4ec9b0;
-                    color: #1e1e1e;
-                    font-size: 9px;
-                    font-weight: bold;
-                    padding: 3px 8px;
-                    border-radius: 10px;
-                    margin-left: 8px;
-                }
-                QLabel#legacyBadge {
-                    background-color: #f48771;
-                    color: #1e1e1e;
-                    font-size: 9px;
-                    font-weight: bold;
-                    padding: 3px 8px;
-                    border-radius: 10px;
-                    margin-left: 8px;
-                }
-                QLabel#olderCpuBadge {
-                    background-color: #ffa726;
-                    color: #1e1e1e;
-                    font-size: 9px;
-                    font-weight: bold;
-                    padding: 3px 8px;
-                    border-radius: 10px;
-                    margin-left: 8px;
-                }
                 QRadioButton {
-                    font-size: 14px;
+                    font-size: 16px;
                     color: #dcdcdc;
                     padding: 8px 0px;
                     spacing: 10px;
+                    font-weight: 500;
                 }
                 QRadioButton::indicator {
                     width: 18px;
@@ -2596,13 +2843,6 @@ class AffinityInstallerGUI(QMainWindow):
                 QRadioButton::indicator:checked {
                     background-color: #4ec9b0;
                     border-color: #4ec9b0;
-                }
-                QRadioButton::indicator:checked::after {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 4px;
-                    background-color: #252526;
-                    margin: 3px;
                 }
                 QPushButton {
                     background-color: #3c3c3c;
@@ -2621,17 +2861,17 @@ class AffinityInstallerGUI(QMainWindow):
                 QPushButton:pressed {
                     background-color: #2d2d2d;
                 }
-                QPushButton#installButton {
+                QPushButton#okButton, QPushButton#installButton {
                     background-color: #4ec9b0;
                     color: #1e1e1e;
                     border: 1px solid #4ec9b0;
                     font-weight: bold;
                 }
-                QPushButton#installButton:hover {
+                QPushButton#okButton:hover, QPushButton#installButton:hover {
                     background-color: #5dd9c0;
                     border-color: #5dd9c0;
                 }
-                QPushButton#installButton:pressed {
+                QPushButton#okButton:pressed, QPushButton#installButton:pressed {
                     background-color: #3db9a0;
                 }
             """
@@ -2657,23 +2897,11 @@ class AffinityInstallerGUI(QMainWindow):
                     padding: 5px 0px 15px 0px;
                     line-height: 1.4;
                 }
-                QLabel#versionTitle {
-                    font-size: 15px;
-                    font-weight: bold;
-                    color: #2d2d2d;
-                    padding: 8px 0px 4px 0px;
-                }
-                QLabel#versionDescription {
+                QLabel#optionDescription {
                     font-size: 12px;
                     color: #666666;
-                    padding: 4px 0px 8px 28px;
+                    padding: 4px 0px 0px 0px;
                     line-height: 1.4;
-                }
-                QLabel#cpuInfoLabel {
-                    font-size: 11px;
-                    color: #999999;
-                    padding: 4px 0px 0px 28px;
-                    font-style: italic;
                 }
                 QFrame#optionFrame {
                     background-color: #f5f5f5;
@@ -2686,38 +2914,12 @@ class AffinityInstallerGUI(QMainWindow):
                     border-color: #c0c0c0;
                     background-color: #fafafa;
                 }
-                QLabel#recommendedBadge {
-                    background-color: #4caf50;
-                    color: #ffffff;
-                    font-size: 9px;
-                    font-weight: bold;
-                    padding: 3px 8px;
-                    border-radius: 10px;
-                    margin-left: 8px;
-                }
-                QLabel#legacyBadge {
-                    background-color: #ff9800;
-                    color: #ffffff;
-                    font-size: 9px;
-                    font-weight: bold;
-                    padding: 3px 8px;
-                    border-radius: 10px;
-                    margin-left: 8px;
-                }
-                QLabel#olderCpuBadge {
-                    background-color: #ff9800;
-                    color: #ffffff;
-                    font-size: 9px;
-                    font-weight: bold;
-                    padding: 3px 8px;
-                    border-radius: 10px;
-                    margin-left: 8px;
-                }
                 QRadioButton {
-                    font-size: 14px;
+                    font-size: 16px;
                     color: #2d2d2d;
                     padding: 8px 0px;
                     spacing: 10px;
+                    font-weight: 500;
                 }
                 QRadioButton::indicator {
                     width: 18px;
@@ -2732,13 +2934,6 @@ class AffinityInstallerGUI(QMainWindow):
                 QRadioButton::indicator:checked {
                     background-color: #4caf50;
                     border-color: #4caf50;
-                }
-                QRadioButton::indicator:checked::after {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 4px;
-                    background-color: #ffffff;
-                    margin: 3px;
                 }
                 QPushButton {
                     background-color: #e0e0e0;
@@ -2798,151 +2993,82 @@ class AffinityInstallerGUI(QMainWindow):
         desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(desc_label)
         
-        # Scrollable area for options (in case content doesn't fit)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        
-        # Wine version options container
+        # Options container - matching NVIDIA dialog structure
         options_container = QFrame()
         options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         options_layout = QVBoxLayout(options_container)
         options_layout.setSpacing(8)
-        # Responsive margins
         options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
         options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
         
         # Detect CPU generation to determine if Wine 10.4 v2 should be recommended
         cpu_gen, is_older_cpu = self.detect_cpu_generation()
         
-        # Wine 10.4 option
-        wine_104_container = QFrame()
-        wine_104_container.setObjectName("optionFrame")
-        wine_104_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_104_layout = QVBoxLayout(wine_104_container)
+        # Create button group to ensure only one radio button is selected at a time
+        button_group = QButtonGroup(dialog)
+        
+        # Wine 10.4 option - clean frame with radio button and description
+        wine_104_frame = QFrame()
+        wine_104_frame.setObjectName("optionFrame")
+        wine_104_layout = QVBoxLayout(wine_104_frame)
         wine_104_layout.setContentsMargins(12, 10, 12, 10)
         wine_104_layout.setSpacing(6)
-        
-        wine_104_header = QHBoxLayout()
-        wine_104_header.setSpacing(8)
         wine_104_radio = QRadioButton("Wine 10.4")
-        wine_104_radio.setChecked(not is_older_cpu)  # Default selection unless older CPU
-        wine_104_radio.setObjectName("wine104Radio")
+        wine_104_radio.setChecked(not is_older_cpu)
         wine_104_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        wine_104_header.addWidget(wine_104_radio)
-        
-        recommended_badge = QLabel("RECOMMENDED")
-        recommended_badge.setObjectName("recommendedBadge")
-        recommended_badge.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        recommended_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        if not is_older_cpu:
-            wine_104_header.addWidget(recommended_badge)
-        wine_104_header.addStretch()
-        
-        wine_104_layout.addLayout(wine_104_header)
-        
-        wine_104_desc = QLabel(
-            "Latest version with AMD GPU and OpenCL patches. "
-            "Best compatibility and performance for most systems."
-        )
-        wine_104_desc.setObjectName("versionDescription")
+        wine_104_layout.addWidget(wine_104_radio)
+        wine_104_desc = QLabel("Latest version with AMD GPU and OpenCL patches. Best compatibility and performance for most systems.")
+        wine_104_desc.setObjectName("optionDescription")
         wine_104_desc.setWordWrap(True)
         wine_104_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         wine_104_layout.addWidget(wine_104_desc)
+        options_layout.addWidget(wine_104_frame)
+        button_group.addButton(wine_104_radio, 0)
         
-        options_layout.addWidget(wine_104_container)
-        
-        # Wine 10.4 v2 option (for older CPUs)
-        wine_104v2_container = QFrame()
-        wine_104v2_container.setObjectName("optionFrame")
-        wine_104v2_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_104v2_layout = QVBoxLayout(wine_104v2_container)
+        # Wine 10.4 v2 option - clean frame with radio button and description
+        wine_104v2_frame = QFrame()
+        wine_104v2_frame.setObjectName("optionFrame")
+        wine_104v2_layout = QVBoxLayout(wine_104v2_frame)
         wine_104v2_layout.setContentsMargins(12, 10, 12, 10)
         wine_104v2_layout.setSpacing(6)
-        
-        wine_104v2_header = QHBoxLayout()
-        wine_104v2_header.setSpacing(8)
-        wine_104v2_radio = QRadioButton("Wine 10.4 v2")
-        wine_104v2_radio.setObjectName("wine104v2Radio")
-        wine_104v2_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        # Auto-select if older CPU detected
+        wine_104v2_radio = QRadioButton("Wine 10.4 v2 (Older CPUs)")
         if is_older_cpu:
             wine_104v2_radio.setChecked(True)
-        wine_104v2_header.addWidget(wine_104v2_radio)
-        
-        if is_older_cpu:
-            older_cpu_badge = QLabel("RECOMMENDED")
-            older_cpu_badge.setObjectName("recommendedBadge")
-        else:
-            older_cpu_badge = QLabel("OLDER CPUs")
-            older_cpu_badge.setObjectName("olderCpuBadge")
-        older_cpu_badge.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        older_cpu_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        wine_104v2_header.addWidget(older_cpu_badge)
-        wine_104v2_header.addStretch()
-        
-        wine_104v2_layout.addLayout(wine_104v2_header)
-        
-        wine_104v2_desc = QLabel(
-            "Optimized for older CPUs (V1-V3 generations). "
-            "Use this if you have a CPU from 2014-2020 (Zen/Broadwell through Zen 2/Coffee Lake)."
-        )
-        wine_104v2_desc.setObjectName("versionDescription")
+        wine_104v2_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        wine_104v2_layout.addWidget(wine_104v2_radio)
+        wine_104v2_desc = QLabel("Optimized for older CPUs (V1-V3 generations). Use this if you have a CPU from 2014-2020 (Zen/Broadwell through Zen 2/Coffee Lake).")
+        wine_104v2_desc.setObjectName("optionDescription")
         wine_104v2_desc.setWordWrap(True)
         wine_104v2_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         wine_104v2_layout.addWidget(wine_104v2_desc)
-        
         # Add CPU info if detected
         if cpu_gen != "Unknown":
             cpu_info_label = QLabel(f"🧩 Detected: {cpu_gen}")
-            cpu_info_label.setObjectName("cpuInfoLabel")
+            cpu_info_label.setObjectName("optionDescription")
             cpu_info_label.setWordWrap(True)
             cpu_info_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             wine_104v2_layout.addWidget(cpu_info_label)
+        options_layout.addWidget(wine_104v2_frame)
+        button_group.addButton(wine_104v2_radio, 1)
         
-        options_layout.addWidget(wine_104v2_container)
-        
-        # Wine 9.14 option
-        wine_914_container = QFrame()
-        wine_914_container.setObjectName("optionFrame")
-        wine_914_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_914_layout = QVBoxLayout(wine_914_container)
+        # Wine 9.14 option - clean frame with radio button and description
+        wine_914_frame = QFrame()
+        wine_914_frame.setObjectName("optionFrame")
+        wine_914_layout = QVBoxLayout(wine_914_frame)
         wine_914_layout.setContentsMargins(12, 10, 12, 10)
         wine_914_layout.setSpacing(6)
-        
-        wine_914_header = QHBoxLayout()
-        wine_914_header.setSpacing(8)
-        wine_914_radio = QRadioButton("Wine 9.14")
-        wine_914_radio.setObjectName("wine914Radio")
+        wine_914_radio = QRadioButton("Wine 9.14 (Legacy)")
         wine_914_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        wine_914_header.addWidget(wine_914_radio)
-        
-        legacy_badge = QLabel("LEGACY")
-        legacy_badge.setObjectName("legacyBadge")
-        legacy_badge.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        legacy_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        wine_914_header.addWidget(legacy_badge)
-        wine_914_header.addStretch()
-        
-        wine_914_layout.addLayout(wine_914_header)
-        
-        wine_914_desc = QLabel(
-            "Legacy version with AMD GPU and OpenCL patches. "
-            "Fallback option if you encounter issues with newer versions."
-        )
-        wine_914_desc.setObjectName("versionDescription")
+        wine_914_layout.addWidget(wine_914_radio)
+        wine_914_desc = QLabel("Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.")
+        wine_914_desc.setObjectName("optionDescription")
         wine_914_desc.setWordWrap(True)
         wine_914_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         wine_914_layout.addWidget(wine_914_desc)
+        options_layout.addWidget(wine_914_frame)
+        button_group.addButton(wine_914_radio, 2)
         
-        options_layout.addWidget(wine_914_container)
-        
-        # Set the scroll area widget
-        scroll_area.setWidget(options_container)
-        main_layout.addWidget(scroll_area, 1)  # Stretch factor 1 to make it expandable
+        main_layout.addWidget(options_container, 1)
         
         # Buttons - fixed at bottom, responsive sizing
         button_layout = QHBoxLayout()
@@ -2954,12 +3080,12 @@ class AffinityInstallerGUI(QMainWindow):
         cancel_btn.clicked.connect(dialog.reject)
         button_layout.addWidget(cancel_btn)
         
-        install_btn = QPushButton("Continue")
-        install_btn.setObjectName("installButton")
-        install_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        install_btn.setDefault(True)
-        install_btn.clicked.connect(dialog.accept)
-        button_layout.addWidget(install_btn)
+        ok_btn = QPushButton("Continue")
+        ok_btn.setObjectName("okButton")
+        ok_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_btn)
         
         main_layout.addLayout(button_layout)
         
@@ -3177,6 +3303,552 @@ class AffinityInstallerGUI(QMainWindow):
     def get_wine_path(self, binary="wine"):
         """Get the path to a Wine binary"""
         return self.get_wine_dir() / "bin" / binary
+    
+    def get_wine_tkg_for_installer(self, binary="wine"):
+        """Get wine-tkg binary path for running installers, fallback to regular wine if not available"""
+        wine_tkg_bin = self.get_wine_tkg_path(binary)
+        if wine_tkg_bin and wine_tkg_bin.exists():
+            return str(wine_tkg_bin)
+        # Fallback to regular wine
+        return str(self.get_wine_path(binary))
+    
+    def get_wine_tkg_dir(self):
+        """Get the wine-tkg directory path"""
+        return Path(self.directory) / "wine-tkg"
+    
+    def get_wine_tkg_path(self, binary="wine"):
+        """Get the path to a wine-tkg binary"""
+        self.log(f"DEBUG: get_wine_tkg_path() called for binary: {binary}", "info")
+        wine_tkg_dir = self.get_wine_tkg_dir()
+        self.log(f"DEBUG: wine-tkg directory: {wine_tkg_dir}", "info")
+        
+        if not wine_tkg_dir.exists():
+            self.log(f"DEBUG: wine-tkg directory does not exist: {wine_tkg_dir}", "info")
+            return None
+        
+        self.log(f"DEBUG: Checking for binary: {binary}", "info")
+        
+        # Check if binary exists directly in wine_tkg_dir/bin/ (direct extraction)
+        direct_path = wine_tkg_dir / "bin" / binary
+        self.log(f"DEBUG: Checking direct path: {direct_path}", "info")
+        if direct_path.exists():
+            self.log(f"DEBUG: ✓ Found binary at direct path: {direct_path}", "info")
+            return direct_path
+        else:
+            self.log(f"DEBUG: ✗ Direct path does not exist", "info")
+        
+        # Check if it's in a subdirectory (like wine-10.19-staging-amd64/bin/wine)
+        self.log(f"DEBUG: Checking subdirectories...", "info")
+        try:
+            subdirs = list(wine_tkg_dir.iterdir())
+            self.log(f"DEBUG: Found {len(subdirs)} items in wine-tkg directory", "info")
+            
+            for subdir in subdirs:
+                if subdir.is_dir():
+                    self.log(f"DEBUG:   Checking subdirectory: {subdir.name}", "info")
+                    
+                    # Check subdir/bin/binary
+                    subdir_bin = subdir / "bin" / binary
+                    self.log(f"DEBUG:     Checking: {subdir_bin}", "info")
+                    if subdir_bin.exists():
+                        self.log(f"DEBUG: ✓ Found binary at: {subdir_bin}", "info")
+                        return subdir_bin
+                    
+                    # Also check if bin is directly in subdir (some archives might have different structure)
+                    subdir_direct = subdir / binary
+                    self.log(f"DEBUG:     Checking direct: {subdir_direct}", "info")
+                    if subdir_direct.exists():
+                        self.log(f"DEBUG: ✓ Found binary at: {subdir_direct}", "info")
+                        return subdir_direct
+        except Exception as e:
+            self.log(f"DEBUG: Error iterating subdirectories: {e}", "warning")
+        
+        # Last resort: recursive search for the binary (but limit depth to avoid performance issues)
+        self.log(f"DEBUG: Performing recursive search for '{binary}'...", "info")
+        try:
+            found_paths = []
+            for path in wine_tkg_dir.rglob(binary):
+                if path.is_file() and path.name == binary:
+                    found_paths.append(path)
+                    # Make sure it's executable or at least looks like a binary
+                    try:
+                        is_executable = path.stat().st_mode & 0o111
+                        has_no_suffix = path.suffix == ''
+                        if is_executable or has_no_suffix:
+                            self.log(f"DEBUG: ✓ Found binary via recursive search: {path}", "info")
+                            return path
+                        else:
+                            self.log(f"DEBUG:   Found '{binary}' but not executable: {path}", "info")
+                    except Exception as e:
+                        self.log(f"DEBUG:   Error checking file {path}: {e}", "warning")
+            
+            if found_paths:
+                self.log(f"DEBUG: Found {len(found_paths)} files named '{binary}' but none are valid binaries", "info")
+                for p in found_paths[:5]:
+                    self.log(f"DEBUG:   - {p}", "info")
+        except Exception as e:
+            self.log(f"DEBUG: Error during recursive search: {e}", "warning")
+        
+        self.log(f"DEBUG: ✗ Binary '{binary}' not found in wine-tkg directory", "info")
+        return None
+    
+    def _debug_log(self, message, level="info"):
+        """Debug logging helper - prints to stderr (unbuffered) AND logs to UI/file AND debug file"""
+        # Use stderr which is unbuffered and more reliable for GUI apps
+        sys.stderr.write(f"[DEBUG] {message}\n")
+        sys.stderr.flush()  # Force immediate output
+        
+        # Also write to a debug log file
+        debug_log_path = Path.home() / "wine-tkg-debug.log"
+        try:
+            with open(debug_log_path, "a", encoding="utf-8") as f:
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{timestamp}] {message}\n")
+                f.flush()
+        except Exception:
+            pass  # Don't fail if we can't write to debug file
+        
+        self.log(f"DEBUG: {message}", level)
+    
+    def ensure_wine_tkg(self):
+        """Download and extract wine-tkg if not already present"""
+        # Print to stderr as backup (visible in terminal, unbuffered)
+        sys.stderr.write("\n" + "="*80 + "\n")
+        sys.stderr.write("DEBUG: Starting wine-tkg setup process\n")
+        sys.stderr.write("="*80 + "\n")
+        sys.stderr.flush()
+        
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
+        self.log("DEBUG: Starting wine-tkg setup process", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
+        
+        # Step 1: Get directory paths
+        self._debug_log("Step 1 - Getting directory paths")
+        wine_tkg_dir = self.get_wine_tkg_dir()
+        self._debug_log(f"wine-tkg directory: {wine_tkg_dir}")
+        self._debug_log(f"wine-tkg directory exists: {wine_tkg_dir.exists()}")
+        
+        # Step 2: Check if already extracted
+        self._debug_log("Step 2 - Checking if wine-tkg is already available")
+        wine_tkg_bin = self.get_wine_tkg_path("wine")
+        self._debug_log(f"wine-tkg binary path: {wine_tkg_bin}")
+        
+        if wine_tkg_bin:
+            exists = wine_tkg_bin.exists()
+            self._debug_log(f"wine-tkg binary exists check: {exists}")
+            if exists:
+                self._debug_log(f"✓ wine-tkg is already available at: {wine_tkg_bin}", "success")
+                return True
+            else:
+                self._debug_log(f"✗ wine-tkg path exists but file not found: {wine_tkg_bin}", "warning")
+        else:
+            self._debug_log("wine-tkg binary not found, will download and extract")
+        
+        # Step 3: Setup download parameters
+        self.log("DEBUG: Step 3 - Setting up download parameters", "info")
+        wine_tkg_url = "https://github.com/Kron4ek/Wine-Builds/releases/download/10.19/wine-10.19-staging-amd64.tar.xz"
+        wine_tkg_file = wine_tkg_dir / "wine-10.19-staging-amd64.tar.xz"
+        self.log(f"DEBUG: Download URL: {wine_tkg_url}", "info")
+        self.log(f"DEBUG: Target file: {wine_tkg_file}", "info")
+        
+        # Step 4: Create directory
+        self.log("DEBUG: Step 4 - Creating wine-tkg directory", "info")
+        try:
+            wine_tkg_dir.mkdir(parents=True, exist_ok=True)
+            self.log(f"DEBUG: ✓ Directory created/verified: {wine_tkg_dir}", "info")
+            self.log(f"DEBUG: Directory exists after creation: {wine_tkg_dir.exists()}", "info")
+        except Exception as e:
+            error_msg = f"Failed to create wine-tkg directory: {e}"
+            sys.stderr.write(f"ERROR: {error_msg}\n")
+            sys.stderr.write(f"Error type: {type(e).__name__}\n")
+            import traceback
+            sys.stderr.write(f"Traceback:\n{traceback.format_exc()}\n")
+            sys.stderr.flush()
+            self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+            self.log(f"DEBUG: Error type: {type(e).__name__}", "error")
+            self.log(f"DEBUG: Traceback:\n{traceback.format_exc()}", "error")
+            return False
+        
+        # Step 5: Check if file already exists
+        self.log("DEBUG: Step 5 - Checking if archive file already exists", "info")
+        if wine_tkg_file.exists():
+            file_size = wine_tkg_file.stat().st_size
+            self.log(f"DEBUG: Archive file already exists, size: {file_size} bytes", "info")
+            if file_size == 0:
+                self.log("DEBUG: Archive file is empty, will re-download", "warning")
+                try:
+                    wine_tkg_file.unlink()
+                    self.log("DEBUG: ✓ Empty file removed", "info")
+                except Exception as e:
+                    self.log(f"DEBUG: ✗ Failed to remove empty file: {e}", "error")
+            else:
+                self.log("DEBUG: Archive file exists and has content, will use it", "info")
+        else:
+            self.log("DEBUG: Archive file does not exist, will download", "info")
+        
+        # Step 6: Download wine-tkg
+        self.log("DEBUG: Step 6 - Downloading wine-tkg archive", "info")
+        self.log("Downloading wine-tkg...", "info")
+        sys.stderr.write(f"\n[WINE-TKG] Starting download from: {wine_tkg_url}\n")
+        sys.stderr.write(f"[WINE-TKG] Saving to: {wine_tkg_file}\n")
+        sys.stderr.flush()
+        try:
+            download_result = self.download_file(wine_tkg_url, str(wine_tkg_file), "wine-tkg")
+            sys.stderr.write(f"[WINE-TKG] Download result: {download_result}\n")
+            sys.stderr.flush()
+            self.log(f"DEBUG: Download result: {download_result}", "info")
+        except Exception as e:
+            error_msg = f"Exception during download: {e}"
+            sys.stderr.write(f"[WINE-TKG] ERROR: {error_msg}\n")
+            import traceback
+            sys.stderr.write(f"[WINE-TKG] Traceback:\n{traceback.format_exc()}\n")
+            sys.stderr.flush()
+            self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+            download_result = False
+        
+        if not download_result:
+            error_msg = "Failed to download wine-tkg archive"
+            sys.stderr.write(f"\nERROR: {error_msg}\n")
+            sys.stderr.write("Possible causes:\n")
+            sys.stderr.write(f"  - Network connectivity issues\n")
+            sys.stderr.write(f"  - URL may be invalid or changed: {wine_tkg_url}\n")
+            sys.stderr.write(f"  - Insufficient disk space\n")
+            sys.stderr.write(f"  - Permission denied writing to: {wine_tkg_file.parent}\n")
+            if wine_tkg_file.exists():
+                file_size = wine_tkg_file.stat().st_size
+                sys.stderr.write(f"  - Partial file exists with size: {file_size} bytes\n")
+            sys.stderr.flush()
+            self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+            self.log(f"DEBUG: Possible causes:", "error")
+            self.log(f"DEBUG:   - Network connectivity issues", "error")
+            self.log(f"DEBUG:   - URL may be invalid or changed: {wine_tkg_url}", "error")
+            self.log(f"DEBUG:   - Insufficient disk space", "error")
+            self.log(f"DEBUG:   - Permission denied writing to: {wine_tkg_file.parent}", "error")
+            if wine_tkg_file.exists():
+                file_size = wine_tkg_file.stat().st_size
+                self.log(f"DEBUG:   - Partial file exists with size: {file_size} bytes", "error")
+            return False
+        
+        # Verify download
+        if wine_tkg_file.exists():
+            file_size = wine_tkg_file.stat().st_size
+            self.log(f"DEBUG: ✓ Download completed, file size: {file_size} bytes", "info")
+            if file_size == 0:
+                error_msg = "Downloaded file is empty"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Cause: Download completed but file has 0 bytes", "error")
+                return False
+        else:
+            error_msg = "Download reported success but file not found"
+            self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+            self.log(f"DEBUG: Cause: File should exist at: {wine_tkg_file}", "error")
+            return False
+        
+        if self.check_cancelled():
+            self.log("DEBUG: Operation cancelled by user", "warning")
+            return False
+        
+        # Step 7: Extract wine-tkg
+        self.log("DEBUG: Step 7 - Extracting wine-tkg archive", "info")
+        self.update_progress_text("Extracting wine-tkg...")
+        self.log("Extracting wine-tkg...", "info")
+        
+        extraction_success = False
+        extraction_method = None
+        
+        # Try Python lzma module first
+        self.log("DEBUG: Step 7a - Attempting extraction with Python lzma module", "info")
+        try:
+            import lzma
+            self.log("DEBUG: ✓ lzma module available", "info")
+            
+            try:
+                self.log("DEBUG: Opening xz file with lzma...", "info")
+                with lzma.open(wine_tkg_file, 'rb') as xz_file:
+                    self.log("DEBUG: ✓ xz file opened successfully", "info")
+                    
+                    self.log("DEBUG: Opening tar archive...", "info")
+                    with tarfile.open(fileobj=xz_file, mode='r') as tar:
+                        self.log("DEBUG: ✓ tar archive opened successfully", "info")
+                        
+                        # Check archive structure
+                        self.log("DEBUG: Analyzing archive structure...", "info")
+                        members = tar.getmembers()
+                        self.log(f"DEBUG: Archive contains {len(members)} entries", "info")
+                        if members:
+                            first_member = members[0].name
+                            self.log(f"DEBUG: First entry: '{first_member}'", "info")
+                            # Show first few entries
+                            for i, member in enumerate(members[:5]):
+                                self.log(f"DEBUG:   Entry {i+1}: {member.name} ({member.size} bytes)", "info")
+                        
+                        # Try with filter='data' first (Python 3.12+)
+                        self.log("DEBUG: Attempting extraction with filter='data' (Python 3.12+)...", "info")
+                        try:
+                            tar.extractall(wine_tkg_dir, filter='data')
+                            extraction_success = True
+                            extraction_method = "Python lzma with filter='data'"
+                            self.log("DEBUG: ✓ Extraction successful with filter='data'", "info")
+                        except TypeError as e:
+                            self.log(f"DEBUG: filter='data' not supported: {e}", "info")
+                            self.log("DEBUG: Attempting extraction without filter (older Python)...", "info")
+                            tar.extractall(wine_tkg_dir)
+                            extraction_success = True
+                            extraction_method = "Python lzma without filter"
+                            self.log("DEBUG: ✓ Extraction successful without filter", "info")
+            except Exception as e:
+                error_msg = f"Error during extraction with lzma: {e}"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Error type: {type(e).__name__}", "error")
+                import traceback
+                self.log(f"DEBUG: Traceback:\n{traceback.format_exc()}", "error")
+                
+        except ImportError:
+            self.log("DEBUG: ✗ lzma module not available, will use xz command", "info")
+            extraction_method = None
+        
+        # Fallback to xz command if lzma module not available or extraction failed
+        if not extraction_success:
+            self.log("DEBUG: Step 7b - Attempting extraction with xz command", "info")
+            
+            # Check for xz command
+            xz_available = self.check_command("xz")
+            unxz_available = self.check_command("unxz")
+            self.log(f"DEBUG: xz command available: {xz_available}", "info")
+            self.log(f"DEBUG: unxz command available: {unxz_available}", "info")
+            
+            if not xz_available and not unxz_available:
+                error_msg = "Neither xz nor unxz command is available"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Cause: Required for extracting .tar.xz files when Python lzma module is unavailable", "error")
+                self.log(f"DEBUG: Solution: Install xz package (e.g., 'sudo pacman -S xz' or 'sudo apt install xz-utils')", "error")
+                return False
+            
+            xz_cmd = "xz" if xz_available else "unxz"
+            self.log(f"DEBUG: Using command: {xz_cmd}", "info")
+            
+            # Decompress with xz
+            tar_file = wine_tkg_file.with_suffix('.tar')
+            self.log(f"DEBUG: Decompressing to: {tar_file}", "info")
+            
+            success, stdout, stderr = self.run_command([xz_cmd, "-d", "-k", str(wine_tkg_file)], check=True)
+            self.log(f"DEBUG: Decompression result: success={success}", "info")
+            if stdout:
+                self.log(f"DEBUG: Decompression stdout: {stdout[:200]}", "info")
+            if stderr:
+                self.log(f"DEBUG: Decompression stderr: {stderr[:200]}", "info")
+            
+            if not success:
+                error_msg = "Failed to decompress wine-tkg archive with xz"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Cause: xz command failed to decompress the archive", "error")
+                if stderr:
+                    self.log(f"DEBUG: Error output: {stderr}", "error")
+                return False
+            
+            if not tar_file.exists():
+                error_msg = "Decompression reported success but tar file not found"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Cause: Expected tar file at: {tar_file}", "error")
+                return False
+            
+            tar_size = tar_file.stat().st_size
+            self.log(f"DEBUG: ✓ Decompression successful, tar file size: {tar_size} bytes", "info")
+            
+            # Extract tar file
+            self.log("DEBUG: Extracting tar archive...", "info")
+            try:
+                with tarfile.open(tar_file, "r") as tar:
+                    self.log("DEBUG: ✓ tar file opened successfully", "info")
+                    
+                    members = tar.getmembers()
+                    self.log(f"DEBUG: Archive contains {len(members)} entries", "info")
+                    
+                    try:
+                        tar.extractall(wine_tkg_dir, filter='data')
+                        extraction_success = True
+                        extraction_method = "xz command + tar with filter='data'"
+                        self.log("DEBUG: ✓ Extraction successful with filter='data'", "info")
+                    except TypeError:
+                        tar.extractall(wine_tkg_dir)
+                        extraction_success = True
+                        extraction_method = "xz command + tar without filter"
+                        self.log("DEBUG: ✓ Extraction successful without filter", "info")
+            except Exception as e:
+                error_msg = f"Error extracting tar file: {e}"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Error type: {type(e).__name__}", "error")
+                import traceback
+                self.log(f"DEBUG: Traceback:\n{traceback.format_exc()}", "error")
+                return False
+            
+            # Clean up intermediate tar file
+            if tar_file.exists():
+                try:
+                    tar_file.unlink()
+                    self.log("DEBUG: ✓ Intermediate tar file cleaned up", "info")
+                except Exception as e:
+                    self.log(f"DEBUG: Warning: Failed to clean up tar file: {e}", "warning")
+        
+        if not extraction_success:
+            error_msg = "Extraction did not complete successfully"
+            sys.stderr.write(f"\nERROR: {error_msg}\n")
+            sys.stderr.write("Cause: All extraction methods failed\n")
+            sys.stderr.flush()
+            self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+            self.log(f"DEBUG: Cause: All extraction methods failed", "error")
+            return False
+        
+        self.log(f"DEBUG: ✓ Extraction completed using method: {extraction_method}", "info")
+        
+        # Step 8: Clean up archive file
+        self.log("DEBUG: Step 8 - Cleaning up archive file", "info")
+        if wine_tkg_file.exists():
+            try:
+                wine_tkg_file.unlink()
+                self.log("DEBUG: ✓ Archive file cleaned up", "info")
+            except Exception as e:
+                self.log(f"DEBUG: Warning: Failed to clean up archive file: {e}", "warning")
+        
+        # Step 9: Verify extraction
+        self.log("DEBUG: Step 9 - Verifying extraction", "info")
+        self.log(f"DEBUG: Checking extraction directory: {wine_tkg_dir}", "info")
+        
+        if not wine_tkg_dir.exists():
+            error_msg = "Extraction directory does not exist after extraction"
+            self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+            self.log(f"DEBUG: Cause: Directory was removed or never created: {wine_tkg_dir}", "error")
+            return False
+        
+        # List extracted contents
+        try:
+            contents = list(wine_tkg_dir.iterdir())
+            self.log(f"DEBUG: Extracted directory contains {len(contents)} items", "info")
+            for i, item in enumerate(contents[:10]):  # Show first 10 items
+                item_type = "directory" if item.is_dir() else "file"
+                size = f" ({item.stat().st_size} bytes)" if item.is_file() else ""
+                self.log(f"DEBUG:   Item {i+1}: {item.name} ({item_type}){size}", "info")
+            if len(contents) > 10:
+                self.log(f"DEBUG:   ... and {len(contents) - 10} more items", "info")
+        except Exception as e:
+            self.log(f"DEBUG: Warning: Failed to list directory contents: {e}", "warning")
+        
+        # Step 10: Find wine binary
+        self.log("DEBUG: Step 10 - Searching for wine binary", "info")
+        wine_tkg_bin = self.get_wine_tkg_path("wine")
+        self.log(f"DEBUG: get_wine_tkg_path() returned: {wine_tkg_bin}", "info")
+        
+        if wine_tkg_bin:
+            if wine_tkg_bin.exists():
+                self.log(f"DEBUG: ✓ wine binary found at: {wine_tkg_bin}", "success")
+                # Verify it's executable
+                try:
+                    is_executable = wine_tkg_bin.stat().st_mode & 0o111
+                    self.log(f"DEBUG: Binary is executable: {bool(is_executable)}", "info")
+                    if not is_executable:
+                        self.log("DEBUG: Warning: Binary is not executable, attempting to make it executable...", "warning")
+                        try:
+                            wine_tkg_bin.chmod(0o755)
+                            self.log("DEBUG: ✓ Made binary executable", "info")
+                        except Exception as e:
+                            self.log(f"DEBUG: Warning: Failed to make executable: {e}", "warning")
+                except Exception as e:
+                    self.log(f"DEBUG: Warning: Could not check executable bit: {e}", "warning")
+                
+                self.log(f"wine-tkg extracted successfully at: {wine_tkg_bin}", "success")
+                return True
+            else:
+                error_msg = f"wine binary path exists but file not found: {wine_tkg_bin}"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Cause: Path was returned but file does not exist", "error")
+        else:
+            error_msg = "wine binary not found after extraction"
+            sys.stderr.write(f"\nERROR: {error_msg}\n")
+            sys.stderr.write("Cause: get_wine_tkg_path() returned None\n")
+            sys.stderr.flush()
+            self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+            self.log(f"DEBUG: Cause: get_wine_tkg_path() returned None", "error")
+        
+        # Detailed search for debugging
+        sys.stderr.write("\nPerforming detailed search for wine binary...\n")
+        sys.stderr.write(f"Expected locations:\n")
+        sys.stderr.write(f"  1. {wine_tkg_dir / 'bin' / 'wine'}\n")
+        sys.stderr.write(f"  2. {wine_tkg_dir}/*/bin/wine (subdirectory)\n")
+        sys.stderr.flush()
+        self.log("DEBUG: Performing detailed search for wine binary...", "info")
+        self.log(f"DEBUG: Expected locations:", "info")
+        self.log(f"DEBUG:   1. {wine_tkg_dir / 'bin' / 'wine'}", "info")
+        self.log(f"DEBUG:   2. {wine_tkg_dir}/*/bin/wine (subdirectory)", "info")
+        
+        # Search for any wine-related files
+        wine_files_found = []
+        try:
+            for item in wine_tkg_dir.rglob("*"):
+                if item.is_file() and "wine" in item.name.lower():
+                    wine_files_found.append(item)
+                    if len(wine_files_found) <= 10:
+                        sys.stderr.write(f"  Found wine-related file: {item.relative_to(wine_tkg_dir)}\n")
+                        self.log(f"DEBUG:   Found wine-related file: {item.relative_to(wine_tkg_dir)}", "info")
+        except Exception as e:
+            sys.stderr.write(f"Warning: Error during recursive search: {e}\n")
+            sys.stderr.flush()
+            self.log(f"DEBUG: Warning: Error during recursive search: {e}", "warning")
+        
+        if wine_files_found:
+            sys.stderr.write(f"Found {len(wine_files_found)} wine-related files total\n")
+            sys.stderr.write("Most likely candidates:\n")
+            self.log(f"DEBUG: Found {len(wine_files_found)} wine-related files total", "info")
+            self.log(f"DEBUG: Most likely candidates:", "info")
+            for candidate in wine_files_found[:5]:
+                if candidate.name == "wine" or candidate.name.startswith("wine"):
+                    sys.stderr.write(f"  - {candidate}\n")
+                    self.log(f"DEBUG:   - {candidate}", "info")
+        else:
+            sys.stderr.write("No wine-related files found in extraction directory\n")
+            self.log("DEBUG: No wine-related files found in extraction directory", "error")
+        
+        sys.stderr.write("\nERROR: wine-tkg extraction completed but binary not found\n")
+        sys.stderr.flush()
+        self.log("DEBUG: ✗ wine-tkg extraction completed but binary not found", "error")
+        return False
+    
+    def get_winetricks_env_with_tkg(self, base_env=None):
+        """Get environment for winetricks with wine-tkg in PATH"""
+        self.log("DEBUG: get_winetricks_env_with_tkg() called", "info")
+        
+        if base_env is None:
+            env = os.environ.copy()
+            self.log("DEBUG: Created new environment from os.environ", "info")
+        else:
+            env = base_env.copy()
+            self.log("DEBUG: Created environment copy from base_env", "info")
+        
+        self.log("DEBUG: Searching for wine-tkg binary...", "info")
+        wine_tkg_bin = self.get_wine_tkg_path("wine")
+        self.log(f"DEBUG: get_wine_tkg_path() returned: {wine_tkg_bin}", "info")
+        
+        if wine_tkg_bin:
+            self.log(f"DEBUG: wine-tkg binary path: {wine_tkg_bin}", "info")
+            self.log(f"DEBUG: wine-tkg binary exists: {wine_tkg_bin.exists()}", "info")
+            
+            if wine_tkg_bin.exists():
+                # Add wine-tkg bin directory to PATH so winetricks uses it
+                wine_tkg_bin_dir = wine_tkg_bin.parent
+                current_path = env.get("PATH", "")
+                env["PATH"] = f"{wine_tkg_bin_dir}:{current_path}"
+                self.log(f"DEBUG: ✓ Using wine-tkg from: {wine_tkg_bin_dir}", "info")
+                self.log(f"DEBUG: Updated PATH (first 200 chars): {env['PATH'][:200]}", "info")
+                self.log(f"Using wine-tkg from: {wine_tkg_bin_dir}", "info")
+            else:
+                error_msg = "wine-tkg binary path returned but file does not exist"
+                self.log(f"DEBUG: ✗ ERROR: {error_msg}", "error")
+                self.log(f"DEBUG: Path was: {wine_tkg_bin}", "error")
+                self.log("wine-tkg not found, using system wine", "warning")
+        else:
+            self.log("DEBUG: ✗ wine-tkg binary not found", "info")
+            self.log("wine-tkg not found, using system wine", "warning")
+        
+        return env
     
     def _register_process(self, proc):
         """Track a running subprocess for potential cancellation."""
@@ -3606,26 +4278,35 @@ class AffinityInstallerGUI(QMainWindow):
         
         For Affinity v3, uses system wine instead of patched wine.
         """
-        # Check if this is Affinity v3 or WebView2 installer (use system wine)
+        # Check if this is Affinity v3 or WebView2 installer
         installer_name = installer_file.name.lower()
         is_affinity_v3 = "affinity" in installer_name and ("x64" in installer_name or "affinity-x64" in installer_name)
+        is_affinity_v2 = any(app in installer_name for app in ["photo", "designer", "publisher"]) and ".exe" in installer_name
         is_webview2 = "webview" in installer_name or "edge" in installer_name
         
-        if is_affinity_v3 or is_webview2:
-            # Use system wine for Affinity v3 and WebView2
+        # Use regular Wine for Affinity installations (wine-tkg is only for winetricks)
+        if is_affinity_v3 or is_affinity_v2:
+            self.log("Using regular Wine for Affinity installation", "info")
+            wine = str(self.get_wine_path("wine"))
+        elif is_webview2:
+            # Use system wine for WebView2
             wine = "wine"
-            if is_affinity_v3:
-                self.log("Using system Wine for Affinity v3 installation", "info")
-            else:
-                self.log("Using system Wine for WebView2 installation", "info")
+            self.log("Using system Wine for WebView2 installation", "info")
         else:
             # Use patched wine for other installers
-            wine = self.get_wine_path("wine")
+            wine = str(self.get_wine_path("wine"))
         
-        attempts = [
-            [wine, "start", "/wait", "/unix", str(installer_file)],
-            [wine, str(installer_file)],
-        ]
+        # For Affinity installers, try direct execution first (more reliable)
+        if is_affinity_v3 or is_affinity_v2:
+            attempts = [
+                [wine, str(installer_file)],
+                [wine, "start", "/wait", "/unix", str(installer_file)],
+            ]
+        else:
+            attempts = [
+                [wine, "start", "/wait", "/unix", str(installer_file)],
+                [wine, str(installer_file)],
+            ]
         for idx, cmd in enumerate(attempts, start=1):
             try:
                 cmd_str = " ".join(shlex.quote(c) for c in cmd)
@@ -3633,6 +4314,19 @@ class AffinityInstallerGUI(QMainWindow):
                 t0 = time.time()
                 ok = self.run_command_streaming(cmd, env=env)
                 dt = time.time() - t0
+                
+                # For Affinity installers, check if installer is actually running despite exceptions
+                if is_affinity_v3 or is_affinity_v2:
+                    txt = (self._last_stream_output_text or "").lower()
+                    # Check if we got a debugger exception but installer might still be running
+                    if "unhandled exception" in txt or "winedbg" in txt:
+                        self.log("Wine debugger exception detected, checking if installer is running...", "warning")
+                        # Give it a moment to start
+                        time.sleep(3)
+                        if self._has_installer_activity(installer_file):
+                            self.log("Installer is running despite exception message, continuing...", "info")
+                            ok = True
+                
                 # If it "succeeded" unrealistically fast, poll briefly for activity or window
                 if ok and dt < 5.0:
                     self.log(f"{label.capitalize()} attempt {idx} returned quickly ({dt:.2f}s). Polling for activity...", "warning")
@@ -3649,8 +4343,22 @@ class AffinityInstallerGUI(QMainWindow):
                     # As a last signal, check stream output for obvious errors
                     txt = (self._last_stream_output_text or "").lower()
                     error_markers = ["err:", "cannot find", "bad exe", "failed", "error:", "no such file", "unable to load"]
-                    if any(m in txt for m in error_markers):
+                    # For Affinity installers, ignore debugger messages if installer is running
+                    if is_affinity_v3 or is_affinity_v2:
+                        # Double-check if installer is actually running
+                        time.sleep(1)
+                        if self._has_installer_activity(installer_file):
+                            ok = True  # Installer is running, ignore error markers
+                    if any(m in txt for m in error_markers) and not (is_affinity_v3 or is_affinity_v2 and self._has_installer_activity(installer_file)):
                         ok = False
+                # For Affinity installers, even if ok is False, check if installer is actually running
+                if (is_affinity_v3 or is_affinity_v2) and not ok:
+                    # Check one more time if installer is running
+                    time.sleep(2)
+                    if self._has_installer_activity(installer_file):
+                        self.log("Installer is running despite error, continuing...", "info")
+                        ok = True
+                
                 if ok:
                     # For WebView2, use polling with timeout instead of indefinite wineserver wait
                     if is_webview2:
@@ -4143,46 +4851,296 @@ class AffinityInstallerGUI(QMainWindow):
         # Create a custom dialog
         dialog = QDialog()
         dialog.setWindowTitle("Choose Graphics Backend for NVIDIA GPU")
-        dialog.setMinimumWidth(500)
+        dialog.setModal(True)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        layout = QVBoxLayout()
-        dialog.setLayout(layout)
+        # Responsive sizing
+        screen = dialog.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
         
-        # Title and description
+        if screen_width < 800 or screen_height < 600:
+            min_width = min(400, int(screen_width * 0.9))
+            min_height = min(300, int(screen_height * 0.8))
+            default_width = min(500, int(screen_width * 0.85))
+            default_height = min(350, int(screen_height * 0.7))
+        else:
+            min_width = 450
+            min_height = 320
+            default_width = 550
+            default_height = 380
+        
+        dialog.setMinimumWidth(min_width)
+        dialog.setMinimumHeight(min_height)
+        dialog.resize(default_width, default_height)
+        dialog.setSizeGripEnabled(True)
+        
+        # Apply theme stylesheet matching main UI
+        if self.dark_mode:
+            dialog_style = """
+                QDialog {
+                    background-color: #252526;
+                    color: #dcdcdc;
+                }
+                QLabel {
+                    color: #dcdcdc;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4ec9b0;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #cccccc;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
+                }
+                QFrame#optionFrame {
+                    background-color: #2d2d2d;
+                    border: 1px solid #3c3c3c;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #4a4a4a;
+                    background-color: #323232;
+                }
+                QRadioButton {
+                    font-size: 16px;
+                    color: #dcdcdc;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                    font-weight: 500;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #555555;
+                    background-color: #3c3c3c;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #6a6a6a;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4ec9b0;
+                    border-color: #4ec9b0;
+                }
+                QPushButton {
+                    background-color: #3c3c3c;
+                    color: #f0f0f0;
+                    border: 1px solid #555555;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border-color: #6a6a6a;
+                }
+                QPushButton:pressed {
+                    background-color: #2d2d2d;
+                }
+                QPushButton#okButton {
+                    background-color: #4ec9b0;
+                    color: #1e1e1e;
+                    border: 1px solid #4ec9b0;
+                    font-weight: bold;
+                }
+                QPushButton#okButton:hover {
+                    background-color: #5dd9c0;
+                    border-color: #5dd9c0;
+                }
+                QPushButton#okButton:pressed {
+                    background-color: #3db9a0;
+                }
+            """
+        else:
+            dialog_style = """
+                QDialog {
+                    background-color: #ffffff;
+                    color: #2d2d2d;
+                }
+                QLabel {
+                    color: #2d2d2d;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4caf50;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #555555;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
+                }
+                QLabel#optionDescription {
+                    font-size: 12px;
+                    color: #666666;
+                    padding: 4px 0px 0px 0px;
+                    line-height: 1.4;
+                }
+                QFrame#optionFrame {
+                    background-color: #f5f5f5;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #c0c0c0;
+                    background-color: #fafafa;
+                }
+                QRadioButton {
+                    font-size: 14px;
+                    color: #2d2d2d;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #c0c0c0;
+                    background-color: #ffffff;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #a0a0a0;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4caf50;
+                    border-color: #4caf50;
+                }
+                QPushButton {
+                    background-color: #e0e0e0;
+                    color: #2d2d2d;
+                    border: 1px solid #c0c0c0;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #d0d0d0;
+                    border-color: #a0a0a0;
+                }
+                QPushButton:pressed {
+                    background-color: #c0c0c0;
+                }
+                QPushButton#okButton {
+                    background-color: #4caf50;
+                    color: #ffffff;
+                    border: 1px solid #4caf50;
+                    font-weight: bold;
+                }
+                QPushButton#okButton:hover {
+                    background-color: #45a049;
+                    border-color: #45a049;
+                }
+                QPushButton#okButton:pressed {
+                    background-color: #3d8b40;
+                }
+            """
+        
+        dialog.setStyleSheet(dialog_style)
+        
+        # Main layout with responsive margins
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+        margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+        main_layout.setContentsMargins(margin, margin, margin, margin)
+        
+        # Title
         title_label = QLabel("NVIDIA GPU Detected")
-        title_label.setStyleSheet("font-size: 14pt; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title_label)
+        title_label.setObjectName("titleLabel")
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(title_label)
         
+        # Description
         desc_label = QLabel(
             "Please choose your preferred graphics backend:\n\n"
             "• <b>vkd3d</b> - Includes OpenCL support for hardware acceleration\n"
             "• <b>DXVK</b> - Hardware accelerated, uses the GPU (no OpenCL)\n\n"
             "Note: You can change this later if needed."
         )
+        desc_label.setObjectName("descriptionLabel")
         desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
+        desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(desc_label)
         
-        # Radio buttons
+        # Options container
+        options_container = QFrame()
+        options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        options_layout = QVBoxLayout(options_container)
+        options_layout.setSpacing(8)
+        options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
+        options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        # Radio buttons in styled frames
         button_group = QButtonGroup()
-        vkd3d_radio = QRadioButton("vkd3d (with OpenCL support)")
-        dxvk_radio = QRadioButton("DXVK (hardware accelerated, no OpenCL)")
         
-        # Default to vkd3d
+        # vkd3d option
+        vkd3d_frame = QFrame()
+        vkd3d_frame.setObjectName("optionFrame")
+        vkd3d_layout = QVBoxLayout(vkd3d_frame)
+        vkd3d_layout.setContentsMargins(12, 10, 12, 10)
+        vkd3d_radio = QRadioButton("vkd3d (with OpenCL support)")
         vkd3d_radio.setChecked(True)
+        vkd3d_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        vkd3d_layout.addWidget(vkd3d_radio)
+        options_layout.addWidget(vkd3d_frame)
+        
+        # DXVK option
+        dxvk_frame = QFrame()
+        dxvk_frame.setObjectName("optionFrame")
+        dxvk_layout = QVBoxLayout(dxvk_frame)
+        dxvk_layout.setContentsMargins(12, 10, 12, 10)
+        dxvk_radio = QRadioButton("DXVK (hardware accelerated, no OpenCL)")
+        dxvk_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        dxvk_layout.addWidget(dxvk_radio)
+        options_layout.addWidget(dxvk_frame)
         
         button_group.addButton(vkd3d_radio, 0)
         button_group.addButton(dxvk_radio, 1)
         
-        layout.addWidget(vkd3d_radio)
-        layout.addWidget(dxvk_radio)
+        main_layout.addWidget(options_container, 1)
         
         # Buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("Continue")
+        ok_btn.setObjectName("okButton")
+        ok_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
         
         # Show dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        
+        # Get result
         if dialog.exec() == QDialog.DialogCode.Accepted:
             if vkd3d_radio.isChecked():
                 preference = "vkd3d"
@@ -4322,44 +5280,122 @@ class AffinityInstallerGUI(QMainWindow):
         # Create dialog for GPU selection (without parent to avoid threading issues)
         dialog = QDialog()
         dialog.setWindowTitle("GPU Selection for Affinity Applications")
-        dialog.setMinimumWidth(500)
-        dialog.setStyleSheet(self.get_dialog_stylesheet())
-        layout = QVBoxLayout(dialog)
+        dialog.setModal(True)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        label = QLabel(
+        # Responsive sizing
+        screen = dialog.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        if screen_width < 800 or screen_height < 600:
+            min_width = min(400, int(screen_width * 0.9))
+            min_height = min(300, int(screen_height * 0.8))
+            default_width = min(500, int(screen_width * 0.85))
+            default_height = min(350, int(screen_height * 0.7))
+        else:
+            min_width = 450
+            min_height = 320
+            default_width = 550
+            default_height = 380
+        
+        dialog.setMinimumWidth(min_width)
+        dialog.setMinimumHeight(min_height)
+        dialog.resize(default_width, default_height)
+        dialog.setSizeGripEnabled(True)
+        
+        # Apply theme stylesheet
+        dialog.setStyleSheet(self.get_dialog_stylesheet())
+        
+        # Main layout with responsive margins
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+        margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+        main_layout.setContentsMargins(margin, margin, margin, margin)
+        
+        # Title
+        title_label = QLabel("GPU Selection for Affinity Applications")
+        title_label.setObjectName("titleLabel")
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(title_label)
+        
+        # Description
+        desc_label = QLabel(
             "Select which GPU to use for Affinity applications:\n\n"
             "This is useful for dual GPU setups (e.g., Intel + NVIDIA, AMD + NVIDIA)."
         )
-        layout.addWidget(label)
+        desc_label.setObjectName("descriptionLabel")
+        desc_label.setWordWrap(True)
+        desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(desc_label)
+        
+        # Options container
+        options_container = QFrame()
+        options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        options_layout = QVBoxLayout(options_container)
+        options_layout.setSpacing(8)
+        options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
+        options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
         
         # Create radio buttons for each GPU
         button_group = QButtonGroup(dialog)
         radio_buttons = []
         
         # Add "Auto" option first
+        auto_frame = QFrame()
+        auto_frame.setObjectName("optionFrame")
+        auto_layout = QVBoxLayout(auto_frame)
+        auto_layout.setContentsMargins(12, 10, 12, 10)
         auto_radio = QRadioButton("Auto (System Default)")
         auto_radio.setChecked(current_gpu == "auto")
+        auto_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        auto_layout.addWidget(auto_radio)
+        options_layout.addWidget(auto_frame)
         button_group.addButton(auto_radio, -1)
-        layout.addWidget(auto_radio)
         radio_buttons.append(("auto", auto_radio))
         
         # Add detected GPUs
         for gpu in gpus:
             if gpu["id"] != "auto":  # Skip if it's the auto placeholder
+                gpu_frame = QFrame()
+                gpu_frame.setObjectName("optionFrame")
+                gpu_layout = QVBoxLayout(gpu_frame)
+                gpu_layout.setContentsMargins(12, 10, 12, 10)
                 gpu_label = f"{gpu['name']} ({gpu['type'].upper()})"
                 radio = QRadioButton(gpu_label)
                 radio.setChecked(current_gpu == gpu["id"])
+                radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+                gpu_layout.addWidget(radio)
+                options_layout.addWidget(gpu_frame)
                 button_group.addButton(radio, gpus.index(gpu))
-                layout.addWidget(radio)
                 radio_buttons.append((gpu["id"], radio))
         
-        # Add buttons
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        main_layout.addWidget(options_container, 1)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("Continue")
+        ok_btn.setObjectName("okButton")
+        ok_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
+        
+        # Show dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
             selected_id = None
@@ -5239,11 +6275,57 @@ class AffinityInstallerGUI(QMainWindow):
             dialog = QDialog()
             dialog.setWindowTitle("Select Affinity Application")
             dialog.setModal(True)
+            dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            
+            # Responsive sizing
+            screen = dialog.screen().availableGeometry()
+            screen_width = screen.width()
+            screen_height = screen.height()
+            
+            if screen_width < 800 or screen_height < 600:
+                min_width = min(400, int(screen_width * 0.9))
+                min_height = min(300, int(screen_height * 0.8))
+                default_width = min(500, int(screen_width * 0.85))
+                default_height = min(350, int(screen_height * 0.7))
+            else:
+                min_width = 450
+                min_height = 320
+                default_width = 550
+                default_height = 380
+            
+            dialog.setMinimumWidth(min_width)
+            dialog.setMinimumHeight(min_height)
+            dialog.resize(default_width, default_height)
+            dialog.setSizeGripEnabled(True)
             dialog.setStyleSheet(self.get_dialog_stylesheet())
             
-            layout = QVBoxLayout(dialog)
-            label = QLabel("Which Affinity application would you like to install?")
-            layout.addWidget(label)
+            # Main layout
+            main_layout = QVBoxLayout(dialog)
+            main_layout.setSpacing(12)
+            margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+            main_layout.setContentsMargins(margin, margin, margin, margin)
+            
+            # Title
+            title_label = QLabel("Select Affinity Application")
+            title_label.setObjectName("titleLabel")
+            title_label.setWordWrap(True)
+            title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            main_layout.addWidget(title_label)
+            
+            # Description
+            desc_label = QLabel("Which Affinity application would you like to install?")
+            desc_label.setObjectName("descriptionLabel")
+            desc_label.setWordWrap(True)
+            desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            main_layout.addWidget(desc_label)
+            
+            # Options container
+            options_container = QFrame()
+            options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            options_layout = QVBoxLayout(options_container)
+            options_layout.setSpacing(8)
+            options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
+            options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
             
             button_group = QButtonGroup()
             apps = [
@@ -5255,17 +6337,44 @@ class AffinityInstallerGUI(QMainWindow):
             
             radio_buttons = {}
             for idx, (app_code, app_name) in enumerate(apps):
+                app_frame = QFrame()
+                app_frame.setObjectName("optionFrame")
+                app_layout = QVBoxLayout(app_frame)
+                app_layout.setContentsMargins(12, 10, 12, 10)
                 radio = QRadioButton(app_name)
                 if app_code == "Add":
                     radio.setChecked(True)
+                radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+                app_layout.addWidget(radio)
+                options_layout.addWidget(app_frame)
                 button_group.addButton(radio, idx)
                 radio_buttons[idx] = app_code
-                layout.addWidget(radio)
             
-            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-            buttons.accepted.connect(dialog.accept)
-            buttons.rejected.connect(dialog.reject)
-            layout.addWidget(buttons)
+            main_layout.addWidget(options_container, 1)
+            
+            # Buttons
+            button_layout = QHBoxLayout()
+            button_layout.setSpacing(10)
+            button_layout.addStretch()
+            
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            cancel_btn.clicked.connect(dialog.reject)
+            button_layout.addWidget(cancel_btn)
+            
+            ok_btn = QPushButton("Continue")
+            ok_btn.setObjectName("okButton")
+            ok_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            ok_btn.setDefault(True)
+            ok_btn.clicked.connect(dialog.accept)
+            button_layout.addWidget(ok_btn)
+            
+            main_layout.addLayout(button_layout)
+            
+            # Show dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
             
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 checked_id = button_group.checkedId()
@@ -5294,28 +6403,108 @@ class AffinityInstallerGUI(QMainWindow):
         dialog = QDialog()
         dialog.setWindowTitle(f"Install {display_name}")
         dialog.setModal(True)
-        dialog.setStyleSheet(self.get_dialog_stylesheet())
-        dialog.setMinimumWidth(400)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        layout = QVBoxLayout(dialog)
-        label = QLabel(f"How would you like to get the {display_name} installer?")
-        layout.addWidget(label)
+        # Responsive sizing
+        screen = dialog.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        if screen_width < 800 or screen_height < 600:
+            min_width = min(400, int(screen_width * 0.9))
+            min_height = min(280, int(screen_height * 0.8))
+            default_width = min(500, int(screen_width * 0.85))
+            default_height = min(320, int(screen_height * 0.7))
+        else:
+            min_width = 450
+            min_height = 300
+            default_width = 550
+            default_height = 350
+        
+        dialog.setMinimumWidth(min_width)
+        dialog.setMinimumHeight(min_height)
+        dialog.resize(default_width, default_height)
+        dialog.setSizeGripEnabled(True)
+        dialog.setStyleSheet(self.get_dialog_stylesheet())
+        
+        # Main layout
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+        margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+        main_layout.setContentsMargins(margin, margin, margin, margin)
+        
+        # Title
+        title_label = QLabel(f"Install {display_name}")
+        title_label.setObjectName("titleLabel")
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(title_label)
+        
+        # Description
+        desc_label = QLabel(f"How would you like to get the {display_name} installer?")
+        desc_label.setObjectName("descriptionLabel")
+        desc_label.setWordWrap(True)
+        desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(desc_label)
+        
+        # Options container
+        options_container = QFrame()
+        options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        options_layout = QVBoxLayout(options_container)
+        options_layout.setSpacing(8)
+        options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
+        options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
         
         button_group = QButtonGroup()
+        
+        # Download option
+        download_frame = QFrame()
+        download_frame.setObjectName("optionFrame")
+        download_layout = QVBoxLayout(download_frame)
+        download_layout.setContentsMargins(12, 10, 12, 10)
         download_radio = QRadioButton("Download from Affinity Studio (automatic)")
         download_radio.setChecked(True)
-        custom_radio = QRadioButton("Provide my own installer file (.exe)")
-        
+        download_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        download_layout.addWidget(download_radio)
+        options_layout.addWidget(download_frame)
         button_group.addButton(download_radio, 0)
+        
+        # Custom option
+        custom_frame = QFrame()
+        custom_frame.setObjectName("optionFrame")
+        custom_layout = QVBoxLayout(custom_frame)
+        custom_layout.setContentsMargins(12, 10, 12, 10)
+        custom_radio = QRadioButton("Provide my own installer file (.exe)")
+        custom_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        custom_layout.addWidget(custom_radio)
+        options_layout.addWidget(custom_frame)
         button_group.addButton(custom_radio, 1)
         
-        layout.addWidget(download_radio)
-        layout.addWidget(custom_radio)
+        main_layout.addWidget(options_container, 1)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("Continue")
+        ok_btn.setObjectName("okButton")
+        ok_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
+        
+        # Show dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
             checked_id = button_group.checkedId()
@@ -5328,9 +6517,11 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 
                 download_url = "https://downloads.affinity.studio/Affinity%20x64.exe"
-                download_dir = Path.home() / ".cache" / "affinity-installer"
+                # Download to .AffinityLinux/Installer/ directory
+                download_dir = Path(self.directory) / "Installer"
                 download_dir.mkdir(parents=True, exist_ok=True)
                 installer_path = download_dir / "Affinity-x64.exe"
+                self.log(f"Downloading to: {installer_path}", "info")
                 
                 self.start_operation(f"Install {display_name}")
                 threading.Thread(
@@ -5908,7 +7099,7 @@ class AffinityInstallerGUI(QMainWindow):
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"
+                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"  # Actual extracted directory name
                 archive_format = "xz"
                 wine_display_name = "Wine 10.4 v2 (for older CPUs - with AMD GPU and OpenCL patches)"
             else:
@@ -6041,7 +7232,46 @@ class AffinityInstallerGUI(QMainWindow):
             # Verify Wine binary
             self.update_progress(0.60)
             wine_binary = Path(self.directory) / wine_dir_name / "bin" / "wine"
+            sys.stderr.write(f"\n[WINE SETUP] ========================================\n")
+            sys.stderr.write(f"[WINE SETUP] VERIFYING WINE BINARY\n")
+            sys.stderr.write(f"[WINE SETUP] ========================================\n")
+            sys.stderr.write(f"[WINE SETUP] Wine version: {wine_display_name}\n")
+            sys.stderr.write(f"[WINE SETUP] Wine directory name: {wine_dir_name}\n")
+            sys.stderr.write(f"[WINE SETUP] Base directory: {self.directory}\n")
+            sys.stderr.write(f"[WINE SETUP] Expected binary path: {wine_binary}\n")
+            sys.stderr.write(f"[WINE SETUP] Expected directory: {wine_binary.parent}\n")
+            sys.stderr.write(f"[WINE SETUP] Directory exists: {wine_binary.parent.exists()}\n")
+            sys.stderr.write(f"[WINE SETUP] Binary exists: {wine_binary.exists()}\n")
+            sys.stderr.write(f"[WINE SETUP] ========================================\n")
+            
+            # If binary doesn't exist, search for it
             if not wine_binary.exists():
+                sys.stderr.write(f"[WINE SETUP] Binary not found at expected location, searching...\n")
+                # Search for wine binary in the directory
+                wine_dir = Path(self.directory) / wine_dir_name
+                if wine_dir.exists():
+                    found_wine = list(wine_dir.rglob("bin/wine"))
+                    if found_wine:
+                        sys.stderr.write(f"[WINE SETUP] Found wine binary at: {found_wine[0]}\n")
+                        wine_binary = found_wine[0]
+                    else:
+                        sys.stderr.write(f"[WINE SETUP] No wine binary found in {wine_dir}\n")
+                        # List what's actually there
+                        sys.stderr.write(f"[WINE SETUP] Directory contents:\n")
+                        for item in list(wine_dir.iterdir())[:10]:
+                            sys.stderr.write(f"  - {item.name} ({'dir' if item.is_dir() else 'file'})\n")
+                else:
+                    sys.stderr.write(f"[WINE SETUP] Wine directory doesn't exist: {wine_dir}\n")
+                    # List what's in the main directory
+                    sys.stderr.write(f"[WINE SETUP] Main directory contents:\n")
+                    for item in list(Path(self.directory).iterdir())[:10]:
+                        sys.stderr.write(f"  - {item.name} ({'dir' if item.is_dir() else 'file'})\n")
+                sys.stderr.flush()
+            
+            if not wine_binary.exists():
+                error_msg = f"Wine binary not found at {wine_binary}"
+                sys.stderr.write(f"[WINE SETUP] ERROR: {error_msg}\n")
+                sys.stderr.flush()
                 self.log("Wine binary not found", "error")
                 self.update_progress_text("Ready")
                 return False
@@ -6406,11 +7636,27 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Wine Configuration", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
+        # Ensure wine-tkg is available for winetricks
+        self.log("Setting up wine-tkg for winetricks...", "info")
+        sys.stderr.write("\n[WINE-TKG] Calling ensure_wine_tkg() for winetricks...\n")
+        sys.stderr.flush()
+        wine_tkg_result = self.ensure_wine_tkg()
+        sys.stderr.write(f"[WINE-TKG] ensure_wine_tkg() returned: {wine_tkg_result}\n")
+        sys.stderr.flush()
+        if not wine_tkg_result:
+            error_msg = "Failed to setup wine-tkg, continuing with system wine"
+            sys.stderr.write(f"[WINE-TKG] WARNING: {error_msg}\n")
+            sys.stderr.flush()
+            self.log(error_msg, "warning")
+        
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
         # Prevent winetricks from showing GUI dialogs
         env["WINETRICKS_GUI"] = "0"
         env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
+        
+        # Use wine-tkg for winetricks if available
+        env = self.get_winetricks_env_with_tkg(env)
         
         wine_cfg = self.get_wine_path("winecfg")
         
@@ -6531,7 +7777,7 @@ class AffinityInstallerGUI(QMainWindow):
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"
+                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"  # Actual extracted directory name
                 archive_format = "xz"
                 wine_display_name = "Wine 10.4 v2"
             else:
@@ -6862,12 +8108,20 @@ class AffinityInstallerGUI(QMainWindow):
         try:
             if self.check_cancelled():
                 return
+            
+            # Ensure wine-tkg is available for winetricks
+            self.log("Setting up wine-tkg for winetricks...", "info")
+            if not self.ensure_wine_tkg():
+                self.log("Failed to setup wine-tkg, continuing with system wine", "warning")
                 
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             # Prevent winetricks from showing GUI dialogs
             env["WINETRICKS_GUI"] = "0"
             env["DISPLAY"] = env.get("DISPLAY", ":0")  # Ensure display is set but winetricks won't use GUI
+            
+            # Use wine-tkg for winetricks if available
+            env = self.get_winetricks_env_with_tkg(env)
             
             components = [
                 ("dotnet35sp1", ".NET Framework 3.5 SP1"),
@@ -7947,24 +9201,15 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Installer {original_filename} copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
             
             # Set Windows version
-            # Check if this is Affinity v3 (use system wine for winecfg too)
-            installer_name = installer_file.name.lower()
-            is_affinity_v3 = "affinity" in installer_name and ("x64" in installer_name or "affinity-x64" in installer_name)
-            
-            if is_affinity_v3:
-                # Use system wine's winecfg for Affinity v3
-                wine_cfg = "winecfg"
-                self.log("Using system Wine's winecfg for Affinity v3 configuration", "info")
-            else:
-                # Use patched wine's winecfg for other installers
-                wine_cfg = self.get_wine_path("winecfg")
+            # Use regular Wine for all installations (wine-tkg is only for winetricks)
+            wine_cfg = self.get_wine_path("winecfg")
+            wine = self.get_wine_path("wine")
             
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
             
             # Run installer
-            wine = self.get_wine_path("wine")
             env["WINEDEBUG"] = "-all"
             self.log("Launching installer with custom Wine...", "info")
             self.log("Follow the installation wizard in the window that opens.", "info")
@@ -8198,12 +9443,17 @@ class AffinityInstallerGUI(QMainWindow):
             self.update_progress(0.3)
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
+            
+            # Use regular Wine for all installations (wine-tkg is only for winetricks)
+            wine_cfg = self.get_wine_path("winecfg")
+            self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
+            
             env["WINEDEBUG"] = "-all"
             
             # Run installer with custom Wine
             self.update_progress_text("Running updater...")
             self.update_progress(0.4)
-            wine = self.get_wine_path("wine")
+            # Wine will be determined by _run_installer_and_capture based on installer type
             self.log("Launching installer...", "info")
             self.log("Follow the installation wizard in the window that opens.", "info")
             self.log("This will update the application without creating desktop entries.", "info")
@@ -8352,30 +9602,36 @@ class AffinityInstallerGUI(QMainWindow):
             self.update_progress(0.0)
             self.log(f"Selected installer: {installer_path}", "success")
             
-            # Copy installer with sanitized filename (remove spaces)
-            self.update_progress_text("Copying installer...")
-            self.update_progress(0.1)
-            original_filename = Path(installer_path).name
-            sanitized_filename = self.sanitize_filename(original_filename)
-            installer_file = Path(self.directory) / sanitized_filename
-            shutil.copy2(installer_path, installer_file)
-            self.log(f"Installer copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
+            # Check if installer is already in .AffinityLinux/Installer/ (downloaded installer)
+            installer_path_obj = Path(installer_path)
+            installer_dir = Path(self.directory) / "Installer"
+            
+            # If installer is in .AffinityLinux/Installer/, use it directly
+            if installer_path_obj.parent == installer_dir:
+                self.log(f"Using installer from .AffinityLinux/Installer/: {installer_path_obj.name}", "info")
+                installer_file = installer_path_obj
+            else:
+                # For custom installers, copy to Wine prefix with sanitized filename (remove spaces)
+                self.update_progress_text("Copying installer...")
+                self.update_progress(0.1)
+                original_filename = installer_path_obj.name
+                sanitized_filename = self.sanitize_filename(original_filename)
+                installer_file = Path(self.directory) / sanitized_filename
+                shutil.copy2(installer_path, installer_file)
+                self.log(f"Installer copied to Wine prefix: {installer_file} (WINEPREFIX={self.directory})", "success")
             
             # Set Windows version
             self.update_progress_text("Configuring Wine...")
             self.update_progress(0.2)
-            # Check if this is Affinity v3 (use system wine for winecfg too)
+            # Check if this is Affinity v3 or v2
             installer_name = installer_file.name.lower()
             is_affinity_v3 = (app_name == "Add" or app_name == "Affinity (Unified)") or \
                             ("affinity" in installer_name and ("x64" in installer_name or "affinity-x64" in installer_name))
+            is_affinity_v2 = any(app in installer_name for app in ["photo", "designer", "publisher"]) and ".exe" in installer_name
             
-            if is_affinity_v3:
-                # Use system wine's winecfg for Affinity v3
-                wine_cfg = "winecfg"
-                self.log("Using system Wine's winecfg for Affinity v3 configuration", "info")
-            else:
-                # Use patched wine's winecfg for other installers
-                wine_cfg = self.get_wine_path("winecfg")
+            # Use regular Wine for all installations (wine-tkg is only for winetricks)
+            wine_cfg = self.get_wine_path("winecfg")
+            wine = self.get_wine_path("wine")
             
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
@@ -8384,7 +9640,7 @@ class AffinityInstallerGUI(QMainWindow):
             # Run installer
             self.update_progress_text("Running installer...")
             self.update_progress(0.3)
-            wine = self.get_wine_path("wine")
+            
             env["WINEDEBUG"] = "-all"
             self.log("Launching installer...", "info")
             self.log("Follow the installation wizard in the window that opens.", "info")
@@ -8395,10 +9651,15 @@ class AffinityInstallerGUI(QMainWindow):
             if not success and not self.check_cancelled():
                 self.log("Installer process exited with a non-zero status", "warning")
             
-            # Clean up installer
+            # Clean up installer (only if it was copied to Wine prefix, not if it's in .AffinityLinux/Installer/)
             self.update_progress(0.5)
-            installer_file.unlink()
-            self.log("Installer file removed", "success")
+            if installer_file.parent != installer_dir:
+                # Only remove if it was copied (not the original in Installer folder)
+                if installer_file.exists():
+                    installer_file.unlink()
+                    self.log("Installer file removed", "success")
+            else:
+                self.log(f"Installer kept in .AffinityLinux/Installer/: {installer_file.name}", "info")
             
             # Restore WinMetadata
             self.update_progress_text("Restoring Windows Metadata...")
@@ -9326,31 +10587,294 @@ class AffinityInstallerGUI(QMainWindow):
         # Ask user to choose renderer (without parent to avoid threading issues)
         dialog = QDialog()
         dialog.setWindowTitle("Select Renderer")
-        dialog.setMinimumWidth(300)
-        dialog.setStyleSheet(self.get_dialog_stylesheet())
-        layout = QVBoxLayout(dialog)
+        dialog.setModal(True)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        label = QLabel("Choose a renderer for troubleshooting:")
-        layout.addWidget(label)
+        # Responsive sizing
+        screen = dialog.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        if screen_width < 800 or screen_height < 600:
+            min_width = min(350, int(screen_width * 0.9))
+            min_height = min(280, int(screen_height * 0.8))
+            default_width = min(450, int(screen_width * 0.85))
+            default_height = min(320, int(screen_height * 0.7))
+        else:
+            min_width = 400
+            min_height = 300
+            default_width = 500
+            default_height = 350
+        
+        dialog.setMinimumWidth(min_width)
+        dialog.setMinimumHeight(min_height)
+        dialog.resize(default_width, default_height)
+        dialog.setSizeGripEnabled(True)
+        
+        # Apply theme stylesheet matching main UI
+        if self.dark_mode:
+            dialog_style = """
+                QDialog {
+                    background-color: #252526;
+                    color: #dcdcdc;
+                }
+                QLabel {
+                    color: #dcdcdc;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4ec9b0;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #cccccc;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
+                }
+                QFrame#optionFrame {
+                    background-color: #2d2d2d;
+                    border: 1px solid #3c3c3c;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #4a4a4a;
+                    background-color: #323232;
+                }
+                QRadioButton {
+                    font-size: 16px;
+                    color: #dcdcdc;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                    font-weight: 500;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #555555;
+                    background-color: #3c3c3c;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #6a6a6a;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4ec9b0;
+                    border-color: #4ec9b0;
+                }
+                QPushButton {
+                    background-color: #3c3c3c;
+                    color: #f0f0f0;
+                    border: 1px solid #555555;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #4a4a4a;
+                    border-color: #6a6a6a;
+                }
+                QPushButton:pressed {
+                    background-color: #2d2d2d;
+                }
+                QPushButton#okButton {
+                    background-color: #4ec9b0;
+                    color: #1e1e1e;
+                    border: 1px solid #4ec9b0;
+                    font-weight: bold;
+                }
+                QPushButton#okButton:hover {
+                    background-color: #5dd9c0;
+                    border-color: #5dd9c0;
+                }
+                QPushButton#okButton:pressed {
+                    background-color: #3db9a0;
+                }
+            """
+        else:
+            dialog_style = """
+                QDialog {
+                    background-color: #ffffff;
+                    color: #2d2d2d;
+                }
+                QLabel {
+                    color: #2d2d2d;
+                    background-color: transparent;
+                }
+                QLabel#titleLabel {
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #4caf50;
+                    padding: 10px 0px;
+                }
+                QLabel#descriptionLabel {
+                    font-size: 13px;
+                    color: #555555;
+                    padding: 5px 0px 15px 0px;
+                    line-height: 1.4;
+                }
+                QLabel#optionDescription {
+                    font-size: 12px;
+                    color: #666666;
+                    padding: 4px 0px 0px 0px;
+                    line-height: 1.4;
+                }
+                QFrame#optionFrame {
+                    background-color: #f5f5f5;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #c0c0c0;
+                    background-color: #fafafa;
+                }
+                QRadioButton {
+                    font-size: 14px;
+                    color: #2d2d2d;
+                    padding: 8px 0px;
+                    spacing: 10px;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    border: 2px solid #c0c0c0;
+                    background-color: #ffffff;
+                }
+                QRadioButton::indicator:hover {
+                    border-color: #a0a0a0;
+                }
+                QRadioButton::indicator:checked {
+                    background-color: #4caf50;
+                    border-color: #4caf50;
+                }
+                QPushButton {
+                    background-color: #e0e0e0;
+                    color: #2d2d2d;
+                    border: 1px solid #c0c0c0;
+                    border-radius: 8px;
+                    min-width: 100px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background-color: #d0d0d0;
+                    border-color: #a0a0a0;
+                }
+                QPushButton:pressed {
+                    background-color: #c0c0c0;
+                }
+                QPushButton#okButton {
+                    background-color: #4caf50;
+                    color: #ffffff;
+                    border: 1px solid #4caf50;
+                    font-weight: bold;
+                }
+                QPushButton#okButton:hover {
+                    background-color: #45a049;
+                    border-color: #45a049;
+                }
+                QPushButton#okButton:pressed {
+                    background-color: #3d8b40;
+                }
+            """
+        
+        dialog.setStyleSheet(dialog_style)
+        
+        # Main layout with responsive margins
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+        margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+        main_layout.setContentsMargins(margin, margin, margin, margin)
+        
+        # Title
+        title_label = QLabel("Select Renderer")
+        title_label.setObjectName("titleLabel")
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(title_label)
+        
+        # Description
+        desc_label = QLabel("Choose a renderer for troubleshooting:")
+        desc_label.setObjectName("descriptionLabel")
+        desc_label.setWordWrap(True)
+        desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(desc_label)
+        
+        # Options container
+        options_container = QFrame()
+        options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        options_layout = QVBoxLayout(options_container)
+        options_layout.setSpacing(8)
+        options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
+        options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
         
         button_group = QButtonGroup()
+        
+        # Vulkan option
+        vulkan_frame = QFrame()
+        vulkan_frame.setObjectName("optionFrame")
+        vulkan_layout = QVBoxLayout(vulkan_frame)
+        vulkan_layout.setContentsMargins(12, 10, 12, 10)
         vulkan_radio = QRadioButton("Vulkan (Recommended - OpenCL support)")
         vulkan_radio.setChecked(True)
+        vulkan_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        vulkan_layout.addWidget(vulkan_radio)
+        options_layout.addWidget(vulkan_frame)
+        
+        # OpenGL option
+        opengl_frame = QFrame()
+        opengl_frame.setObjectName("optionFrame")
+        opengl_layout = QVBoxLayout(opengl_frame)
+        opengl_layout.setContentsMargins(12, 10, 12, 10)
         opengl_radio = QRadioButton("OpenGL (Alternative)")
+        opengl_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        opengl_layout.addWidget(opengl_radio)
+        options_layout.addWidget(opengl_frame)
+        
+        # GDI option
+        gdi_frame = QFrame()
+        gdi_frame.setObjectName("optionFrame")
+        gdi_layout = QVBoxLayout(gdi_frame)
+        gdi_layout.setContentsMargins(12, 10, 12, 10)
         gdi_radio = QRadioButton("GDI (Fallback)")
+        gdi_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        gdi_layout.addWidget(gdi_radio)
+        options_layout.addWidget(gdi_frame)
         
         button_group.addButton(vulkan_radio, 0)
         button_group.addButton(opengl_radio, 1)
         button_group.addButton(gdi_radio, 2)
         
-        layout.addWidget(vulkan_radio)
-        layout.addWidget(opengl_radio)
-        layout.addWidget(gdi_radio)
+        main_layout.addWidget(options_container, 1)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("Continue")
+        ok_btn.setObjectName("okButton")
+        ok_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(button_layout)
         
         if dialog.exec() != QDialog.DialogCode.Accepted:
             self.log("Renderer configuration cancelled", "warning")
@@ -9367,8 +10891,15 @@ class AffinityInstallerGUI(QMainWindow):
         selected_id = button_group.checkedId()
         renderer_value, renderer_name = renderer_map.get(selected_id, ("vulkan", "Vulkan"))
         
+        # Ensure wine-tkg is available for winetricks (fallback method)
+        self.log("Setting up wine-tkg for winetricks (if needed)...", "info")
+        self.ensure_wine_tkg()  # Don't fail if this doesn't work, it's just a fallback
+        
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
+        
+        # Use wine-tkg for winetricks if available (fallback method)
+        env = self.get_winetricks_env_with_tkg(env)
         
         # Set Windows version to 11
         self.log("Setting Windows version to 11...", "info")
@@ -9664,9 +11195,43 @@ class AffinityInstallerGUI(QMainWindow):
         # Create dialog (without parent to avoid threading issues)
         dialog = QDialog()
         dialog.setWindowTitle("Set DPI Scaling")
-        dialog.setMinimumWidth(400)
+        dialog.setModal(True)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
+        # Responsive sizing
+        screen = dialog.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        if screen_width < 800 or screen_height < 600:
+            min_width = min(400, int(screen_width * 0.9))
+            min_height = min(350, int(screen_height * 0.8))
+            default_width = min(500, int(screen_width * 0.85))
+            default_height = min(400, int(screen_height * 0.7))
+        else:
+            min_width = 450
+            min_height = 380
+            default_width = 550
+            default_height = 420
+        
+        dialog.setMinimumWidth(min_width)
+        dialog.setMinimumHeight(min_height)
+        dialog.resize(default_width, default_height)
+        dialog.setSizeGripEnabled(True)
         dialog.setStyleSheet(self.get_dialog_stylesheet())
-        layout = QVBoxLayout(dialog)
+        
+        # Main layout
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(12)
+        margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
+        main_layout.setContentsMargins(margin, margin, margin, margin)
+        
+        # Title
+        title_label = QLabel("Set DPI Scaling")
+        title_label.setObjectName("titleLabel")
+        title_label.setWordWrap(True)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(title_label)
         
         # Info label
         info_label = QLabel(
@@ -9678,13 +11243,17 @@ class AffinityInstallerGUI(QMainWindow):
             "• 144 = 150% (1440p, 27-32 inches)\n"
             "• 192 = 200% (4K, 27-32 inches)"
         )
+        info_label.setObjectName("descriptionLabel")
         info_label.setWordWrap(True)
-        layout.addWidget(info_label)
+        info_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(info_label)
         
         # Current value display
         value_label = QLabel()
-        value_label.setStyleSheet("font-size: 14px; font-weight: bold; padding: 10px;")
-        layout.addWidget(value_label)
+        value_label.setObjectName("titleLabel")
+        value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        value_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(value_label)
         
         # Slider
         slider = QSlider(Qt.Orientation.Horizontal)
@@ -9694,14 +11263,19 @@ class AffinityInstallerGUI(QMainWindow):
         slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         slider.setTickInterval(24)  # Show ticks every 24 DPI
         slider.setSingleStep(12)  # Step by 12 DPI for smoother adjustment
-        layout.addWidget(slider)
+        slider.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        main_layout.addWidget(slider)
         
         # Min/Max labels
         minmax_layout = QHBoxLayout()
-        minmax_layout.addWidget(QLabel("96 (100%)"))
+        min_label = QLabel("96 (100%)")
+        min_label.setObjectName("descriptionLabel")
+        minmax_layout.addWidget(min_label)
         minmax_layout.addStretch()
-        minmax_layout.addWidget(QLabel("480 (500%)"))
-        layout.addLayout(minmax_layout)
+        max_label = QLabel("480 (500%)")
+        max_label.setObjectName("descriptionLabel")
+        minmax_layout.addWidget(max_label)
+        main_layout.addLayout(minmax_layout)
         
         # Update label when slider changes
         def update_label(value):
@@ -9712,11 +11286,28 @@ class AffinityInstallerGUI(QMainWindow):
         update_label(current_dpi)  # Set initial value
         
         # Buttons
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Save")
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        save_btn = QPushButton("Save")
+        save_btn.setObjectName("okButton")
+        save_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(save_btn)
+        
+        main_layout.addLayout(button_layout)
+        
+        # Show dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
         
         if dialog.exec() != QDialog.DialogCode.Accepted:
             self.log("DPI scaling configuration cancelled", "warning")
