@@ -376,7 +376,7 @@ install_dependencies() {
             print_error "This function should not be called for unsupported distributions"
             exit 1
             ;;
-        "arch"|"cachyos"|"endeavouros"|"xerolinux")
+        "arch"|"cachyos"|"endeavouros"|"xerolinux"|"manjaro")
             sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd
             ;;
         "fedora"|"nobara")
