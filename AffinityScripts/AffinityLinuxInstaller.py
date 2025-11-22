@@ -3116,6 +3116,40 @@ class AffinityInstallerGUI(QMainWindow):
         options_layout.addWidget(wine_914_frame)
         button_group.addButton(wine_914_radio, 2)
         
+        # Wine 10.10 option - clean frame with radio button and description
+        wine_1010_frame = QFrame()
+        wine_1010_frame.setObjectName("optionFrame")
+        wine_1010_layout = QVBoxLayout(wine_1010_frame)
+        wine_1010_layout.setContentsMargins(12, 10, 12, 10)
+        wine_1010_layout.setSpacing(6)
+        wine_1010_radio = QRadioButton("Wine 10.10")
+        wine_1010_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        wine_1010_layout.addWidget(wine_1010_radio)
+        wine_1010_desc = QLabel("ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.")
+        wine_1010_desc.setObjectName("optionDescription")
+        wine_1010_desc.setWordWrap(True)
+        wine_1010_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_1010_layout.addWidget(wine_1010_desc)
+        options_layout.addWidget(wine_1010_frame)
+        button_group.addButton(wine_1010_radio, 3)
+        
+        # Wine 10.11 option - clean frame with radio button and description
+        wine_1011_frame = QFrame()
+        wine_1011_frame.setObjectName("optionFrame")
+        wine_1011_layout = QVBoxLayout(wine_1011_frame)
+        wine_1011_layout.setContentsMargins(12, 10, 12, 10)
+        wine_1011_layout.setSpacing(6)
+        wine_1011_radio = QRadioButton("Wine 10.11")
+        wine_1011_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        wine_1011_layout.addWidget(wine_1011_radio)
+        wine_1011_desc = QLabel("ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.")
+        wine_1011_desc.setObjectName("optionDescription")
+        wine_1011_desc.setWordWrap(True)
+        wine_1011_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_1011_layout.addWidget(wine_1011_desc)
+        options_layout.addWidget(wine_1011_frame)
+        button_group.addButton(wine_1011_radio, 4)
+        
         main_layout.addWidget(options_container, 1)
         
         # Buttons - fixed at bottom, responsive sizing
@@ -3149,8 +3183,12 @@ class AffinityInstallerGUI(QMainWindow):
                 self.question_dialog_response = "Wine 10.4 (Recommended)"
             elif wine_104v2_radio.isChecked():
                 self.question_dialog_response = "Wine 10.4 v2 (Older CPUs)"
-            else:
+            elif wine_914_radio.isChecked():
                 self.question_dialog_response = "Wine 9.14 (Legacy)"
+            elif wine_1010_radio.isChecked():
+                self.question_dialog_response = "Wine 10.10"
+            elif wine_1011_radio.isChecked():
+                self.question_dialog_response = "Wine 10.11"
         else:
             # User cancelled - return "Cancel" to match expected format
             self.question_dialog_response = "Cancel"
@@ -3162,7 +3200,7 @@ class AffinityInstallerGUI(QMainWindow):
         # Check if this is a Wine version selection dialog
         is_wine_version_dialog = (
             "Wine Version" in title or "Wine version" in title or
-            any("Wine 10.4" in btn or "Wine 9.14" in btn or "Wine 10.4 v2" in btn for btn in buttons)
+            any("Wine 10.4" in btn or "Wine 9.14" in btn or "Wine 10.4 v2" in btn or "Wine 10.10" in btn or "Wine 10.11" in btn for btn in buttons)
         )
         if is_wine_version_dialog:
             self._show_wine_version_dialog_safe()
@@ -6260,10 +6298,12 @@ class AffinityInstallerGUI(QMainWindow):
             "Which Wine version would you like to install?\n\n"
             "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
             "• Wine 10.4 v2 (Older CPUs) - Optimized for older CPUs (V1-V3 generations)\n"
-            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
+            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n"
+            "• Wine 10.10 - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches\n"
+            "• Wine 10.11 - ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches\n\n"
             "Note: You can switch versions later by running 'Setup Wine Environment' again."
             + cpu_info_note,
-            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)"]
+            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)", "Wine 10.10", "Wine 10.11"]
         )
         
         if wine_version == "Wine 10.4 (Recommended)":
@@ -6272,6 +6312,10 @@ class AffinityInstallerGUI(QMainWindow):
             wine_version_choice = "10.4-v2"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
+        elif wine_version == "Wine 10.10":
+            wine_version_choice = "10.10"
+        elif wine_version == "Wine 10.11":
+            wine_version_choice = "10.11"
         else:
             self.log("Wine setup cancelled", "warning")
             return
@@ -7117,10 +7161,10 @@ class AffinityInstallerGUI(QMainWindow):
         return True
     
     def setup_wine(self, wine_version="10.4"):
-        """Setup Wine environment - installs custom Wine 10.4, 10.4 v2, or 9.14 with AMD GPU and OpenCL patches
+        """Setup Wine environment - installs custom Wine 10.4, 10.4 v2, 9.14, 10.10, or 10.11 with AMD GPU and OpenCL patches
         
         Args:
-            wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), or "9.14" for Wine 9.14 (legacy)
+            wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), "9.14" for Wine 9.14 (legacy), "10.10" for Wine 10.10, or "10.11" for Wine 10.11
         """
         self.start_operation("Setting up Wine environment")
         
@@ -7148,21 +7192,35 @@ class AffinityInstallerGUI(QMainWindow):
                 wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
                 wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"
+                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
                 archive_format = "gz"
                 wine_display_name = "Wine 9.14 (Legacy - with AMD GPU and OpenCL patches)"
             elif wine_version == "10.4-v2":
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"
+                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"  # Actual extracted directory name
                 archive_format = "xz"
                 wine_display_name = "Wine 10.4 v2 (for older CPUs - with AMD GPU and OpenCL patches)"
+            elif wine_version == "10.10":
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.10.tar.xz"
+                wine_file_name = "ElementalWarrior-wine-10.10.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarrior-wine-10.10*"  # Actual extracted directory name
+                archive_format = "xz"
+                wine_display_name = "Wine 10.10 (with AMD GPU and OpenCL patches)"
+            elif wine_version == "10.11":
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.11.tar.xz"
+                wine_file_name = "ElementalWarrior-wine-10.11.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarrior-wine-10.11*"  # Actual extracted directory name
+                archive_format = "xz"
+                wine_display_name = "Wine 10.11 (with AMD GPU and OpenCL patches)"
             else:
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
                 wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"
+                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
                 archive_format = "xz"
                 wine_display_name = "Wine 10.4 (with AMD GPU and OpenCL patches)"
             
@@ -7724,10 +7782,12 @@ class AffinityInstallerGUI(QMainWindow):
             "Which Wine version would you like to install?\n\n"
             "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
             "• Wine 10.4 v2 (Older CPUs) - Optimized for older CPUs (V1-V3 generations)\n"
-            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
+            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n"
+            "• Wine 10.10 - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches\n"
+            "• Wine 10.11 - ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches\n\n"
             "Note: You can switch versions later by running this setup again."
             + cpu_info_note,
-            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)"]
+            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)", "Wine 10.10", "Wine 10.11"]
         )
         
         if wine_version == "Wine 10.4 (Recommended)":
@@ -7736,6 +7796,10 @@ class AffinityInstallerGUI(QMainWindow):
             wine_version_choice = "10.4-v2"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
+        elif wine_version == "Wine 10.10":
+            wine_version_choice = "10.10"
+        elif wine_version == "Wine 10.11":
+            wine_version_choice = "10.11"
         else:
             self.log("Wine setup cancelled", "warning")
             return
@@ -7746,7 +7810,7 @@ class AffinityInstallerGUI(QMainWindow):
         """Setup Wine binary only - for switching versions without reconfiguration
         
         Args:
-            wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), or "9.14" for Wine 9.14 (legacy)
+            wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), "9.14" for Wine 9.14 (legacy), "10.10" for Wine 10.10, or "10.11" for Wine 10.11
         """
         try:
             # Configure Wine version based on user's choice
@@ -7755,7 +7819,7 @@ class AffinityInstallerGUI(QMainWindow):
                 wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
                 wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"
+                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
                 archive_format = "gz"
                 wine_display_name = "Wine 9.14 (Legacy)"
             elif wine_version == "10.4-v2":
@@ -7765,12 +7829,26 @@ class AffinityInstallerGUI(QMainWindow):
                 wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"  # Actual extracted directory name
                 archive_format = "xz"
                 wine_display_name = "Wine 10.4 v2"
+            elif wine_version == "10.10":
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.10.tar.xz"
+                wine_file_name = "ElementalWarrior-wine-10.10.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarrior-wine-10.10*"  # Actual extracted directory name
+                archive_format = "xz"
+                wine_display_name = "Wine 10.10"
+            elif wine_version == "10.11":
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.11.tar.xz"
+                wine_file_name = "ElementalWarrior-wine-10.11.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarrior-wine-10.11*"  # Actual extracted directory name
+                archive_format = "xz"
+                wine_display_name = "Wine 10.11"
             else:
                 # Default to Wine 10.4 if version is "10.4" or anything else
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
                 wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"
+                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
                 archive_format = "xz"
                 wine_display_name = "Wine 10.4"
             
@@ -7909,10 +7987,12 @@ class AffinityInstallerGUI(QMainWindow):
             "Which Wine version would you like to install?\n\n"
             "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
             "• Wine 10.4 v2 (Older CPUs) - Optimized for older CPUs (V1-V3 generations)\n"
-            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
+            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n"
+            "• Wine 10.10 - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches\n"
+            "• Wine 10.11 - ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches\n\n"
             "Note: This will replace your current Wine installation."
             + cpu_info_note,
-            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)"]
+            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)", "Wine 10.10", "Wine 10.11"]
         )
         
         if wine_version == "Wine 10.4 (Recommended)":
@@ -7921,6 +8001,10 @@ class AffinityInstallerGUI(QMainWindow):
             wine_version_choice = "10.4-v2"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
+        elif wine_version == "Wine 10.10":
+            wine_version_choice = "10.10"
+        elif wine_version == "Wine 10.11":
+            wine_version_choice = "10.11"
         else:
             self.log("Wine version switch cancelled", "warning")
             return
