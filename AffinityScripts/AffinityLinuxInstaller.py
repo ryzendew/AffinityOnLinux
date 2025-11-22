@@ -743,12 +743,16 @@ class AffinityInstallerGUI(QMainWindow):
                     font-weight: bold;
                     color: #4ec9b0;
                     padding: 10px 0px;
+                    background-color: transparent;
+                    border: none;
                 }
                 QLabel#descriptionLabel {
                     font-size: 13px;
                     color: #cccccc;
                     padding: 5px 0px 15px 0px;
                     line-height: 1.4;
+                    background-color: transparent;
+                    border: none;
                 }
                 QLineEdit {
                     background-color: #3c3c3c;
@@ -880,12 +884,16 @@ class AffinityInstallerGUI(QMainWindow):
                     font-weight: bold;
                     color: #4caf50;
                     padding: 10px 0px;
+                    background-color: transparent;
+                    border: none;
                 }
                 QLabel#descriptionLabel {
                     font-size: 13px;
                     color: #555555;
                     padding: 5px 0px 15px 0px;
                     line-height: 1.4;
+                    background-color: transparent;
+                    border: none;
                 }
                 QLineEdit {
                     background-color: #ffffff;
@@ -1327,9 +1335,29 @@ class AffinityInstallerGUI(QMainWindow):
                 background-color: #252525;
                 border-radius: 12px;
             }
+            QDialog QLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QDialog QLabel#titleLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QDialog QLabel#descriptionLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
             QMessageBox {
                 background-color: #252525;
                 border-radius: 12px;
+            }
+            QMessageBox QLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
             }
         """)
     
@@ -1562,9 +1590,29 @@ class AffinityInstallerGUI(QMainWindow):
                 background-color: #ffffff;
                 border-radius: 12px;
             }
+            QDialog QLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QDialog QLabel#titleLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QDialog QLabel#descriptionLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
             QMessageBox {
                 background-color: #ffffff;
                 border-radius: 12px;
+            }
+            QMessageBox QLabel {
+                background-color: transparent;
+                border: none;
+                padding: 0px;
             }
         """)
     
@@ -4284,16 +4332,16 @@ class AffinityInstallerGUI(QMainWindow):
         is_affinity_v2 = any(app in installer_name for app in ["photo", "designer", "publisher"]) and ".exe" in installer_name
         is_webview2 = "webview" in installer_name or "edge" in installer_name
         
-        # Use regular Wine for Affinity installations (wine-tkg is only for winetricks)
+        # Use system Wine for Affinity installations (custom Wine doesn't work for installation)
         if is_affinity_v3 or is_affinity_v2:
-            self.log("Using regular Wine for Affinity installation", "info")
-            wine = str(self.get_wine_path("wine"))
+            wine = "wine"  # Use system Wine for installation
+            self.log("Using system Wine for Affinity installation", "info")
         elif is_webview2:
             # Use system wine for WebView2
             wine = "wine"
             self.log("Using system Wine for WebView2 installation", "info")
         else:
-            # Use patched wine for other installers
+            # Use custom Wine for other installers
             wine = str(self.get_wine_path("wine"))
         
         # For Affinity installers, try direct execution first (more reliable)
@@ -7069,7 +7117,7 @@ class AffinityInstallerGUI(QMainWindow):
         return True
     
     def setup_wine(self, wine_version="10.4"):
-        """Setup Wine environment - installs Wine 10.4, 10.4 v2, or 9.14 with AMD GPU and OpenCL patches
+        """Setup Wine environment - installs custom Wine 10.4, 10.4 v2, or 9.14 with AMD GPU and OpenCL patches
         
         Args:
             wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), or "9.14" for Wine 9.14 (legacy)
@@ -7081,13 +7129,22 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
+            # First check that system Wine is available (needed for installation)
+            system_wine = shutil.which("wine")
+            if not system_wine:
+                self.log("System Wine not found. System Wine is required for installation:", "error")
+                self.log("  Ubuntu/Debian: sudo apt install wine", "info")
+                self.log("  Fedora: sudo dnf install wine", "info")
+                self.log("  Arch: sudo pacman -S wine", "info")
+                self.update_progress_text("Ready")
+                return False
+            
             self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             self.log("Wine Binary Setup", "info")
             self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
             
             # Configure Wine version based on choice
             if wine_version == "9.14":
-                # Wine 9.14 (Legacy)
                 wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
                 wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
                 wine_dir_name = "ElementalWarriorWine"
@@ -7095,15 +7152,13 @@ class AffinityInstallerGUI(QMainWindow):
                 archive_format = "gz"
                 wine_display_name = "Wine 9.14 (Legacy - with AMD GPU and OpenCL patches)"
             elif wine_version == "10.4-v2":
-                # Wine 10.4 v2 for older CPUs
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
                 wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"  # Actual extracted directory name
+                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"
                 archive_format = "xz"
                 wine_display_name = "Wine 10.4 v2 (for older CPUs - with AMD GPU and OpenCL patches)"
             else:
-                # Wine 10.4 with AMD GPU and OpenCL patches (default)
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
                 wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
                 wine_dir_name = "ElementalWarriorWine"
@@ -7151,25 +7206,19 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Extracting Wine binary...", "info")
             try:
                 if archive_format == "gz":
-                    # Extract .tar.gz
                     with tarfile.open(wine_file, "r:gz") as tar:
                         tar.extractall(self.directory, filter='data')
                 elif archive_format == "xz":
-                    # Extract .tar.xz using Python's lzma module or xz command
                     try:
-                        # Try using Python's built-in lzma support
                         import lzma
                         with lzma.open(wine_file, 'rb') as xz_file:
                             with tarfile.open(fileobj=xz_file, mode='r') as tar:
                                 tar.extractall(self.directory, filter='data')
                     except ImportError:
-                        # Fallback to xz command if lzma module not available
                         if not self.check_command("xz") and not self.check_command("unxz"):
                             self.log("xz or unxz is required to extract Wine archive. Please install xz.", "error")
                             self.update_progress_text("Ready")
                             return False
-                        
-                        # First decompress with xz, then extract with tar
                         tar_file = wine_file.with_suffix('.tar')
                         xz_cmd = "xz" if self.check_command("xz") else "unxz"
                         success, _, _ = self.run_command([xz_cmd, "-d", "-k", str(wine_file)], check=True)
@@ -7177,34 +7226,9 @@ class AffinityInstallerGUI(QMainWindow):
                             self.log("Failed to decompress Wine archive", "error")
                             self.update_progress_text("Ready")
                             return False
-                        
-                        # Extract the tar file
                         with tarfile.open(tar_file, "r") as tar:
                             tar.extractall(self.directory, filter='data')
-                        
-                        # Clean up intermediate tar file
                         tar_file.unlink()
-                elif archive_format == "zst":
-                    # Extract .tar.zst using zstd
-                    if not self.check_command("zstd"):
-                        self.log("zstd is required to extract archives. Please install zstd.", "error")
-                        self.update_progress_text("Ready")
-                        return False
-                    
-                    # First decompress with zstd, then extract with tar
-                    tar_file = wine_file.with_suffix('.tar')
-                    success, _, _ = self.run_command(["zstd", "-d", str(wine_file), "-o", str(tar_file)], check=True)
-                    if not success:
-                        self.log("Failed to decompress Wine archive", "error")
-                        self.update_progress_text("Ready")
-                        return False
-                    
-                    # Extract the tar file
-                    with tarfile.open(tar_file, "r") as tar:
-                        tar.extractall(self.directory, filter='data')
-                    
-                    # Clean up intermediate tar file
-                    tar_file.unlink()
                 
                 wine_file.unlink()
                 self.log("Wine binary extracted", "success")
@@ -7216,7 +7240,7 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Find and link Wine directory (handle legacy naming)
+            # Find and link Wine directory
             self.update_progress(0.55)
             wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
             if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
@@ -7232,46 +7256,7 @@ class AffinityInstallerGUI(QMainWindow):
             # Verify Wine binary
             self.update_progress(0.60)
             wine_binary = Path(self.directory) / wine_dir_name / "bin" / "wine"
-            sys.stderr.write(f"\n[WINE SETUP] ========================================\n")
-            sys.stderr.write(f"[WINE SETUP] VERIFYING WINE BINARY\n")
-            sys.stderr.write(f"[WINE SETUP] ========================================\n")
-            sys.stderr.write(f"[WINE SETUP] Wine version: {wine_display_name}\n")
-            sys.stderr.write(f"[WINE SETUP] Wine directory name: {wine_dir_name}\n")
-            sys.stderr.write(f"[WINE SETUP] Base directory: {self.directory}\n")
-            sys.stderr.write(f"[WINE SETUP] Expected binary path: {wine_binary}\n")
-            sys.stderr.write(f"[WINE SETUP] Expected directory: {wine_binary.parent}\n")
-            sys.stderr.write(f"[WINE SETUP] Directory exists: {wine_binary.parent.exists()}\n")
-            sys.stderr.write(f"[WINE SETUP] Binary exists: {wine_binary.exists()}\n")
-            sys.stderr.write(f"[WINE SETUP] ========================================\n")
-            
-            # If binary doesn't exist, search for it
             if not wine_binary.exists():
-                sys.stderr.write(f"[WINE SETUP] Binary not found at expected location, searching...\n")
-                # Search for wine binary in the directory
-                wine_dir = Path(self.directory) / wine_dir_name
-                if wine_dir.exists():
-                    found_wine = list(wine_dir.rglob("bin/wine"))
-                    if found_wine:
-                        sys.stderr.write(f"[WINE SETUP] Found wine binary at: {found_wine[0]}\n")
-                        wine_binary = found_wine[0]
-                    else:
-                        sys.stderr.write(f"[WINE SETUP] No wine binary found in {wine_dir}\n")
-                        # List what's actually there
-                        sys.stderr.write(f"[WINE SETUP] Directory contents:\n")
-                        for item in list(wine_dir.iterdir())[:10]:
-                            sys.stderr.write(f"  - {item.name} ({'dir' if item.is_dir() else 'file'})\n")
-                else:
-                    sys.stderr.write(f"[WINE SETUP] Wine directory doesn't exist: {wine_dir}\n")
-                    # List what's in the main directory
-                    sys.stderr.write(f"[WINE SETUP] Main directory contents:\n")
-                    for item in list(Path(self.directory).iterdir())[:10]:
-                        sys.stderr.write(f"  - {item.name} ({'dir' if item.is_dir() else 'file'})\n")
-                sys.stderr.flush()
-            
-            if not wine_binary.exists():
-                error_msg = f"Wine binary not found at {wine_binary}"
-                sys.stderr.write(f"[WINE SETUP] ERROR: {error_msg}\n")
-                sys.stderr.flush()
                 self.log("Wine binary not found", "error")
                 self.update_progress_text("Ready")
                 return False
@@ -7966,9 +7951,9 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Step 2: Remove current Wine installation
+            # Step 2: Remove current Wine installation (not applicable for system Wine)
             wine_dir = self.get_wine_dir()
-            if wine_dir.exists():
+            if wine_dir and wine_dir.exists():
                 self.update_progress_text("Removing current Wine installation...")
                 self.update_progress(0.2)
                 self.log(f"Removing current Wine installation: {wine_dir}", "info")
@@ -11468,11 +11453,13 @@ class AffinityInstallerGUI(QMainWindow):
         # Prepare environment variables
         env = os.environ.copy()
         
-        # Set PATH to include Wine binaries
+        # Set PATH to include Wine binaries (only for custom Wine builds)
         wine_dir = self.get_wine_dir()
-        wine_dir_str = str(wine_dir)
-        current_path = env.get("PATH", "")
-        env["PATH"] = f"{wine_dir_str}/bin:{current_path}"
+        if wine_dir:
+            wine_dir_str = str(wine_dir)
+            current_path = env.get("PATH", "")
+            env["PATH"] = f"{wine_dir_str}/bin:{current_path}"
+        # For system Wine, it's already in PATH
         
         # Set Wine-related environment variables
         env["WINE"] = str(wine_bin)
