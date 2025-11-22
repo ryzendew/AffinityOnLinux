@@ -11,8 +11,9 @@ it has major bugs and issues it's why we don't use it.
 
 ## Features
 
-- **Full OpenCL Support** - Hardware acceleration enabled out of the box with Wine 10.4 (patched for OpenCL)
-- **Wine 10.4 with Patches** - Uses Wine 10.4 patched specifically for OpenCL support and AMD GPU fixes
+- **Full OpenCL Support** - Hardware acceleration enabled out of the box with multiple Wine versions (10.4, 10.10, 10.11, 9.14) patched for OpenCL
+- **Multiple Wine Versions** - Choose from Wine 10.4 (recommended), 10.4 v2 (older CPUs), 10.10, 10.11, or 9.14 (legacy) - all patched specifically for OpenCL support and AMD GPU fixes
+- **Wine Version Switching** - Easily switch between Wine versions without reinstalling applications
 - **Automated Installation** - Streamlined setup process with dependency management
 - **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
 - **Desktop Integration** - Automatic desktop entry and shortcut creation
@@ -53,7 +54,7 @@ The AppImage is available from the [GitHub Releases page](https://github.com/ryz
 
 The AppImage includes:
 - ✅ Full GUI installer functionality
-- ✅ Wine 10.4 with patches for AMD GPU fixes
+- ✅ Wine 10.4 with patches for AMD GPU fixes (standard installer supports multiple Wine versions: 10.4, 10.4 v2, 10.10, 10.11, 9.14)
 - ✅ DXVK support for better graphics performance (NVIDIA and AMD GPUs)
 - ✅ Automated dependency management
 - ✅ All installer features (One-Click Setup, Wine Configuration, etc.)
@@ -82,17 +83,31 @@ For more information, see the [release notes](https://github.com/ryzendew/Affini
 
 ## Wine Version
 
-The installer uses **Wine 10.4** which has been specifically patched for:
+The installer supports multiple Wine versions, all patched specifically for Affinity compatibility:
+
+### Available Wine Versions
+
+- **Wine 10.4 (Recommended)** - Latest version with AMD GPU and OpenCL patches. Best compatibility and performance for most systems.
+- **Wine 10.4 v2 (Older CPUs)** - Optimized for older CPUs (V1-V3 generations). Use this if you have a CPU from 2014-2020 (Zen/Broadwell through Zen 2/Coffee Lake).
+- **Wine 10.10** - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.
+- **Wine 10.11** - ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.
+- **Wine 9.14 (Legacy)** - Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.
+
+### Wine Version Features
+
+All Wine versions are specifically patched for:
 
 - **OpenCL Support** - Full hardware acceleration enabled out of the box
 - **AMD GPU Fixes** - Optimized patches for AMD graphics cards
 - **Affinity Compatibility** - Additional fixes and optimizations for running Affinity applications
 
+The installer will automatically detect your CPU and recommend the best Wine version for your system. You can switch between Wine versions at any time using the "Switch Wine Version" feature in the GUI installer.
+
 This patched Wine version is automatically downloaded and configured during setup, providing the best experience for Affinity software on Linux.
 
 ## OpenCL Hardware Acceleration
 
-OpenCL support is fully functional with Wine 10.4 (patched for OpenCL), enabling GPU acceleration for improved performance in Affinity applications. The patched Wine version includes specific fixes for OpenCL and AMD GPU compatibility.
+OpenCL support is fully functional with all supported Wine versions (10.4, 10.4 v2, 10.10, 10.11, 9.14), all patched for OpenCL, enabling GPU acceleration for improved performance in Affinity applications. The patched Wine versions include specific fixes for OpenCL and AMD GPU compatibility.
 
 <img width="2559" height="1441" alt="OpenCL Hardware Acceleration" src="https://github.com/user-attachments/assets/b5350cbf-09a3-4ba2-9e98-aec86a73986b" />
 
@@ -154,8 +169,9 @@ A modern PyQt6-based graphical user interface for the Affinity Linux Installer, 
 A portable AppImage version is also available - see the [AppImage Release](#appimage-release) section below for details. The AppImage is self-contained and doesn't require Python/PyQt6 to be installed system-wide.
 
 **Features:**
-- **One-Click Full Setup** - Automatically detects your distribution, installs dependencies, sets up Wine 10.4 (patched for OpenCL and AMD GPU fixes), and configures everything
-- **Wine 10.4 with Patches** - Uses Wine 10.4 specifically patched for OpenCL support and AMD GPU fixes
+- **One-Click Full Setup** - Automatically detects your distribution, installs dependencies, sets up Wine (patched for OpenCL and AMD GPU fixes), and configures everything
+- **Multiple Wine Versions** - Choose from Wine 10.4 (recommended), 10.4 v2 (older CPUs), 10.10, 10.11, or 9.14 (legacy) - all patched for OpenCL support and AMD GPU fixes
+- **Wine Version Switching** - Switch between Wine versions without reinstalling applications or losing your configuration
 - **System Setup Tools** - Download Affinity installers and install custom Windows applications using the Wine environment
 - **Update Affinity Applications** - Update existing installations without creating new desktop entries or reinstalling dependencies
 - **Automatic WebView2 Runtime Installation** - Automatically detects and installs Microsoft Edge WebView2 Runtime for Affinity v3 to enable Help > View Help functionality
@@ -204,10 +220,11 @@ python AffinityScripts/AffinityLinuxInstaller.py
 **Usage:**
 1. Run the installer - it will automatically attempt to install PyQt6 if needed
 2. Click **"One-Click Full Setup"** for automatic configuration
-3. Wine 10.4 (patched for OpenCL and AMD GPU fixes) will be automatically downloaded and configured
+3. Choose your Wine version (10.4 recommended for most systems, or 10.4 v2 for older CPUs) - Wine will be automatically downloaded and configured with OpenCL and AMD GPU patches
 4. Once Wine is set up, use **"Update Affinity Applications"** to install or update Affinity apps
    - For Affinity v3 (Unified), WebView2 Runtime will be automatically installed if missing
 5. Use **"Troubleshooting"** tools to:
+   - Switch Wine versions if needed (try different versions for better compatibility)
    - Configure Wine settings and renderers
    - Adjust DPI scaling for better UI visibility
    - Reinstall WinMetadata if needed
@@ -322,7 +339,7 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 
 ### Required Dependencies
 
-- Wine (provided automatically - Wine 10.4 patched for OpenCL and AMD GPU fixes)
+- Wine (provided automatically - Multiple Wine versions available: 10.4, 10.4 v2, 10.10, 10.11, or 9.14, all patched for OpenCL and AMD GPU fixes)
 - winetricks
 - wget
 - curl
@@ -335,11 +352,15 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 
 ### Wine Version
 
-The installer uses **Wine 10.4** which has been specifically patched for:
+The installer supports multiple Wine versions, all patched specifically for Affinity compatibility:
 
-- **OpenCL Support** - Full hardware acceleration enabled out of the box
-- **AMD GPU Fixes** - Optimized patches for AMD graphics cards
-- **Affinity Compatibility** - Additional fixes and optimizations for running Affinity applications
+- **Wine 10.4 (Recommended)** - Latest version with AMD GPU and OpenCL patches. Best compatibility and performance for most systems.
+- **Wine 10.4 v2 (Older CPUs)** - Optimized for older CPUs (V1-V3 generations). Use this if you have a CPU from 2014-2020.
+- **Wine 10.10** - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.
+- **Wine 10.11** - ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.
+- **Wine 9.14 (Legacy)** - Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.
+
+All Wine versions are specifically patched for OpenCL support, AMD GPU fixes, and Affinity compatibility. The installer will automatically detect your CPU and recommend the best Wine version for your system. You can switch between Wine versions at any time using the GUI installer.
 
 This patched Wine version is automatically downloaded and configured during setup, providing the best experience for Affinity software on Linux.
 
