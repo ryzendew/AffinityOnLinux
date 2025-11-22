@@ -224,9 +224,20 @@ class AffinityInstallerGUI(QMainWindow):
         step_start = log_timing("QMainWindow.__init__", step_start)
         
         self.setWindowTitle("Affinity Linux Installer")
-        # Use a more reasonable initial size that fits smaller screens
-        self.setMinimumSize(800, 600)
-        self.resize(1000, 700)
+        # Adaptive sizing based on screen size
+        screen = self.screen().availableGeometry()
+        screen_width = screen.width()
+        screen_height = screen.height()
+        
+        # Calculate responsive minimum size (at least 70% of screen, but not less than 640x480)
+        min_width = max(640, int(screen_width * 0.7))
+        min_height = max(480, int(screen_height * 0.7))
+        self.setMinimumSize(min_width, min_height)
+        
+        # Calculate responsive default size (80% of screen, but not more than 1200x900)
+        default_width = min(1200, int(screen_width * 0.8))
+        default_height = min(900, int(screen_height * 0.8))
+        self.resize(default_width, default_height)
         step_start = log_timing("Window setup", step_start)
         
         # Variables
@@ -282,30 +293,23 @@ class AffinityInstallerGUI(QMainWindow):
         self.hide_spinner_signal.connect(self._hide_spinner_safe)
         step_start = log_timing("Signal connections", step_start)
         
-        # Load Affinity icon
-        self.load_affinity_icon()
-        step_start = log_timing("Load icon", step_start)
-        
-        # Setup UI
+        # Setup UI (do this first - needed for window to display)
         self.create_ui()
         step_start = log_timing("Create UI", step_start)
         
-        # Ensure icons directory exists (download from GitHub if needed)
-        # Do this after UI is created so we can log messages
-        self._ensure_icons_directory()
-        step_start = log_timing("Ensure icons directory", step_start)
-        
-        # Apply dark theme (default)
+        # Apply dark theme (default) - needed before showing window
         self.apply_theme()
         step_start = log_timing("Apply theme", step_start)
         
-        # Setup zoom functionality
-        self.setup_zoom()
-        step_start = log_timing("Setup zoom", step_start)
-        
-        # Center window
+        # Center window (fast operation)
         self.center_window()
         step_start = log_timing("Center window", step_start)
+        
+        # Defer non-critical operations to after window is shown
+        # Load Affinity icon (non-blocking, will load in background if needed)
+        # Setup zoom functionality (can be done after window is shown)
+        # Icons will be ensured in background - don't block startup
+        # Icons from local directory will work immediately
         
         # Don't auto-start initialization - user will click button
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -332,13 +336,27 @@ class AffinityInstallerGUI(QMainWindow):
         # Start background tasks after window is shown
         # Use QTimer to defer these operations until after the window is displayed
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(100, self._deferred_startup_tasks)
+        QTimer.singleShot(50, self._deferred_startup_tasks)
     
     def _deferred_startup_tasks(self):
         """Run slow startup tasks in background after window is shown"""
+        # Load Affinity icon (non-blocking, will load in background if needed)
+        self.load_affinity_icon()
+        
+        # Setup zoom functionality (can be done after window is shown)
+        self.setup_zoom()
+        
         def run_background_tasks():
             import time as time_module
             bg_start = time_module.time()
+            
+            # Ensure icons directory exists (download from GitHub if needed) - do this first
+            icons_start = time_module.time()
+            self._ensure_icons_directory()
+            icons_time = time_module.time() - icons_start
+            if icons_time > 0.1:
+                # Update icons after download completes
+                QTimer.singleShot(100, self._update_button_icons)
             
             # Ensure patcher files are available (silently) - might download from network
             patcher_start = time_module.time()
@@ -353,8 +371,8 @@ class AffinityInstallerGUI(QMainWindow):
             total_bg_time = time_module.time() - bg_start
             
             # Log timing in GUI (thread-safe via signal)
-            if patcher_time > 0.1 or status_time > 0.1:
-                self.log(f"Background tasks completed: patcher={patcher_time:.3f}s, status={status_time:.3f}s, total={total_bg_time:.3f}s", "info")
+            if icons_time > 0.1 or patcher_time > 0.1 or status_time > 0.1:
+                self.log(f"Background tasks completed: icons={icons_time:.3f}s, patcher={patcher_time:.3f}s, status={status_time:.3f}s, total={total_bg_time:.3f}s", "info")
             
             # Update welcome message based on Wine status
             wine_path = self.get_wine_path("wine")
@@ -397,11 +415,15 @@ class AffinityInstallerGUI(QMainWindow):
         # Update system status indicator
         if hasattr(self, 'system_status_label'):
             if wine_exists:
-                self.system_status_label.setStyleSheet("font-size: 14px; color: #4ec9b0; padding: 0 5px;")
+                self.system_status_label.setStyleSheet("font-size: 12px; color: #4ec9b0; background-color: transparent; border: none; padding: 0px;")
                 self.system_status_label.setToolTip(f"System Status: Ready - {wine_version_display} is installed")
+                if hasattr(self, 'status_text_label'):
+                    self.status_text_label.setText("Ready")
             else:
-                self.system_status_label.setStyleSheet("font-size: 14px; color: #f48771; padding: 0 5px;")
+                self.system_status_label.setStyleSheet("font-size: 12px; color: #f48771; background-color: transparent; border: none; padding: 0px;")
                 self.system_status_label.setToolTip("System Status: Not Ready - Wine needs to be installed")
+                if hasattr(self, 'status_text_label'):
+                    self.status_text_label.setText("Not Ready")
         
         # Log Wine status
         if wine_exists:
@@ -639,10 +661,11 @@ class AffinityInstallerGUI(QMainWindow):
         if not icon_name:
             return None
         
-        # Use standard location in user's config directory
+        theme_suffix = "light" if self.dark_mode else "dark"
+        
+        # First check standard location in user's config directory
         # This works even when script is piped from curl
         icons_dir = Path.home() / ".config" / "AffinityOnLinux" / "AffinityScripts" / "icons"
-        theme_suffix = "light" if self.dark_mode else "dark"
         
         # Check for theme-specific icon first
         themed_icon_path = icons_dir / f"{icon_name}-{theme_suffix}.svg"
@@ -653,6 +676,17 @@ class AffinityInstallerGUI(QMainWindow):
         base_icon_path = icons_dir / f"{icon_name}.svg"
         if base_icon_path.exists():
             return base_icon_path
+        
+        # Fallback to local script directory (for development/local installations)
+        local_icons_dir = Path(__file__).parent / "icons"
+        if local_icons_dir.exists():
+            local_themed_icon = local_icons_dir / f"{icon_name}-{theme_suffix}.svg"
+            if local_themed_icon.exists():
+                return local_themed_icon
+            
+            local_base_icon = local_icons_dir / f"{icon_name}.svg"
+            if local_base_icon.exists():
+                return local_base_icon
         
         return None
 
@@ -824,277 +858,464 @@ class AffinityInstallerGUI(QMainWindow):
             self._apply_light_theme()
     
     def _apply_dark_theme(self):
-        """Apply modern dark theme"""
+        """Apply modern dark theme with card-based design"""
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #1c1c1c;
+                background-color: #1a1a1a;
             }
             QWidget {
-                background-color: #1c1c1c;
-                color: #dcdcdc;
-                font-family: 'Segoe UI', sans-serif;
+                background-color: #1a1a1a;
+                color: #e0e0e0;
+                font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+                font-size: 13px;
             }
-            QGroupBox {
-                border: 1px solid #2d2d2d;
-                background-color: #252526;
-                margin-top: 8px;
-                padding-top: 12px;
+            /* Top Bar */
+            QFrame#topBar {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #2a2a2a, stop:1 #1f1f1f);
+                border-bottom: 2px solid #333333;
+            }
+            QLabel#titleLabel {
+                font-size: 20px;
+                font-weight: 600;
+                color: #ffffff;
+                letter-spacing: -0.5px;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QLabel#statusIndicator {
+                font-size: 12px;
+                color: #666666;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QLabel#statusText {
+                font-size: 12px;
+                color: #999999;
+                font-weight: 500;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QPushButton#themeToggle {
+                background-color: #333333;
+                color: #e0e0e0;
+                border: 1px solid #444444;
                 border-radius: 8px;
+                font-size: 18px;
             }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 2px 8px;
-                background-color: #3c3c3c;
-                color: #dcdcdc;
-                font-weight: bold;
-                font-size: 10px;
-                border-radius: 4px;
-                margin-left: 10px;
+            QPushButton#themeToggle:hover {
+                background-color: #3d3d3d;
+                border-color: #555555;
             }
-            QFrame {
-                background-color: #252526;
+            /* Content Area */
+            QWidget#contentArea {
+                background-color: #1a1a1a;
+            }
+            /* Status Card */
+            QFrame#statusCard {
+                background-color: #252525;
+                border: 1px solid #333333;
+                border-radius: 12px;
+            }
+            QLabel#sectionTitle {
+                font-size: 16px;
+                font-weight: 600;
+                color: #ffffff;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            /* Progress Section */
+            QFrame#progressSection {
+                background-color: #1e1e1e;
+                border: 1px solid #2d2d2d;
+                border-radius: 8px;
+                padding: 12px;
+            }
+            QLabel#progressLabel {
+                font-size: 12px;
+                font-weight: 500;
+                color: #b0b0b0;
+                padding: 8px 12px;
+                background-color: transparent;
                 border: none;
                 border-radius: 0px;
             }
-            QPushButton {
-                background-color: #3c3c3c;
-                color: #f0f0f0;
-                border: 1px solid #555555;
-                padding: 8px 12px;
-                min-height: 28px;
-                font-size: 11px;
-                font-weight: 500;
-                text-align: left;
+            QProgressBar#progressBar {
+                border: none;
+                background-color: #1a1a1a;
+                height: 8px;
+                border-radius: 4px;
+            }
+            QProgressBar#progressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4ec9b0, stop:1 #5dd9c0);
+                border-radius: 4px;
+            }
+            QPushButton#cancelButton {
+                background-color: #d32f2f;
+                color: #ffffff;
+                border: none;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton#cancelButton:hover {
+                background-color: #e53935;
+            }
+            QPushButton#cancelButton:pressed {
+                background-color: #b71c1c;
+            }
+            /* Log Section */
+            QFrame#logSection {
+                background-color: #1e1e1e;
+                border: 1px solid #2d2d2d;
+                border-radius: 8px;
+                padding: 12px;
+            }
+            QFrame#zoomToolbar {
+                background-color: transparent;
+                border: none;
+            }
+            QPushButton#zoomButton {
+                background-color: #2d2d2d;
+                color: #b0b0b0;
+                border: 1px solid #3d3d3d;
                 border-radius: 6px;
             }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-                border-color: #6a6a6a;
+            QPushButton#zoomButton:hover {
+                background-color: #3a3a3a;
+                border-color: #4a4a4a;
                 color: #ffffff;
             }
-            QPushButton:disabled {
-                background-color: #2a2a2a;
-                color: #555555;
-                border-color: #3a3a3a;
-            }
-            QPushButton:pressed {
-                background-color: #2d2d2d;
-                border-color: #4a4a4a;
-            }
-            QPushButton[class="primary"] {
-                background-color: #6b8e6b;
-                color: #000000;
-                font-weight: bold;
-                font-size: 12px;
-                border: 1px solid #5a7a5a;
-            }
-            QPushButton[class="primary"]:hover {
-                background-color: #7a9e7a;
-                border-color: #6b8e6b;
-                color: #000000;
-            }
-            QTextEdit {
-                background-color: #1a1a1a;
-                color: #d4d4d4;
-                border: 1px solid #333333;
-                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                font-size: 11px;
-                border-radius: 8px;
-                selection-background-color: #007acc;
-                padding: 8px;
-            }
-            QProgressBar {
-                border: none;
-                background-color: #2d2d30;
-                height: 10px;
-                border-radius: 5px;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #8ff361, stop:1 #9af471);
-                border-radius: 5px;
-            }
-            QLabel {
-                color: #dcdcdc;
-            }
-            QToolTip {
-                background-color: #2d2d30;
-                color: #dcdcdc;
-                border: 1px solid #4a4a4a;
-                padding: 6px;
-                border-radius: 4px;
-                font-size: 10px;
-            }
-            QDialog {
-                background-color: #252526;
-                border-radius: 12px;
-            }
-            QMessageBox {
-                background-color: #252526;
-                border-radius: 12px;
-            }
-            QRadioButton {
-                color: #dcdcdc;
-                spacing: 8px;
-            }
-            QRadioButton::indicator {
-                width: 16px;
-                height: 16px;
-                border-radius: 8px;
-                border: 2px solid #555555;
-                background-color: #3c3c3c;
-            }
-            QRadioButton::indicator:hover {
-                border-color: #6a6a6a;
-            }
-            QRadioButton::indicator:checked {
-                background-color: #007acc;
-                border-color: #007acc;
-            }
-            QDialogButtonBox QPushButton {
-                border-radius: 8px;
-                min-width: 80px;
-                padding: 8px 16px;
-            }
-            QPushButton[zoomButton="true"] {
-                background-color: #2d2d2d;
-                color: #dcdcdc;
-                border: 1px solid #4a4a4a;
-                padding: 4px 8px;
-                min-height: 24px;
-                max-width: 35px;
-                font-size: 14px;
-                border-radius: 6px;
-            }
-            QPushButton[zoomButton="true"]:hover {
-                background-color: #3c3c3c;
-                border-color: #5a5a5a;
-            }
-            QPushButton[zoomButton="true"]:disabled {
-                background-color: #252526;
+            QPushButton#zoomButton:disabled {
+                background-color: #252525;
                 color: #555555;
                 border-color: #2d2d2d;
             }
-            QPushButton[cancelButton="true"] {
-                background-color: #c74e4e;
+            QTextEdit#logText {
+                background-color: #0d0d0d;
+                color: #d4d4d4;
+                border: 1px solid #2d2d2d;
+                border-radius: 8px;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 11px;
+                padding: 12px;
+                selection-background-color: #007acc;
+            }
+            /* Button Cards */
+            QFrame#buttonCard {
+                background-color: #252525;
+                border: 1px solid #333333;
+                border-radius: 12px;
+            }
+            QPushButton#actionButton {
+                background-color: #2d2d2d;
+                color: #e0e0e0;
+                border: 1px solid #3d3d3d;
+                padding: 12px 16px;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 500;
+                text-align: left;
+                min-width: 200px;
+            }
+            QPushButton#actionButton:hover {
+                background-color: #353535;
+                border-color: #4d4d4d;
                 color: #ffffff;
-                border: 1px solid #a33a3a;
-                padding: 4px 8px;
-                min-height: 24px;
-                max-width: 30px;
-                font-size: 16px;
-                font-weight: bold;
+            }
+            QPushButton#actionButton:pressed {
+                background-color: #252525;
+                border-color: #3d3d3d;
+            }
+            QPushButton#actionButton:disabled {
+                background-color: #1f1f1f;
+                color: #555555;
+                border-color: #2d2d2d;
+            }
+            QPushButton#actionButton[class="primary"] {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #4ec9b0, stop:1 #3db9a0);
+                color: #000000;
+                font-weight: 600;
+                font-size: 14px;
+                border: none;
+            }
+            QPushButton#actionButton[class="primary"]:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #5dd9c0, stop:1 #4ec9b0);
+            }
+            QPushButton#actionButton[class="primary"]:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #3db9a0, stop:1 #2da990);
+            }
+            /* Scroll Area */
+            QScrollArea#rightScroll {
+                background-color: #1a1a1a;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background-color: #1a1a1a;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #3d3d3d;
+                border-radius: 5px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #4d4d4d;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QToolTip {
+                background-color: #2d2d2d;
+                color: #e0e0e0;
+                border: 1px solid #444444;
+                padding: 6px;
                 border-radius: 6px;
+                font-size: 11px;
             }
-            QPushButton[cancelButton="true"]:hover {
-                background-color: #d95f5f;
-                border-color: #b74a4a;
+            QDialog {
+                background-color: #252525;
+                border-radius: 12px;
             }
-            QPushButton[cancelButton="true"]:pressed {
-                background-color: #a33a3a;
+            QMessageBox {
+                background-color: #252525;
+                border-radius: 12px;
             }
         """)
     
     def _apply_light_theme(self):
-        """Apply modern light theme"""
+        """Apply modern light theme with card-based design"""
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #f5f5f5;
+                background-color: #f5f5f7;
             }
             QWidget {
-                background-color: #f5f5f5;
-                color: #2d2d2d;
-                font-family: 'Segoe UI', sans-serif;
+                background-color: #f5f5f7;
+                color: #1d1d1f;
+                font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+                font-size: 13px;
             }
-            QGroupBox {
+            /* Top Bar */
+            QFrame#topBar {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ffffff, stop:1 #f5f5f7);
+                border-bottom: 2px solid #e0e0e0;
+            }
+            QLabel#titleLabel {
+                font-size: 20px;
+                font-weight: 600;
+                color: #1d1d1f;
+                letter-spacing: -0.5px;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QLabel#statusIndicator {
+                font-size: 12px;
+                color: #86868b;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QLabel#statusText {
+                font-size: 12px;
+                color: #515154;
+                font-weight: 500;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            QPushButton#themeToggle {
+                background-color: #e5e5e7;
+                color: #1d1d1f;
                 border: 1px solid #d0d0d0;
-                background-color: #ffffff;
-                margin-top: 8px;
-                padding-top: 12px;
                 border-radius: 8px;
+                font-size: 18px;
             }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 2px 8px;
-                background-color: #e0e0e0;
-                color: #2d2d2d;
-                font-weight: bold;
-                font-size: 10px;
-                border-radius: 4px;
-                margin-left: 10px;
+            QPushButton#themeToggle:hover {
+                background-color: #d5d5d7;
+                border-color: #c0c0c0;
             }
-            QFrame {
+            /* Content Area */
+            QWidget#contentArea {
+                background-color: #f5f5f7;
+            }
+            /* Status Card */
+            QFrame#statusCard {
                 background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 12px;
+            }
+            QLabel#sectionTitle {
+                font-size: 16px;
+                font-weight: 600;
+                color: #1d1d1f;
+                background-color: transparent;
+                border: none;
+                padding: 0px;
+            }
+            /* Progress Section */
+            QFrame#progressSection {
+                background-color: #fafafa;
+                border: 1px solid #e5e5e7;
+                border-radius: 8px;
+                padding: 12px;
+            }
+            QLabel#progressLabel {
+                font-size: 12px;
+                font-weight: 500;
+                color: #515154;
+                padding: 8px 12px;
+                background-color: transparent;
                 border: none;
                 border-radius: 0px;
             }
-            QPushButton {
-                background-color: #e0e0e0;
-                color: #2d2d2d;
-                border: 1px solid #c0c0c0;
-                padding: 8px 12px;
-                min-height: 28px;
-                font-size: 11px;
-                font-weight: 500;
-                text-align: left;
+            QProgressBar#progressBar {
+                border: none;
+                background-color: #e5e5e7;
+                height: 8px;
+                border-radius: 4px;
+            }
+            QProgressBar#progressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #34c759, stop:1 #30d158);
+                border-radius: 4px;
+            }
+            QPushButton#cancelButton {
+                background-color: #ff3b30;
+                color: #ffffff;
+                border: none;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton#cancelButton:hover {
+                background-color: #ff453a;
+            }
+            QPushButton#cancelButton:pressed {
+                background-color: #d70015;
+            }
+            /* Log Section */
+            QFrame#logSection {
+                background-color: #fafafa;
+                border: 1px solid #e5e5e7;
+                border-radius: 8px;
+                padding: 12px;
+            }
+            QFrame#zoomToolbar {
+                background-color: transparent;
+                border: none;
+            }
+            QPushButton#zoomButton {
+                background-color: #ffffff;
+                color: #515154;
+                border: 1px solid #d0d0d0;
                 border-radius: 6px;
             }
-            QPushButton:hover {
-                background-color: #d0d0d0;
-                border-color: #a0a0a0;
-                color: #1a1a1a;
+            QPushButton#zoomButton:hover {
+                background-color: #f5f5f7;
+                border-color: #c0c0c0;
+                color: #1d1d1f;
             }
-            QPushButton:disabled, QPushButton[class="primary"]:disabled {
-                background-color: #e0e0e0;
-                color: #a0a0a0;
-                border: 1px solid #c5c5c5;
+            QPushButton#zoomButton:disabled {
+                background-color: #f5f5f7;
+                color: #86868b;
+                border-color: #e0e0e0;
             }
-            QPushButton[class="primary"] {
-                background-color: #9bc49b;
-                color: #1c1c1c;
-                font-weight: bold;
-                font-size: 12px;
-                border: 1px solid #8ab48a;
-            }
-            QPushButton[class="primary"]:hover {
-                background-color: #a8d0a8;
-                border-color: #9bc49b;
-            }
-            QTextEdit {
-                background-color: #fafafa;
-                color: #1a1a1a;
-                border: 1px solid #d0d0d0;
+            QTextEdit#logText {
+                background-color: #ffffff;
+                color: #1d1d1f;
+                border: 1px solid #e5e5e7;
+                border-radius: 8px;
                 font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
                 font-size: 11px;
+                padding: 12px;
+                selection-background-color: #007aff;
+            }
+            /* Button Cards */
+            QFrame#buttonCard {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 12px;
+            }
+            QPushButton#actionButton {
+                background-color: #f5f5f7;
+                color: #1d1d1f;
+                border: 1px solid #e5e5e7;
+                padding: 12px 16px;
                 border-radius: 8px;
-                selection-background-color: #b3d9ff;
-                padding: 8px;
+                font-size: 13px;
+                font-weight: 500;
+                text-align: left;
+                min-width: 200px;
             }
-            QProgressBar {
+            QPushButton#actionButton:hover {
+                background-color: #ffffff;
+                border-color: #d0d0d0;
+                color: #000000;
+            }
+            QPushButton#actionButton:pressed {
+                background-color: #e5e5e7;
+                border-color: #c0c0c0;
+            }
+            QPushButton#actionButton:disabled {
+                background-color: #f5f5f7;
+                color: #86868b;
+                border-color: #e5e5e7;
+            }
+            QPushButton#actionButton[class="primary"] {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #34c759, stop:1 #30d158);
+                color: #ffffff;
+                font-weight: 600;
+                font-size: 14px;
                 border: none;
-                background-color: #e0e0e0;
-                height: 10px;
-                border-radius: 5px;
-                text-align: center;
             }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4caf50, stop:1 #66bb6a);
+            QPushButton#actionButton[class="primary"]:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #30d158, stop:1 #2dd45f);
+            }
+            QPushButton#actionButton[class="primary"]:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #28cd55, stop:1 #24c04f);
+            }
+            /* Scroll Area */
+            QScrollArea#rightScroll {
+                background-color: #f5f5f7;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background-color: #f5f5f7;
+                width: 10px;
                 border-radius: 5px;
             }
-            QLabel {
-                color: #2d2d2d;
+            QScrollBar::handle:vertical {
+                background-color: #d0d0d0;
+                border-radius: 5px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #c0c0c0;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
             QToolTip {
-                background-color: #ffffff;
-                color: #2d2d2d;
-                border: 1px solid #c0c0c0;
+                background-color: #1d1d1f;
+                color: #ffffff;
+                border: 1px solid #2d2d2f;
                 padding: 6px;
-                border-radius: 4px;
-                font-size: 10px;
+                border-radius: 6px;
+                font-size: 11px;
             }
             QDialog {
                 background-color: #ffffff;
@@ -1103,132 +1324,18 @@ class AffinityInstallerGUI(QMainWindow):
             QMessageBox {
                 background-color: #ffffff;
                 border-radius: 12px;
-            }
-            QRadioButton {
-                color: #2d2d2d;
-                spacing: 8px;
-            }
-            QRadioButton::indicator {
-                width: 16px;
-                height: 16px;
-                border-radius: 8px;
-                border: 2px solid #c0c0c0;
-                background-color: #f5f5f5;
-            }
-            QRadioButton::indicator:hover {
-                border-color: #a0a0a0;
-            }
-            QRadioButton::indicator:checked {
-                background-color: #4caf50;
-                border-color: #4caf50;
-            }
-            QDialogButtonBox QPushButton {
-                border-radius: 8px;
-                min-width: 80px;
-                padding: 8px 16px;
-            }
-            QPushButton[zoomButton="true"] {
-                background-color: #e0e0e0;
-                color: #2d2d2d;
-                border: 1px solid #c0c0c0;
-                padding: 4px 8px;
-                min-height: 24px;
-                max-width: 35px;
-                font-size: 14px;
-                border-radius: 6px;
-            }
-            QPushButton[zoomButton="true"]:hover {
-                background-color: #d0d0d0;
-                border-color: #a0a0a0;
-            }
-            QPushButton[zoomButton="true"]:disabled {
-                background-color: #e0e0e0;
-                color: #a0a0a0;
-                border-color: #c5c5c5;
-            }
-            QPushButton[cancelButton="true"] {
-                background-color: #f44336;
-                color: #ffffff;
-                border: 1px solid #d32f2f;
-                padding: 4px 8px;
-                min-height: 24px;
-                max-width: 30px;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton[cancelButton="true"]:hover {
-                background-color: #e57373;
-                border-color: #ef5350;
-            }
-            QPushButton[cancelButton="true"]:pressed {
-                background-color: #d32f2f;
             }
         """)
     
     def _update_theme_button_style(self):
         """Update theme toggle button styling based on current theme"""
-        if hasattr(self, 'theme_toggle_btn'):
-            if self.dark_mode:
-                self.theme_toggle_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #3c3c3c;
-                        color: #f0f0f0;
-                        border: 1px solid #555555;
-                        padding: 0px;
-                        min-height: 32px;
-                        max-height: 32px;
-                        min-width: 40px;
-                        max-width: 40px;
-                        font-size: 18px;
-                        border-radius: 6px;
-                        text-align: center;
-                    }
-                    QPushButton:hover {
-                        background-color: #4a4a4a;
-                        border-color: #6a6a6a;
-                    }
-                """)
-            else:
-                self.theme_toggle_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e0e0e0;
-                        color: #2d2d2d;
-                        border: 1px solid #c0c0c0;
-                        padding: 0px;
-                        min-height: 32px;
-                        max-height: 32px;
-                        min-width: 40px;
-                        max-width: 40px;
-                        font-size: 18px;
-                        border-radius: 6px;
-                        text-align: center;
-                    }
-                    QPushButton:hover {
-                        background-color: #d0d0d0;
-                        border-color: #a0a0a0;
-                    }
-                """)
+        # Theme button styling is now handled by the main stylesheet
+        pass
     
     def _update_top_bar_style(self):
         """Update top bar styling based on current theme"""
-        if hasattr(self, 'top_bar'):
-            if self.dark_mode:
-                self.top_bar.setStyleSheet(
-                    "background-color: #2d2d2d; padding: 10px 15px; "
-                    "border-top-left-radius: 8px; border-top-right-radius: 8px;"
-                )
-            else:
-                self.top_bar.setStyleSheet(
-                    "background-color: #e8e8e8; padding: 10px 15px; "
-                    "border-top-left-radius: 8px; border-top-right-radius: 8px;"
-                )
-        
-        if hasattr(self, 'title_label'):
-            if self.dark_mode:
-                self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
-            else:
-                self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #1a1a1a;")
+        # Top bar styling is now handled by the main stylesheet
+        pass
     
     def _update_right_scroll_style(self):
         """Update right scroll area styling based on current theme"""
@@ -1292,256 +1399,330 @@ class AffinityInstallerGUI(QMainWindow):
             if self.dark_mode:
                 self.progress_label.setStyleSheet(
                     "font-size: 11px; font-weight: 500; color: #dcdcdc; "
-                    "padding: 5px 10px; background-color: #2d2d2d; border-radius: 4px;"
+                    "padding: 5px 10px; background-color: transparent; border: none; border-radius: 0px;"
                 )
             else:
                 self.progress_label.setStyleSheet(
                     "font-size: 11px; font-weight: 500; color: #2d2d2d; "
-                    "padding: 5px 10px; background-color: #e0e0e0; border-radius: 4px;"
+                    "padding: 5px 10px; background-color: transparent; border: none; border-radius: 0px;"
                 )
     
     def create_ui(self):
-        """Create the user interface"""
-        # Central widget
+        """Create the modern user interface"""
+        # Central widget with modern styling
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout
+        # Main layout with proper spacing
         main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(0)
-        main_layout.setContentsMargins(1, 1, 1, 1)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Top bar
+        # Modern top bar with gradient effect (responsive)
+        screen = self.screen().availableGeometry()
+        screen_width = screen.width()
+        
+        # Adaptive top bar height and margins
+        if screen_width < 1024:
+            top_bar_height = 56
+            top_bar_margin = 12
+            top_bar_spacing = 12
+            icon_size = 32
+        else:
+            top_bar_height = 64
+            top_bar_margin = 24
+            top_bar_spacing = 16
+            icon_size = 40
+        
         self.top_bar = QFrame()
-        self.top_bar.setStyleSheet("background-color: #2d2d2d; padding: 10px 15px; border-top-left-radius: 8px; border-top-right-radius: 8px;")
+        self.top_bar.setFixedHeight(top_bar_height)
+        self.top_bar.setObjectName("topBar")
         top_bar_layout = QHBoxLayout(self.top_bar)
-        top_bar_layout.setContentsMargins(15, 10, 15, 10)
+        top_bar_layout.setContentsMargins(top_bar_margin, 12, top_bar_margin, 12)
+        top_bar_layout.setSpacing(top_bar_spacing)
         
         # Add Affinity icon if available
         if hasattr(self, 'affinity_icon_path') and self.affinity_icon_path:
             try:
-                # Try to use QSvgWidget for proper SVG rendering
+                icon = QIcon(self.affinity_icon_path)
+                self.setWindowIcon(icon)
+                
                 try:
-                    # Set window icon
-                    icon = QIcon(self.affinity_icon_path)
-                    self.setWindowIcon(icon)
-                    
-                    # Use QSvgWidget for proper SVG display
                     svg_widget = QSvgWidget(self.affinity_icon_path)
-                    svg_widget.setFixedSize(32, 32)
+                    svg_widget.setFixedSize(icon_size, icon_size)
                     svg_widget.setStyleSheet("background: transparent;")
                     top_bar_layout.addWidget(svg_widget)
-                    top_bar_layout.addSpacing(5)
                 except Exception:
-                    # Fallback to QIcon if QSvgWidget fails
-                    icon = QIcon(self.affinity_icon_path)
-                    self.setWindowIcon(icon)
-                    
                     icon_label = QLabel()
-                    pixmap = icon.pixmap(32, 32)
+                    pixmap = icon.pixmap(icon_size, icon_size)
                     if not pixmap.isNull():
-                        icon_label.setPixmap(pixmap.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                        icon_label.setFixedSize(32, 32)
+                        icon_label.setPixmap(pixmap.scaled(icon_size, icon_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                        icon_label.setFixedSize(icon_size, icon_size)
                         top_bar_layout.addWidget(icon_label)
-                        top_bar_layout.addSpacing(5)
-            except Exception as e:
-                pass  # If icon loading fails, continue without icon
+            except Exception:
+                pass
         
-        self.title_label = QLabel("Affinity on Linux Installer")
-        self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        # Title with better typography (responsive, transparent background)
+        self.title_label = QLabel("Affinity on Linux")
+        self.title_label.setObjectName("titleLabel")
+        # Adjust font size for small screens and ensure transparent background
+        if screen_width < 1024:
+            self.title_label.setStyleSheet("font-size: 18px; font-weight: 600; background-color: transparent; border: none; padding: 0px;")
+        else:
+            self.title_label.setStyleSheet("background-color: transparent; border: none; padding: 0px;")
         top_bar_layout.addWidget(self.title_label)
+        
         top_bar_layout.addStretch()
         
-        # Add system status indicator in top bar
-        self.system_status_label = QLabel("●")
-        self.system_status_label.setStyleSheet(
-            "font-size: 14px; color: #666666; padding: 0 5px;"
-        )
-        self.system_status_label.setToolTip("System Status: Initializing...")
-        top_bar_layout.addWidget(self.system_status_label)
-        top_bar_layout.addSpacing(12)
+        # System status indicator with better design
+        status_container = QWidget()
+        status_container.setStyleSheet("background-color: transparent; border: none;")
+        status_layout = QHBoxLayout(status_container)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(8)
         
-        # Add theme toggle button
+        self.system_status_label = QLabel("●")
+        self.system_status_label.setObjectName("statusIndicator")
+        self.system_status_label.setToolTip("System Status: Initializing...")
+        status_layout.addWidget(self.system_status_label)
+        
+        status_text = QLabel("Initializing...")
+        status_text.setObjectName("statusText")
+        # Hide status text on very small screens to save space
+        if screen_width < 800:
+            status_text.setVisible(False)
+        status_layout.addWidget(status_text)
+        self.status_text_label = status_text
+        
+        top_bar_layout.addWidget(status_container)
+        
+        # Theme toggle button with modern design (responsive)
         self.theme_toggle_btn = QPushButton("☀")
-        self.theme_toggle_btn.setToolTip("Switch to Light Mode")
-        self.theme_toggle_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3c3c3c;
-                color: #f0f0f0;
-                border: 1px solid #555555;
-                padding: 0px;
-                min-height: 32px;
-                max-height: 32px;
-                min-width: 40px;
-                max-width: 40px;
-                font-size: 18px;
-                border-radius: 6px;
-                text-align: center;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-                border-color: #6a6a6a;
-            }
-        """)
+        self.theme_toggle_btn.setObjectName("themeToggle")
+        self.theme_toggle_btn.setToolTip("Switch Theme")
+        self.theme_toggle_btn.setFixedSize(icon_size, icon_size)
         self.theme_toggle_btn.clicked.connect(self.toggle_theme)
         top_bar_layout.addWidget(self.theme_toggle_btn)
         
         main_layout.addWidget(self.top_bar)
         
-        # Content area with scroll support
+        # Content area with modern card layout (responsive)
         content_widget = QWidget()
+        content_widget.setObjectName("contentArea")
         content_layout = QHBoxLayout(content_widget)
-        content_layout.setSpacing(10)
-        content_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Left panel - Status/Log
+        # Adaptive spacing and margins based on screen size
+        if screen_width < 1024:
+            content_spacing = 12
+            content_margin = 12
+            right_panel_min = 280
+            right_panel_max = 320
+        elif screen_width < 1280:
+            content_spacing = 16
+            content_margin = 16
+            right_panel_min = 320
+            right_panel_max = 380
+        else:
+            content_spacing = 20
+            content_margin = 20
+            right_panel_min = 360
+            right_panel_max = 420
+        
+        content_layout.setSpacing(content_spacing)
+        content_layout.setContentsMargins(content_margin, content_margin, content_margin, content_margin)
+        
+        # Left panel - Status/Log with modern card design
         left_panel = self.create_status_section()
-        content_layout.addWidget(left_panel, stretch=3)
+        content_layout.addWidget(left_panel, stretch=2)
         
-        # Right panel - Buttons (wrapped in scroll area for small screens)
+        # Right panel - Buttons with modern scroll area (responsive width)
         right_scroll = QScrollArea()
         right_scroll.setWidgetResizable(True)
         right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         right_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.right_scroll = right_scroll  # Store reference for theme updates
+        right_scroll.setObjectName("rightScroll")
+        self.right_scroll = right_scroll
         self._update_right_scroll_style()
         
         right_panel = self.create_button_sections()
         right_scroll.setWidget(right_panel)
-        right_scroll.setMinimumWidth(320)
-        right_scroll.setMaximumWidth(400)
+        right_scroll.setMinimumWidth(right_panel_min)
+        right_scroll.setMaximumWidth(right_panel_max)
         
         content_layout.addWidget(right_scroll, stretch=1)
         
         main_layout.addWidget(content_widget, stretch=1)
     
     def create_status_section(self):
-        """Create the status/log output section"""
-        group = QGroupBox("Status & Log Output")
-        group_layout = QVBoxLayout(group)
-        group_layout.setSpacing(8)
-        group_layout.setContentsMargins(12, 22, 12, 12)
+        """Create the modern status/log output section (responsive)"""
+        # Get screen size for responsive design
+        screen = self.screen().availableGeometry()
+        screen_width = screen.width()
         
-        # Progress status label (above progress bar)
+        # Adaptive spacing and margins
+        if screen_width < 1024:
+            card_spacing = 12
+            card_margin = 12
+        elif screen_width < 1280:
+            card_spacing = 14
+            card_margin = 16
+        else:
+            card_spacing = 16
+            card_margin = 20
+        
+        # Main card container
+        card = QFrame()
+        card.setObjectName("statusCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(card_spacing)
+        card_layout.setContentsMargins(card_margin, card_margin, card_margin, card_margin)
+        
+        # Header with title
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("Status & Log")
+        title.setObjectName("sectionTitle")
+        header.addWidget(title)
+        header.addStretch()
+        card_layout.addLayout(header)
+        
+        # Progress section with modern design
+        progress_section = QFrame()
+        progress_section.setObjectName("progressSection")
+        progress_layout = QVBoxLayout(progress_section)
+        progress_layout.setSpacing(8)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Progress status label
         self.progress_label = QLabel("Ready")
-        self.progress_label.setStyleSheet(
-            "font-size: 11px; font-weight: 500; color: #dcdcdc; "
-            "padding: 5px 10px; background-color: #2d2d2d; border-radius: 4px;"
-        )
+        self.progress_label.setObjectName("progressLabel")
         self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        group_layout.addWidget(self.progress_label)
+        progress_layout.addWidget(self.progress_label)
         
         # Progress bar and cancel button container
-        progress_container = QWidget()
-        progress_container_layout = QHBoxLayout(progress_container)
-        progress_container_layout.setContentsMargins(0, 0, 0, 0)
-        progress_container_layout.setSpacing(8)
+        progress_container = QHBoxLayout()
+        progress_container.setSpacing(12)
+        progress_container.setContentsMargins(0, 0, 0, 0)
         
         self.progress = QProgressBar()
+        self.progress.setObjectName("progressBar")
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
-        progress_container_layout.addWidget(self.progress, stretch=1)
+        self.progress.setFixedHeight(8)
+        progress_container.addWidget(self.progress, stretch=1)
         
         # Cancel button (hidden by default)
         self.cancel_btn = QPushButton("✕")
+        self.cancel_btn.setObjectName("cancelButton")
         self.cancel_btn.setToolTip("Cancel current operation")
-        self.cancel_btn.setProperty("cancelButton", True)
-        self.cancel_btn.setMaximumWidth(30)
-        self.cancel_btn.setMinimumWidth(30)
+        self.cancel_btn.setFixedSize(32, 32)
         self.cancel_btn.setVisible(False)
         self.cancel_btn.clicked.connect(self.cancel_operation)
-        progress_container_layout.addWidget(self.cancel_btn)
+        progress_container.addWidget(self.cancel_btn)
         
-        group_layout.addWidget(progress_container)
+        progress_layout.addLayout(progress_container)
+        card_layout.addWidget(progress_section)
         
-        # Log and zoom controls container
-        log_container = QWidget()
-        log_layout = QVBoxLayout(log_container)
-        log_layout.setContentsMargins(0, 5, 0, 0)
-        log_layout.setSpacing(5)
-
-        # Zoom controls
-        zoom_container = QWidget()
-        zoom_layout = QHBoxLayout(zoom_container)
+        # Log section with modern design
+        log_section = QFrame()
+        log_section.setObjectName("logSection")
+        log_layout = QVBoxLayout(log_section)
+        log_layout.setSpacing(12)
+        log_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Zoom controls toolbar
+        zoom_toolbar = QFrame()
+        zoom_toolbar.setObjectName("zoomToolbar")
+        zoom_layout = QHBoxLayout(zoom_toolbar)
         zoom_layout.setContentsMargins(0, 0, 0, 0)
-        zoom_layout.setSpacing(5)
+        zoom_layout.setSpacing(8)
         zoom_layout.addStretch()
         
-        # Get icon path
-        icons_dir = Path(__file__).parent / "icons"
-        
-        # Zoom out button
-        self.zoom_out_btn = QPushButton()
-        self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+-)")
-        self.zoom_out_btn.setProperty("zoomButton", True)
-        self.zoom_out_btn.setMaximumWidth(35)
-        self.zoom_out_btn.setMinimumWidth(35)
+        # Zoom buttons with modern styling
         icon_name_zoom_out = "zoom-out"
         icon_path_zoom_out = self.get_icon_path(icon_name_zoom_out)
+        self.zoom_out_btn = QPushButton()
+        self.zoom_out_btn.setObjectName("zoomButton")
+        self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+-)")
+        self.zoom_out_btn.setFixedSize(32, 32)
         if icon_path_zoom_out:
             self.zoom_out_btn.setIcon(QIcon(str(icon_path_zoom_out)))
-        self.zoom_out_btn.setIconSize(QSize(16, 16))
+        self.zoom_out_btn.setIconSize(QSize(18, 18))
         self.zoom_out_btn.clicked.connect(self.zoom_out)
         zoom_layout.addWidget(self.zoom_out_btn)
         self.icon_buttons.append((self.zoom_out_btn, icon_name_zoom_out))
 
-        # Zoom reset button
-        self.zoom_reset_btn = QPushButton()
-        self.zoom_reset_btn.setToolTip("Reset Zoom (Ctrl+0)")
-        self.zoom_reset_btn.setProperty("zoomButton", True)
-        self.zoom_reset_btn.setMaximumWidth(35)
-        self.zoom_reset_btn.setMinimumWidth(35)
         icon_name_zoom_reset = "zoom-original"
         icon_path_zoom_reset = self.get_icon_path(icon_name_zoom_reset)
+        self.zoom_reset_btn = QPushButton()
+        self.zoom_reset_btn.setObjectName("zoomButton")
+        self.zoom_reset_btn.setToolTip("Reset Zoom (Ctrl+0)")
+        self.zoom_reset_btn.setFixedSize(32, 32)
         if icon_path_zoom_reset:
             self.zoom_reset_btn.setIcon(QIcon(str(icon_path_zoom_reset)))
-        self.zoom_reset_btn.setIconSize(QSize(16, 16))
+        self.zoom_reset_btn.setIconSize(QSize(18, 18))
         self.zoom_reset_btn.clicked.connect(self.zoom_reset)
         zoom_layout.addWidget(self.zoom_reset_btn)
         self.icon_buttons.append((self.zoom_reset_btn, icon_name_zoom_reset))
 
-        # Zoom in button
-        self.zoom_in_btn = QPushButton()
-        self.zoom_in_btn.setToolTip("Zoom In (Ctrl++)")
-        self.zoom_in_btn.setProperty("zoomButton", True)
-        self.zoom_in_btn.setMaximumWidth(35)
-        self.zoom_in_btn.setMinimumWidth(35)
         icon_name_zoom_in = "zoom-in"
         icon_path_zoom_in = self.get_icon_path(icon_name_zoom_in)
+        self.zoom_in_btn = QPushButton()
+        self.zoom_in_btn.setObjectName("zoomButton")
+        self.zoom_in_btn.setToolTip("Zoom In (Ctrl++)")
+        self.zoom_in_btn.setFixedSize(32, 32)
         if icon_path_zoom_in:
             self.zoom_in_btn.setIcon(QIcon(str(icon_path_zoom_in)))
-        self.zoom_in_btn.setIconSize(QSize(16, 16))
+        self.zoom_in_btn.setIconSize(QSize(18, 18))
         self.zoom_in_btn.clicked.connect(self.zoom_in)
         zoom_layout.addWidget(self.zoom_in_btn)
         self.icon_buttons.append((self.zoom_in_btn, icon_name_zoom_in))
         
-        log_layout.addWidget(zoom_container)
+        log_layout.addWidget(zoom_toolbar)
         
-        # Log output with zoom support
+        # Log output with modern styling (responsive)
         self.log_text = ZoomableTextEdit(self)
+        self.log_text.setObjectName("logText")
         self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", self.log_font_size))
+        # Ensure minimum readable font size
+        min_font_size = max(9, self.log_font_size)
+        self.log_text.setFont(QFont("Consolas", min_font_size))
         self.log_text.set_zoom_callbacks(self.zoom_in, self.zoom_out)
+        # Ensure log area has minimum height for readability on small screens
+        screen = self.screen().availableGeometry()
+        if screen.height() < 768:
+            self.log_text.setMinimumHeight(150)
+        else:
+            self.log_text.setMinimumHeight(200)
         log_layout.addWidget(self.log_text)
         
-        group_layout.addWidget(log_container)
+        card_layout.addWidget(log_section)
         
         # Initialize zoom button states
         self.update_zoom_buttons()
         
-        return group
+        return card
     
     def create_button_sections(self):
-        """Create organized button sections"""
+        """Create modern organized button sections (responsive)"""
+        # Get screen size for responsive spacing
+        screen = self.screen().availableGeometry()
+        screen_width = screen.width()
+        
+        # Adaptive spacing
+        if screen_width < 1024:
+            container_spacing = 12
+        elif screen_width < 1280:
+            container_spacing = 14
+        else:
+            container_spacing = 16
+        
         container = QWidget()
         container_layout = QVBoxLayout(container)
-        container_layout.setSpacing(8)
+        container_layout.setSpacing(container_spacing)
         container_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Get icon path helper
-        icons_dir = Path(__file__).parent / "icons"
         
         # Quick Start section - One-click install
         quick_group = self.create_button_group(
@@ -1561,6 +1742,7 @@ class AffinityInstallerGUI(QMainWindow):
             [
                 ("Download Affinity Installer", self.download_affinity_installer, "Download the latest Affinity installer from official source", "download"),
                 ("Install from File Manager", self.install_from_file, "Install Affinity or any Windows app from a local .exe file", "folderopen"),
+                ("Enable OpenCL", self.enable_opencl_support, "Enable OpenCL support for hardware acceleration in Affinity applications", "lightning"),
             ]
         )
         container_layout.addWidget(sys_group)
@@ -1584,6 +1766,7 @@ class AffinityInstallerGUI(QMainWindow):
         troubleshoot_group = self.create_button_group(
             "Troubleshooting",
             [
+                ("Switch Wine Version", self.switch_wine_version, "Remove current Wine and install a different version (keeps your apps and settings)", "wine"),
                 ("Wine Configuration", self.open_winecfg, "Open Wine settings to configure Windows version and libraries", "wine"),
                 ("Winetricks", self.open_winetricks, "Install additional Windows components and dependencies", "wand"),
                 ("Set Windows 11 + Renderer", self.set_windows11_renderer, "Configure Windows version and graphics renderer (Vulkan/OpenGL)", "windows"),
@@ -1621,11 +1804,51 @@ class AffinityInstallerGUI(QMainWindow):
         return container
     
     def create_button_group(self, title, buttons, button_refs=None, button_keys=None):
-        """Create a grouped button section"""
-        group = QGroupBox(title)
-        group_layout = QVBoxLayout(group)
-        group_layout.setSpacing(4)
-        group_layout.setContentsMargins(10, 20, 10, 10)
+        """Create a modern grouped button section (responsive)"""
+        # Get screen size for responsive design
+        screen = self.screen().availableGeometry()
+        screen_width = screen.width()
+        
+        # Adaptive spacing and margins
+        if screen_width < 1024:
+            card_spacing = 8
+            card_margin = 12
+            button_height = 40
+            icon_size = 18
+        elif screen_width < 1280:
+            card_spacing = 10
+            card_margin = 14
+            button_height = 42
+            icon_size = 20
+        else:
+            card_spacing = 12
+            card_margin = 16
+            button_height = 44
+            icon_size = 22
+        
+        # Modern card container
+        card = QFrame()
+        card.setObjectName("buttonCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(card_spacing)
+        card_layout.setContentsMargins(card_margin, 16, card_margin, card_margin)
+        
+        # Section title (responsive font size, transparent background)
+        title_label = QLabel(title)
+        title_label.setObjectName("sectionTitle")
+        if screen_width < 1024:
+            title_label.setStyleSheet("font-size: 14px; font-weight: 600; background-color: transparent; border: none; padding: 0px;")
+        else:
+            title_label.setStyleSheet("background-color: transparent; border: none; padding: 0px;")
+        card_layout.addWidget(title_label)
+        
+        # Buttons container (responsive spacing)
+        buttons_layout = QVBoxLayout()
+        if screen_width < 1024:
+            buttons_layout.setSpacing(6)
+        else:
+            buttons_layout.setSpacing(8)
+        buttons_layout.setContentsMargins(0, 0, 0, 0)
         
         for idx, button_data in enumerate(buttons):
             # Handle (text, command), (text, command, tooltip), (text, command, tooltip, icon) formats
@@ -1641,6 +1864,12 @@ class AffinityInstallerGUI(QMainWindow):
                 text, command = button_data[0], button_data[1]
             
             btn = QPushButton(text)
+            btn.setObjectName("actionButton")
+            
+            # Set primary style for main CTA button
+            if text == "One-Click Full Setup":
+                btn.setProperty("class", "primary")
+            
             # Wrap click to track the button and delegate to original command
             btn.clicked.connect(lambda checked=False, b=btn, cmd=command: self._handle_button_click(b, cmd))
             
@@ -1650,18 +1879,26 @@ class AffinityInstallerGUI(QMainWindow):
                 if icon_path:
                     icon = QIcon(str(icon_path))
                     btn.setIcon(icon)
-                    btn.setIconSize(QSize(16, 16))
-                    self.icon_buttons.append((btn, icon_name))  # Store button and icon name
+                    btn.setIconSize(QSize(icon_size, icon_size))  # Responsive icon size
+                    self.icon_buttons.append((btn, icon_name))
             
             # Add tooltip if provided
             if tooltip:
                 btn.setToolTip(tooltip)
             
-            # Set primary class for the main call-to-action button
-            if text == "One-Click Full Setup":
-                btn.setProperty("class", "primary")
+            # Set button height and styling (responsive)
+            btn.setMinimumHeight(button_height)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            # Set minimum width to prevent buttons from being too narrow and ensure text is readable (responsive)
+            if screen_width < 800:
+                btn.setMinimumWidth(220)
+            elif screen_width < 1024:
+                btn.setMinimumWidth(240)
+            else:
+                btn.setMinimumWidth(260)
+            # Ensure button text is readable - QPushButton automatically handles text overflow with ellipsis
             
-            group_layout.addWidget(btn)
+            buttons_layout.addWidget(btn)
             
             # Store button reference if requested
             if button_refs is not None and button_keys is not None and idx < len(button_keys):
@@ -1671,7 +1908,9 @@ class AffinityInstallerGUI(QMainWindow):
             if text.startswith("Switch to"):
                 self.switch_backend_button = btn
         
-        return group
+        card_layout.addLayout(buttons_layout)
+        
+        return card
     
     def _handle_button_click(self, button, command):
         """Record last clicked button and invoke the original command."""
@@ -1755,44 +1994,56 @@ class AffinityInstallerGUI(QMainWindow):
             pass
     
     def load_affinity_icon(self):
-        """Download and load Affinity V3 icon"""
-        try:
-            icon_dir = Path.home() / ".local" / "share" / "icons"
-            icon_dir.mkdir(parents=True, exist_ok=True)
-            icon_path = icon_dir / "Affinity.svg"
-            
-            # Check if file exists and is valid SVG
-            needs_download = True
-            if icon_path.exists():
-                try:
-                    # Check if file is valid SVG (not HTML)
-                    with open(icon_path, 'r', encoding='utf-8') as f:
-                        first_line = f.readline().strip()
-                        # Valid SVG should start with <?xml or <svg, not <!DOCTYPE or <html
-                        if first_line.startswith('<?xml') or first_line.startswith('<svg'):
-                            needs_download = False
-                        else:
-                            # File is corrupted (likely HTML), delete it
-                            icon_path.unlink()
-                except Exception:
-                    # If we can't read it, delete and re-download
+        """Load Affinity V3 icon (non-blocking - downloads in background if needed)"""
+        # Set default to None first (fast)
+        self.affinity_icon_path = None
+        
+        # Check and load icon in background thread to avoid blocking
+        def check_and_load_icon():
+            try:
+                icon_dir = Path.home() / ".local" / "share" / "icons"
+                icon_dir.mkdir(parents=True, exist_ok=True)
+                icon_path = icon_dir / "Affinity.svg"
+                
+                # Check if file exists and is valid SVG
+                if icon_path.exists():
                     try:
-                        icon_path.unlink()
+                        # Quick check if file is valid SVG (not HTML) - read only first 100 bytes
+                        with open(icon_path, 'rb') as f:
+                            first_bytes = f.read(100).decode('utf-8', errors='ignore')
+                            # Valid SVG should start with <?xml or <svg, not <!DOCTYPE or <html
+                            if first_bytes.strip().startswith('<?xml') or first_bytes.strip().startswith('<svg'):
+                                self.affinity_icon_path = str(icon_path)
+                                # Update window icon on main thread
+                                from PyQt6.QtCore import QTimer
+                                QTimer.singleShot(0, lambda: self.setWindowIcon(QIcon(str(icon_path))))
+                                return
+                            else:
+                                # File is corrupted (likely HTML), delete it
+                                icon_path.unlink()
                     except Exception:
-                        pass
-            
-            # Download if needed
-            if needs_download:
-                icon_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/Assets/Icons/Affinity-Canva.svg"
+                        # If we can't read it, try to use it anyway
+                        self.affinity_icon_path = str(icon_path)
+                        from PyQt6.QtCore import QTimer
+                        QTimer.singleShot(0, lambda: self.setWindowIcon(QIcon(str(icon_path))))
+                        return
+                
+                # If icon doesn't exist, download in background
                 try:
+                    icon_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/Assets/Icons/Affinity-Canva.svg"
                     urllib.request.urlretrieve(icon_url, str(icon_path))
+                    # Update icon path and refresh UI
                     self.affinity_icon_path = str(icon_path)
-                except Exception as e:
-                    self.affinity_icon_path = None
-            else:
-                self.affinity_icon_path = str(icon_path)
-        except Exception as e:
-            self.affinity_icon_path = None
+                    # Update window icon on main thread
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(0, lambda: self.setWindowIcon(QIcon(str(icon_path))))
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        
+        # Run in background thread to avoid blocking
+        threading.Thread(target=check_and_load_icon, daemon=True).start()
     
     def closeEvent(self, event):
         """Handle window close event - close log file"""
@@ -2279,28 +2530,52 @@ class AffinityInstallerGUI(QMainWindow):
                 QLabel#versionDescription {
                     font-size: 12px;
                     color: #b0b0b0;
-                    padding: 0px 0px 12px 20px;
-                    line-height: 1.5;
+                    padding: 4px 0px 8px 28px;
+                    line-height: 1.4;
+                }
+                QLabel#cpuInfoLabel {
+                    font-size: 11px;
+                    color: #888888;
+                    padding: 4px 0px 0px 28px;
+                    font-style: italic;
+                }
+                QFrame#optionFrame {
+                    background-color: #2d2d2d;
+                    border: 1px solid #3c3c3c;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #4a4a4a;
+                    background-color: #323232;
                 }
                 QLabel#recommendedBadge {
                     background-color: #4ec9b0;
                     color: #1e1e1e;
-                    font-size: 10px;
+                    font-size: 9px;
                     font-weight: bold;
-                    padding: 2px 6px;
-                    border-radius: 8px;
-                    margin-left: 6px;
-                    max-width: 120px;
+                    padding: 3px 8px;
+                    border-radius: 10px;
+                    margin-left: 8px;
                 }
                 QLabel#legacyBadge {
                     background-color: #f48771;
                     color: #1e1e1e;
-                    font-size: 10px;
+                    font-size: 9px;
                     font-weight: bold;
-                    padding: 2px 6px;
-                    border-radius: 8px;
-                    margin-left: 6px;
-                    max-width: 80px;
+                    padding: 3px 8px;
+                    border-radius: 10px;
+                    margin-left: 8px;
+                }
+                QLabel#olderCpuBadge {
+                    background-color: #ffa726;
+                    color: #1e1e1e;
+                    font-size: 9px;
+                    font-weight: bold;
+                    padding: 3px 8px;
+                    border-radius: 10px;
+                    margin-left: 8px;
                 }
                 QRadioButton {
                     font-size: 14px;
@@ -2391,28 +2666,52 @@ class AffinityInstallerGUI(QMainWindow):
                 QLabel#versionDescription {
                     font-size: 12px;
                     color: #666666;
-                    padding: 0px 0px 12px 20px;
-                    line-height: 1.5;
+                    padding: 4px 0px 8px 28px;
+                    line-height: 1.4;
+                }
+                QLabel#cpuInfoLabel {
+                    font-size: 11px;
+                    color: #999999;
+                    padding: 4px 0px 0px 28px;
+                    font-style: italic;
+                }
+                QFrame#optionFrame {
+                    background-color: #f5f5f5;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 4px 0px;
+                }
+                QFrame#optionFrame:hover {
+                    border-color: #c0c0c0;
+                    background-color: #fafafa;
                 }
                 QLabel#recommendedBadge {
                     background-color: #4caf50;
                     color: #ffffff;
-                    font-size: 10px;
+                    font-size: 9px;
                     font-weight: bold;
-                    padding: 2px 6px;
-                    border-radius: 8px;
-                    margin-left: 6px;
-                    max-width: 120px;
+                    padding: 3px 8px;
+                    border-radius: 10px;
+                    margin-left: 8px;
                 }
                 QLabel#legacyBadge {
                     background-color: #ff9800;
                     color: #ffffff;
-                    font-size: 10px;
+                    font-size: 9px;
                     font-weight: bold;
-                    padding: 2px 6px;
-                    border-radius: 8px;
-                    margin-left: 6px;
-                    max-width: 80px;
+                    padding: 3px 8px;
+                    border-radius: 10px;
+                    margin-left: 8px;
+                }
+                QLabel#olderCpuBadge {
+                    background-color: #ff9800;
+                    color: #ffffff;
+                    font-size: 9px;
+                    font-weight: bold;
+                    padding: 3px 8px;
+                    border-radius: 10px;
+                    margin-left: 8px;
                 }
                 QRadioButton {
                     font-size: 14px;
@@ -2511,22 +2810,26 @@ class AffinityInstallerGUI(QMainWindow):
         options_container = QFrame()
         options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         options_layout = QVBoxLayout(options_container)
-        options_layout.setSpacing(10)
+        options_layout.setSpacing(8)
         # Responsive margins
-        options_margin = 12 if (screen_width >= 800 and screen_height >= 600) else 8
+        options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
         options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        # Detect CPU generation to determine if Wine 10.4 v2 should be recommended
+        cpu_gen, is_older_cpu = self.detect_cpu_generation()
         
         # Wine 10.4 option
         wine_104_container = QFrame()
+        wine_104_container.setObjectName("optionFrame")
         wine_104_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         wine_104_layout = QVBoxLayout(wine_104_container)
-        wine_104_layout.setContentsMargins(0, 0, 0, 0)
-        wine_104_layout.setSpacing(4)
+        wine_104_layout.setContentsMargins(12, 10, 12, 10)
+        wine_104_layout.setSpacing(6)
         
         wine_104_header = QHBoxLayout()
         wine_104_header.setSpacing(8)
         wine_104_radio = QRadioButton("Wine 10.4")
-        wine_104_radio.setChecked(True)  # Default selection
+        wine_104_radio.setChecked(not is_older_cpu)  # Default selection unless older CPU
         wine_104_radio.setObjectName("wine104Radio")
         wine_104_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         wine_104_header.addWidget(wine_104_radio)
@@ -2535,14 +2838,15 @@ class AffinityInstallerGUI(QMainWindow):
         recommended_badge.setObjectName("recommendedBadge")
         recommended_badge.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         recommended_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        wine_104_header.addWidget(recommended_badge)
+        if not is_older_cpu:
+            wine_104_header.addWidget(recommended_badge)
         wine_104_header.addStretch()
         
         wine_104_layout.addLayout(wine_104_header)
         
         wine_104_desc = QLabel(
             "Latest version with AMD GPU and OpenCL patches. "
-            "Recommended for most users and provides the best compatibility."
+            "Best compatibility and performance for most systems."
         )
         wine_104_desc.setObjectName("versionDescription")
         wine_104_desc.setWordWrap(True)
@@ -2551,12 +2855,63 @@ class AffinityInstallerGUI(QMainWindow):
         
         options_layout.addWidget(wine_104_container)
         
+        # Wine 10.4 v2 option (for older CPUs)
+        wine_104v2_container = QFrame()
+        wine_104v2_container.setObjectName("optionFrame")
+        wine_104v2_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_104v2_layout = QVBoxLayout(wine_104v2_container)
+        wine_104v2_layout.setContentsMargins(12, 10, 12, 10)
+        wine_104v2_layout.setSpacing(6)
+        
+        wine_104v2_header = QHBoxLayout()
+        wine_104v2_header.setSpacing(8)
+        wine_104v2_radio = QRadioButton("Wine 10.4 v2")
+        wine_104v2_radio.setObjectName("wine104v2Radio")
+        wine_104v2_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        # Auto-select if older CPU detected
+        if is_older_cpu:
+            wine_104v2_radio.setChecked(True)
+        wine_104v2_header.addWidget(wine_104v2_radio)
+        
+        if is_older_cpu:
+            older_cpu_badge = QLabel("RECOMMENDED")
+            older_cpu_badge.setObjectName("recommendedBadge")
+        else:
+            older_cpu_badge = QLabel("OLDER CPUs")
+            older_cpu_badge.setObjectName("olderCpuBadge")
+        older_cpu_badge.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        older_cpu_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        wine_104v2_header.addWidget(older_cpu_badge)
+        wine_104v2_header.addStretch()
+        
+        wine_104v2_layout.addLayout(wine_104v2_header)
+        
+        wine_104v2_desc = QLabel(
+            "Optimized for older CPUs (V1-V3 generations). "
+            "Use this if you have a CPU from 2014-2020 (Zen/Broadwell through Zen 2/Coffee Lake)."
+        )
+        wine_104v2_desc.setObjectName("versionDescription")
+        wine_104v2_desc.setWordWrap(True)
+        wine_104v2_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_104v2_layout.addWidget(wine_104v2_desc)
+        
+        # Add CPU info if detected
+        if cpu_gen != "Unknown":
+            cpu_info_label = QLabel(f"🧩 Detected: {cpu_gen}")
+            cpu_info_label.setObjectName("cpuInfoLabel")
+            cpu_info_label.setWordWrap(True)
+            cpu_info_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            wine_104v2_layout.addWidget(cpu_info_label)
+        
+        options_layout.addWidget(wine_104v2_container)
+        
         # Wine 9.14 option
         wine_914_container = QFrame()
+        wine_914_container.setObjectName("optionFrame")
         wine_914_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         wine_914_layout = QVBoxLayout(wine_914_container)
-        wine_914_layout.setContentsMargins(0, 0, 0, 0)
-        wine_914_layout.setSpacing(4)
+        wine_914_layout.setContentsMargins(12, 10, 12, 10)
+        wine_914_layout.setSpacing(6)
         
         wine_914_header = QHBoxLayout()
         wine_914_header.setSpacing(8)
@@ -2576,7 +2931,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         wine_914_desc = QLabel(
             "Legacy version with AMD GPU and OpenCL patches. "
-            "Use this if you encounter issues with Wine 10.4."
+            "Fallback option if you encounter issues with newer versions."
         )
         wine_914_desc.setObjectName("versionDescription")
         wine_914_desc.setWordWrap(True)
@@ -2618,6 +2973,8 @@ class AffinityInstallerGUI(QMainWindow):
         if result == QDialog.DialogCode.Accepted:
             if wine_104_radio.isChecked():
                 self.question_dialog_response = "Wine 10.4 (Recommended)"
+            elif wine_104v2_radio.isChecked():
+                self.question_dialog_response = "Wine 10.4 v2 (Older CPUs)"
             else:
                 self.question_dialog_response = "Wine 9.14 (Legacy)"
         else:
@@ -2631,7 +2988,7 @@ class AffinityInstallerGUI(QMainWindow):
         # Check if this is a Wine version selection dialog
         is_wine_version_dialog = (
             "Wine Version" in title or "Wine version" in title or
-            any("Wine 10.4" in btn or "Wine 9.14" in btn for btn in buttons)
+            any("Wine 10.4" in btn or "Wine 9.14" in btn or "Wine 10.4 v2" in btn for btn in buttons)
         )
         if is_wine_version_dialog:
             self._show_wine_version_dialog_safe()
@@ -2685,6 +3042,133 @@ class AffinityInstallerGUI(QMainWindow):
             waited += 1
         
         return self.question_dialog_response or "Cancel"
+    
+    def detect_cpu_generation(self):
+        """Detect CPU generation using the V1-V5 method based on CPU model name.
+        
+        Returns:
+            str: CPU generation ("V1", "V2", "V3", "V4", "V5", or "Unknown")
+            bool: True if CPU is older (V1, V2, V3) and may need Wine 10.4 v2
+        """
+        try:
+            # Read CPU info from /proc/cpuinfo
+            cpu_info = ""
+            if Path("/proc/cpuinfo").exists():
+                with open("/proc/cpuinfo", "r") as f:
+                    cpu_info = f.read()
+            
+            # Try lscpu as fallback
+            if not cpu_info or "model name" not in cpu_info.lower():
+                try:
+                    success, stdout, _ = self.run_command(["lscpu"], check=False, capture=True)
+                    if success:
+                        cpu_info = stdout
+                except Exception:
+                    pass
+            
+            if not cpu_info:
+                return "Unknown", False
+            
+            cpu_info_lower = cpu_info.lower()
+            
+            # AMD Detection (Zen architecture) - check in order from newest to oldest to avoid false matches
+            # V5: Zen 4 (2022-2023) - Ryzen 7000 (desktop), Ryzen 7040 (mobile)
+            if any(x in cpu_info_lower for x in ["ryzen 7", "ryzen 7000", "ryzen 7040"]):
+                return "V5", False
+            
+            # V4: Zen 3 (2020-2021) and Zen 5 (2024-2025) - Ryzen 5000, Ryzen 9000, Ryzen AI 300
+            if any(x in cpu_info_lower for x in ["ryzen 5", "ryzen 5000", "ryzen 9", "ryzen 9000", "ryzen ai 300"]):
+                return "V4", False
+            
+            # V3: Zen 2 (2019-2020) - Ryzen 3000 (desktop), Ryzen 4000U/H (mobile)
+            # Check for 4000 series first (mobile), then 3000 desktop (but not 3000U)
+            if any(x in cpu_info_lower for x in ["ryzen 4", "ryzen 4000"]):
+                return "V3", True
+            if "ryzen 3" in cpu_info_lower or "ryzen 3000" in cpu_info_lower:
+                # Check if it's not V2 (3000U is V2)
+                if "3000u" not in cpu_info_lower and "pro 3700u" not in cpu_info_lower:
+                    return "V3", True
+            
+            # V2: Zen+ (2018-2019) - Ryzen 2000 (desktop), Ryzen 3000U (mobile)
+            if any(x in cpu_info_lower for x in ["ryzen 3000u", "ryzen 7 pro 3700u"]):
+                return "V2", True
+            if "ryzen 2" in cpu_info_lower or "ryzen 2000" in cpu_info_lower:
+                # Check if it's not V1 (2000U is V1, 2000 desktop is V2)
+                if "2000u" not in cpu_info_lower:
+                    return "V2", True
+            
+            # V1: Zen (2017) - Ryzen 1000 (desktop), Ryzen 2000U (mobile)
+            if any(x in cpu_info_lower for x in ["ryzen 1", "ryzen 1000", "ryzen 2000u"]):
+                return "V1", True
+            
+            
+            # Intel Detection
+            # V1: Broadwell (5th Gen, 2014-2015) - i7-5600U, i5-5300U
+            if any(x in cpu_info_lower for x in ["i7-5600", "i5-5300", "broadwell"]):
+                return "V1", True
+            
+            # V2: Skylake (6th Gen, 2015-2016) - i7-6600U, i5-6200U
+            if any(x in cpu_info_lower for x in ["i7-6600", "i5-6200", "skylake"]):
+                return "V2", True
+            
+            # V3: Kaby Lake (7th Gen, 2016-2017), Coffee Lake (8th Gen, 2017-2018)
+            # i7-7600U, i7-8650U
+            if any(x in cpu_info_lower for x in ["i7-7600", "i7-8650", "kaby lake", "coffee lake"]):
+                return "V3", True
+            
+            # V4: Ice Lake (10th Gen, 2019), Tiger Lake (11th Gen, 2020), Meteor Lake / Arrow Lake (14th Gen, 2024-2025)
+            # i7-1065G7, i7-1165G7, i7-14700K
+            if any(x in cpu_info_lower for x in ["i7-1065", "i7-1165", "i7-14700", "ice lake", "tiger lake", "meteor lake", "arrow lake"]):
+                return "V4", False
+            
+            # V5: Alder Lake (12th Gen, 2021), Raptor Lake (13th Gen, 2022-2023)
+            # i7-12700K, i7-13700K
+            if any(x in cpu_info_lower for x in ["i7-12700", "i7-13700", "alder lake", "raptor lake"]):
+                return "V5", False
+            
+            # Try to detect by generation number in model name
+            # Intel: Look for patterns like "Core i7-5xxx", "Core i5-6xxx", etc.
+            intel_gen_match = re.search(r'core\s+i[357]-([0-9])([0-9]{3})', cpu_info_lower)
+            if intel_gen_match:
+                gen_digit = int(intel_gen_match.group(1))
+                if gen_digit == 5:
+                    return "V1", True
+                elif gen_digit == 6:
+                    return "V2", True
+                elif gen_digit == 7:
+                    return "V3", True
+                elif gen_digit in [10, 11, 14]:
+                    return "V4", False
+                elif gen_digit in [12, 13]:
+                    return "V5", False
+            
+            # AMD: Look for Ryzen model numbers
+            amd_match = re.search(r'ryzen\s+([0-9])([0-9]{3})', cpu_info_lower)
+            if amd_match:
+                first_digit = int(amd_match.group(1))
+                if first_digit == 1:
+                    return "V1", True
+                elif first_digit == 2:
+                    # Could be V1 (2000U) or V2 (2000 desktop) - default to V2
+                    return "V2", True
+                elif first_digit == 3:
+                    # Could be V2 (3000U) or V3 (3000 desktop) - check for U suffix
+                    if "u" in cpu_info_lower or "pro 3700u" in cpu_info_lower:
+                        return "V2", True
+                    return "V3", True
+                elif first_digit == 4:
+                    return "V3", True
+                elif first_digit == 5:
+                    return "V4", False
+                elif first_digit == 7:
+                    return "V5", False
+                elif first_digit == 9:
+                    return "V4", False
+            
+            return "Unknown", False
+        except Exception as e:
+            self.log(f"Error detecting CPU generation: {e}", "warning")
+            return "Unknown", False
     
     def get_wine_dir(self):
         """Get the Wine directory path"""
@@ -3422,7 +3906,7 @@ class AffinityInstallerGUI(QMainWindow):
             return False
     
     def _ensure_icons_directory(self):
-        """Ensure icons directory exists, download from GitHub if missing"""
+        """Ensure icons directory exists, download from GitHub if missing (optimized)"""
         try:
             # Always use the standard location in user's config directory
             # This ensures icons are available even when script is piped from curl
@@ -3434,12 +3918,75 @@ class AffinityInstallerGUI(QMainWindow):
             # Ensure icons directory exists
             icons_dir.mkdir(parents=True, exist_ok=True)
             
-            # List of UI theme icons to download from GitHub
+            # Check if local icons directory exists and has icons (fast path)
+            local_icons_dir = Path(__file__).parent / "icons"
+            if local_icons_dir.exists():
+                # If local icons exist, copy them quickly instead of downloading
+                try:
+                    import shutil
+                    local_icons = list(local_icons_dir.glob("*.svg"))
+                    if local_icons:
+                        # Copy missing icons from local directory
+                        for local_icon in local_icons:
+                            dest_icon = icons_dir / local_icon.name
+                            if not dest_icon.exists():
+                                shutil.copy2(local_icon, dest_icon)
+                        return  # Fast path - use local icons
+                except Exception:
+                    pass  # Fall through to download if copy fails
+            
+            # List of UI theme icons to download from GitHub (only if local icons don't exist)
             # Note: Application icons (Affinity.png, etc.) are downloaded elsewhere
             # These are just the UI button icons needed for the installer interface
             icon_files = [
-                # UI theme icons - these are the ones actually used by the installer buttons
-                # The application icons are handled by setup_wine function
+                # Zoom icons
+                ("zoom-in-dark.svg", "AffinityScripts/icons/zoom-in-dark.svg"),
+                ("zoom-in-light.svg", "AffinityScripts/icons/zoom-in-light.svg"),
+                ("zoom-out-dark.svg", "AffinityScripts/icons/zoom-out-dark.svg"),
+                ("zoom-out-light.svg", "AffinityScripts/icons/zoom-out-light.svg"),
+                ("zoom-original-dark.svg", "AffinityScripts/icons/zoom-original-dark.svg"),
+                ("zoom-original-light.svg", "AffinityScripts/icons/zoom-original-light.svg"),
+                # Action icons
+                ("rocket-dark.svg", "AffinityScripts/icons/rocket-dark.svg"),
+                ("rocket-light.svg", "AffinityScripts/icons/rocket-light.svg"),
+                ("wine-dark.svg", "AffinityScripts/icons/wine-dark.svg"),
+                ("wine-light.svg", "AffinityScripts/icons/wine-light.svg"),
+                ("dependencies-dark.svg", "AffinityScripts/icons/dependencies-dark.svg"),
+                ("dependencies-light.svg", "AffinityScripts/icons/dependencies-light.svg"),
+                ("wand-dark.svg", "AffinityScripts/icons/wand-dark.svg"),
+                ("wand-light.svg", "AffinityScripts/icons/wand-light.svg"),
+                ("download-dark.svg", "AffinityScripts/icons/download-dark.svg"),
+                ("download-light.svg", "AffinityScripts/icons/download-light.svg"),
+                ("folderopen-dark.svg", "AffinityScripts/icons/folderopen-dark.svg"),
+                ("folderopen-light.svg", "AffinityScripts/icons/folderopen-light.svg"),
+                ("camera-dark.svg", "AffinityScripts/icons/camera-dark.svg"),
+                ("camera-light.svg", "AffinityScripts/icons/camera-light.svg"),
+                ("pen-dark.svg", "AffinityScripts/icons/pen-dark.svg"),
+                ("pen-light.svg", "AffinityScripts/icons/pen-light.svg"),
+                ("book-dark.svg", "AffinityScripts/icons/book-dark.svg"),
+                ("book-light.svg", "AffinityScripts/icons/book-light.svg"),
+                ("windows-dark.svg", "AffinityScripts/icons/windows-dark.svg"),
+                ("windows-light.svg", "AffinityScripts/icons/windows-light.svg"),
+                ("display-dark.svg", "AffinityScripts/icons/display-dark.svg"),
+                ("display-light.svg", "AffinityScripts/icons/display-light.svg"),
+                ("lightning-dark.svg", "AffinityScripts/icons/lightning-dark.svg"),
+                ("lightning-light.svg", "AffinityScripts/icons/lightning-light.svg"),
+                ("loop-dark.svg", "AffinityScripts/icons/loop-dark.svg"),
+                ("loop-light.svg", "AffinityScripts/icons/loop-light.svg"),
+                ("chrome-dark.svg", "AffinityScripts/icons/chrome-dark.svg"),
+                ("chrome-light.svg", "AffinityScripts/icons/chrome-light.svg"),
+                ("cog-dark.svg", "AffinityScripts/icons/cog-dark.svg"),
+                ("cog-light.svg", "AffinityScripts/icons/cog-light.svg"),
+                ("scale-dark.svg", "AffinityScripts/icons/scale-dark.svg"),
+                ("scale-light.svg", "AffinityScripts/icons/scale-light.svg"),
+                ("trash-dark.svg", "AffinityScripts/icons/trash-dark.svg"),
+                ("trash-light.svg", "AffinityScripts/icons/trash-light.svg"),
+                ("play-dark.svg", "AffinityScripts/icons/play-dark.svg"),
+                ("play-light.svg", "AffinityScripts/icons/play-light.svg"),
+                ("exit-dark.svg", "AffinityScripts/icons/exit-dark.svg"),
+                ("exit-light.svg", "AffinityScripts/icons/exit-light.svg"),
+                ("affinity-unified-dark.svg", "AffinityScripts/icons/affinity-unified-dark.svg"),
+                ("affinity-unified-light.svg", "AffinityScripts/icons/affinity-unified-light.svg"),
             ]
             
             # Check which icons are missing
@@ -3453,10 +4000,11 @@ class AffinityInstallerGUI(QMainWindow):
             if not missing_icons:
                 return  # All icons already exist
             
-            # Download icons silently (no log messages)
+            # Download icons in parallel for speed (no log messages)
             base_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/"
             
-            for local_name, github_path in missing_icons:
+            def download_icon(local_name, github_path):
+                """Download a single icon"""
                 icon_path = icons_dir / local_name
                 try:
                     # Check if github_path is a full URL (for user-attachments) or relative path
@@ -3465,11 +4013,16 @@ class AffinityInstallerGUI(QMainWindow):
                     else:
                         icon_url = base_url + github_path
                     
-                    # Use urlretrieve with better error handling
+                    # Use urlretrieve with timeout
                     urllib.request.urlretrieve(icon_url, str(icon_path))
                 except Exception:
                     # Silently fail - icons are not critical for functionality
                     pass
+            
+            # Download icons in parallel (limit to 5 concurrent downloads to avoid overwhelming)
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                executor.map(lambda args: download_icon(*args), missing_icons)
         except Exception:
             # Silently fail - icons are not critical for functionality
             pass
@@ -4609,18 +5162,30 @@ class AffinityInstallerGUI(QMainWindow):
         if self.check_cancelled():
             return
         
+        # Detect CPU to provide recommendation
+        cpu_gen, is_older_cpu = self.detect_cpu_generation()
+        cpu_info_note = ""
+        if cpu_gen != "Unknown":
+            cpu_info_note = f"\n\n🧩 Detected CPU: {cpu_gen}"
+            if is_older_cpu:
+                cpu_info_note += " (Older CPU - Wine 10.4 v2 recommended)"
+        
         # Ask user to choose Wine version
         wine_version = self.show_question_dialog(
             "Choose Wine Version",
             "Which Wine version would you like to install?\n\n"
             "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
+            "• Wine 10.4 v2 (Older CPUs) - Optimized for older CPUs (V1-V3 generations)\n"
             "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
-            "Note: You can switch versions later by running 'Setup Wine Environment' again.",
-            ["Wine 10.4 (Recommended)", "Wine 9.14 (Legacy)"]
+            "Note: You can switch versions later by running 'Setup Wine Environment' again."
+            + cpu_info_note,
+            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)"]
         )
         
         if wine_version == "Wine 10.4 (Recommended)":
             wine_version_choice = "10.4"
+        elif wine_version == "Wine 10.4 v2 (Older CPUs)":
+            wine_version_choice = "10.4-v2"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
         else:
@@ -5313,10 +5878,10 @@ class AffinityInstallerGUI(QMainWindow):
         return True
     
     def setup_wine(self, wine_version="10.4"):
-        """Setup Wine environment - installs Wine 10.4 or 9.14 with AMD GPU and OpenCL patches
+        """Setup Wine environment - installs Wine 10.4, 10.4 v2, or 9.14 with AMD GPU and OpenCL patches
         
         Args:
-            wine_version: "10.4" for Wine 10.4 (recommended) or "9.14" for Wine 9.14 (legacy)
+            wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), or "9.14" for Wine 9.14 (legacy)
         """
         self.start_operation("Setting up Wine environment")
         
@@ -5338,6 +5903,14 @@ class AffinityInstallerGUI(QMainWindow):
                 wine_dir_pattern = "ElementalWarriorWine*"
                 archive_format = "gz"
                 wine_display_name = "Wine 9.14 (Legacy - with AMD GPU and OpenCL patches)"
+            elif wine_version == "10.4-v2":
+                # Wine 10.4 v2 for older CPUs
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
+                wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarriorWine*"
+                archive_format = "xz"
+                wine_display_name = "Wine 10.4 v2 (for older CPUs - with AMD GPU and OpenCL patches)"
             else:
                 # Wine 10.4 with AMD GPU and OpenCL patches (default)
                 wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
@@ -5906,18 +6479,30 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("Setup Wine Environment", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
+        # Detect CPU to provide recommendation
+        cpu_gen, is_older_cpu = self.detect_cpu_generation()
+        cpu_info_note = ""
+        if cpu_gen != "Unknown":
+            cpu_info_note = f"\n\n🧩 Detected CPU: {cpu_gen}"
+            if is_older_cpu:
+                cpu_info_note += " (Older CPU - Wine 10.4 v2 recommended)"
+        
         # Ask user to choose Wine version
         wine_version = self.show_question_dialog(
             "Choose Wine Version",
             "Which Wine version would you like to install?\n\n"
             "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
+            "• Wine 10.4 v2 (Older CPUs) - Optimized for older CPUs (V1-V3 generations)\n"
             "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
-            "Note: You can switch versions later by running this setup again.",
-            ["Wine 10.4 (Recommended)", "Wine 9.14 (Legacy)"]
+            "Note: You can switch versions later by running this setup again."
+            + cpu_info_note,
+            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)"]
         )
         
         if wine_version == "Wine 10.4 (Recommended)":
             wine_version_choice = "10.4"
+        elif wine_version == "Wine 10.4 v2 (Older CPUs)":
+            wine_version_choice = "10.4-v2"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
         else:
@@ -5925,6 +6510,281 @@ class AffinityInstallerGUI(QMainWindow):
             return
         
         threading.Thread(target=self.setup_wine, args=(wine_version_choice,), daemon=True).start()
+    
+    def _setup_wine_switch(self, wine_version="10.4"):
+        """Setup Wine binary only - for switching versions without reconfiguration
+        
+        Args:
+            wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), or "9.14" for Wine 9.14 (legacy)
+        """
+        try:
+            # Configure Wine version based on user's choice
+            # This ensures the exact version selected by the user is downloaded
+            if wine_version == "9.14":
+                wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
+                wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarriorWine*"
+                archive_format = "gz"
+                wine_display_name = "Wine 9.14 (Legacy)"
+            elif wine_version == "10.4-v2":
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
+                wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarriorWine*"
+                archive_format = "xz"
+                wine_display_name = "Wine 10.4 v2"
+            else:
+                # Default to Wine 10.4 if version is "10.4" or anything else
+                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
+                wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
+                wine_dir_name = "ElementalWarriorWine"
+                wine_dir_pattern = "ElementalWarriorWine*"
+                archive_format = "xz"
+                wine_display_name = "Wine 10.4"
+            
+            # Log which version is being downloaded
+            self.log(f"Selected version: {wine_version} -> Downloading: {wine_display_name}", "info")
+            self.log(f"Download URL: {wine_url}", "info")
+            
+            # Create directory
+            Path(self.directory).mkdir(parents=True, exist_ok=True)
+            
+            if self.check_cancelled():
+                return False
+            
+            # Download Wine binary
+            wine_file = Path(self.directory) / wine_file_name
+            self.update_progress_text(f"Downloading {wine_display_name}...")
+            self.update_progress(0.4)
+            self.log(f"Downloading {wine_display_name}...", "info")
+            if not self.download_file(wine_url, str(wine_file), f"{wine_display_name} binaries"):
+                self.log(f"Failed to download {wine_display_name}", "error")
+                return False
+            
+            if self.check_cancelled():
+                return False
+            
+            # Extract Wine
+            self.update_progress_text("Extracting Wine binary...")
+            self.update_progress(0.6)
+            self.log("Extracting Wine binary...", "info")
+            try:
+                if archive_format == "gz":
+                    with tarfile.open(wine_file, "r:gz") as tar:
+                        tar.extractall(self.directory, filter='data')
+                elif archive_format == "xz":
+                    try:
+                        import lzma
+                        with lzma.open(wine_file, 'rb') as xz_file:
+                            with tarfile.open(fileobj=xz_file, mode='r') as tar:
+                                tar.extractall(self.directory, filter='data')
+                    except ImportError:
+                        if not self.check_command("xz") and not self.check_command("unxz"):
+                            self.log("xz or unxz is required to extract Wine archive. Please install xz.", "error")
+                            return False
+                        tar_file = wine_file.with_suffix('.tar')
+                        xz_cmd = "xz" if self.check_command("xz") else "unxz"
+                        success, _, _ = self.run_command([xz_cmd, "-d", "-k", str(wine_file)], check=True)
+                        if not success:
+                            self.log("Failed to decompress Wine archive", "error")
+                            return False
+                        with tarfile.open(tar_file, "r") as tar:
+                            tar.extractall(self.directory, filter='data')
+                        tar_file.unlink()
+                
+                wine_file.unlink()
+                self.log("Wine binary extracted", "success")
+            except Exception as e:
+                self.log(f"Failed to extract Wine: {e}", "error")
+                return False
+            
+            if self.check_cancelled():
+                return False
+            
+            # Find and link Wine directory
+            self.update_progress(0.8)
+            wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
+            if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
+                target = Path(self.directory) / wine_dir_name
+                if target.exists() or target.is_symlink():
+                    if target.is_symlink():
+                        target.unlink()
+                    elif target.is_dir():
+                        shutil.rmtree(target)
+                target.symlink_to(wine_dir)
+                self.log("Wine symlink created", "success")
+            
+            # Verify Wine binary
+            self.update_progress(0.9)
+            wine_binary = Path(self.directory) / wine_dir_name / "bin" / "wine"
+            if not wine_binary.exists():
+                self.log("Wine binary not found", "error")
+                return False
+            
+            self.log("Wine binary verified", "success")
+            self.update_progress(1.0)
+            return True
+            
+        except Exception as e:
+            self.log(f"Error installing Wine: {e}", "error")
+            return False
+    
+    def switch_wine_version(self):
+        """Switch to a different Wine version - removes current and installs new one"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Switch Wine Version", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Check if Wine is installed
+        wine_dir = self.get_wine_dir()
+        if not wine_dir.exists():
+            self.log("No Wine installation found. Use 'Setup Wine Environment' to install Wine first.", "warning")
+            QMessageBox.warning(
+                self,
+                "No Wine Installation",
+                "No Wine installation found.\n\n"
+                "Please use 'Setup Wine Environment' to install Wine first."
+            )
+            return
+        
+        # Confirm with user
+        reply = QMessageBox.question(
+            self,
+            "Switch Wine Version",
+            "This will remove the current Wine installation and install a new version.\n\n"
+            "Your Wine prefix and installed applications will NOT be affected.\n"
+            "Only the Wine binary will be replaced.\n\n"
+            "Do you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            self.log("Wine version switch cancelled", "warning")
+            return
+        
+        # Detect CPU to provide recommendation
+        cpu_gen, is_older_cpu = self.detect_cpu_generation()
+        cpu_info_note = ""
+        if cpu_gen != "Unknown":
+            cpu_info_note = f"\n\n🧩 Detected CPU: {cpu_gen}"
+            if is_older_cpu:
+                cpu_info_note += " (Older CPU - Wine 10.4 v2 recommended)"
+        
+        # Ask user to choose Wine version
+        wine_version = self.show_question_dialog(
+            "Choose Wine Version",
+            "Which Wine version would you like to install?\n\n"
+            "• Wine 10.4 (Recommended) - Latest version with AMD GPU and OpenCL patches\n"
+            "• Wine 10.4 v2 (Older CPUs) - Optimized for older CPUs (V1-V3 generations)\n"
+            "• Wine 9.14 (Legacy) - Fallback option if you encounter issues with 10.4\n\n"
+            "Note: This will replace your current Wine installation."
+            + cpu_info_note,
+            ["Wine 10.4 (Recommended)", "Wine 10.4 v2 (Older CPUs)", "Wine 9.14 (Legacy)"]
+        )
+        
+        if wine_version == "Wine 10.4 (Recommended)":
+            wine_version_choice = "10.4"
+        elif wine_version == "Wine 10.4 v2 (Older CPUs)":
+            wine_version_choice = "10.4-v2"
+        elif wine_version == "Wine 9.14 (Legacy)":
+            wine_version_choice = "9.14"
+        else:
+            self.log("Wine version switch cancelled", "warning")
+            return
+        
+        # Run the switch in a thread
+        threading.Thread(target=self._switch_wine_version_thread, args=(wine_version_choice,), daemon=True).start()
+    
+    def _switch_wine_version_thread(self, wine_version):
+        """Thread function to switch Wine version"""
+        self.start_operation("Switching Wine Version")
+        
+        try:
+            # Check if cancelled
+            if self.check_cancelled():
+                return False
+            
+            self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            self.log("Switching Wine Version", "info")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            
+            # Step 1: Stop Wine processes
+            self.update_progress_text("Stopping Wine processes...")
+            self.update_progress(0.1)
+            self.log("Stopping Wine processes...", "info")
+            self.run_command(["wineserver", "-k"], check=False)
+            time.sleep(1)  # Give processes time to terminate
+            
+            if self.check_cancelled():
+                return False
+            
+            # Step 2: Remove current Wine installation
+            wine_dir = self.get_wine_dir()
+            if wine_dir.exists():
+                self.update_progress_text("Removing current Wine installation...")
+                self.update_progress(0.2)
+                self.log(f"Removing current Wine installation: {wine_dir}", "info")
+                try:
+                    if wine_dir.is_symlink():
+                        wine_dir.unlink()
+                        self.log("Wine symlink removed", "success")
+                    else:
+                        shutil.rmtree(wine_dir)
+                        self.log("Wine directory removed", "success")
+                except Exception as e:
+                    self.log(f"Error removing Wine directory: {e}", "error")
+                    # Try to continue anyway - setup_wine will handle it
+            
+            # Also remove any old wine archive files
+            wine_archives = list(Path(self.directory).glob("ElementalWarrior*.tar.*"))
+            for archive in wine_archives:
+                try:
+                    archive.unlink()
+                    self.log(f"Removed old archive: {archive.name}", "info")
+                except Exception:
+                    pass
+            
+            if self.check_cancelled():
+                return False
+            
+            # Step 3: Install new Wine version (skip configuration to preserve existing setup)
+            self.update_progress_text(f"Installing Wine {wine_version}...")
+            self.update_progress(0.3)
+            self.log(f"\nInstalling Wine version: {wine_version} (preserving existing configuration)...", "info")
+            
+            # Call _setup_wine_switch which only replaces the binary, no reconfiguration
+            # Pass the wine_version parameter to ensure the correct version is downloaded
+            success = self._setup_wine_switch(wine_version)
+            
+            if not success:
+                self.log(f"Failed to install Wine version: {wine_version}", "error")
+            
+            if success:
+                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log("Wine version switched successfully!", "success")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                self.update_progress_text("Wine version switched")
+                self.update_progress(1.0)
+                
+                # Refresh installation status
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(500, self.check_installation_status)
+            else:
+                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log("Failed to switch Wine version", "error")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                self.update_progress_text("Failed to switch Wine version")
+            
+            self.end_operation()
+            return success
+            
+        except Exception as e:
+            self.log(f"Error switching Wine version: {e}", "error")
+            self.update_progress_text("Error switching Wine version")
+            self.end_operation()
+            return False
     
     def install_winetricks_deps(self):
         """Install winetricks dependencies - wrapper for button"""
@@ -7697,6 +8557,220 @@ class AffinityInstallerGUI(QMainWindow):
         
         if dlls_copied > 0:
             self.log(f"d3d12 DLLs configured for {app_dir_name}", "success")
+    
+    def enable_opencl_support(self):
+        """Enable OpenCL support for Affinity applications"""
+        # Check if Wine is set up
+        wine = self.get_wine_path("wine")
+        if not wine.exists():
+            QMessageBox.warning(
+                self,
+                "Wine Not Installed",
+                "Wine must be installed before enabling OpenCL support.\n\n"
+                "Please run 'One-Click Setup' or 'Setup Wine Environment' first."
+            )
+            return
+        
+        # Check if OpenCL is already enabled
+        if self.is_opencl_enabled():
+            reply = QMessageBox.question(
+                self,
+                "OpenCL Already Enabled",
+                "OpenCL support is already enabled.\n\n"
+                "Would you like to reconfigure OpenCL support?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        
+        # Confirm with user
+        reply = QMessageBox.question(
+            self,
+            "Enable OpenCL Support",
+            "OpenCL (Open Computing Language) enables hardware acceleration for certain features in Affinity applications.\n\n"
+            "This will:\n"
+            "• Download and configure vkd3d-proton (or d3d12 DLLs for AMD GPUs)\n"
+            "• Install AMD OpenCL dependencies if AMD GPU is detected\n"
+            "• Configure OpenCL for all installed Affinity applications\n\n"
+            "Would you like to enable OpenCL support?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Run in a thread to avoid blocking UI
+        def enable_opencl_thread():
+            try:
+                self.update_progress(0.0)
+                self.update_progress_text("Enabling OpenCL support...")
+                self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                self.log("Enabling OpenCL Support", "info")
+                self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                
+                # Set OpenCL preference
+                self.enable_opencl = True
+                self.update_progress(0.1)
+                
+                # Save OpenCL preference
+                opencl_config_file = Path(self.directory) / ".opencl_enabled"
+                try:
+                    with open(opencl_config_file, 'w') as f:
+                        f.write("1")
+                    self.log("OpenCL preference saved", "success")
+                    # Verify it was saved correctly
+                    if opencl_config_file.exists():
+                        with open(opencl_config_file, 'r') as f:
+                            content = f.read().strip()
+                            if content == "1":
+                                self.log("OpenCL preference verified", "success")
+                            else:
+                                self.log(f"Warning: OpenCL preference file contains '{content}' instead of '1'", "warning")
+                    else:
+                        self.log("Error: OpenCL preference file was not created", "error")
+                except Exception as e:
+                    self.log(f"Error: Failed to save OpenCL preference: {e}", "error")
+                    import traceback
+                    self.log(f"Traceback: {traceback.format_exc()}", "error")
+                
+                self.update_progress(0.2)
+                
+                # Check GPU and set up accordingly
+                if self.has_amd_gpu():
+                    self.update_progress_text("AMD GPU detected - installing OpenCL dependencies...")
+                    self.log("AMD GPU detected - installing additional OpenCL dependencies...", "info")
+                    
+                    amd_deps = []
+                    install_cmd = None
+                    
+                    # Fedora
+                    if self.distro == "fedora":
+                        if self.distro_version == "43":
+                            amd_deps = ["mesa-opencl-icd", "ocl-icd", "rocm-opencl", "rocm-hip", "wine-opencl"]
+                            self.log("Fedora 43 detected - installing Fedora 43 specific AMD OpenCL dependencies...", "info")
+                        else:
+                            amd_deps = ["rocm-opencl", "apr", "apr-util", "zlib", "libxcrypt-compat", "libcurl", "libcurl-devel", "mesa-libGLU"]
+                        install_cmd = ["sudo", "dnf", "install", "-y"] + amd_deps
+                    
+                    # Arch-based distributions
+                    elif self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+                        amd_deps = ["opencl-mesa", "ocl-icd", "rocm-opencl-runtime", "rocm-hip", "wine-opencl"]
+                        self.log(f"{self.format_distro_name()} detected - installing Arch-based AMD OpenCL dependencies...", "info")
+                        install_cmd = ["sudo", "pacman", "-S", "--needed", "--noconfirm"] + amd_deps
+                    
+                    # PikaOS (Ubuntu/Debian-based)
+                    elif self.distro == "pikaos":
+                        amd_deps = ["mesa-opencl-icd", "ocl-icd-libopencl1", "rocm-opencl-runtime", "rocm-hip-runtime"]
+                        self.log("PikaOS detected - installing Debian/Ubuntu-based AMD OpenCL dependencies...", "info")
+                        install_cmd = ["sudo", "apt", "install", "-y"] + amd_deps
+                    
+                    # Install dependencies if we have a command
+                    if install_cmd and amd_deps:
+                        self.log(f"Installing: {', '.join(amd_deps)}", "info")
+                        success, stdout, stderr = self.run_command(install_cmd)
+                        
+                        if success:
+                            self.log("AMD OpenCL dependencies installed successfully", "success")
+                        else:
+                            self.log(f"Warning: Failed to install some AMD OpenCL dependencies: {stderr}", "warning")
+                            self.log("OpenCL may still work, but some features might be limited", "warning")
+                    
+                    self.update_progress(0.5)
+                    self.update_progress_text("Installing d3d12 DLLs for AMD GPU...")
+                    self.install_d3d12_dlls()
+                    
+                elif self.has_nvidia_gpu():
+                    # Ask NVIDIA users to choose between DXVK and vkd3d
+                    preference = self.ask_nvidia_dxvk_vkd3d_choice()
+                    self.update_progress(0.4)
+                    
+                    if preference == "dxvk":
+                        self.update_progress_text("NVIDIA GPU with DXVK preference - installing d3d12 DLLs...")
+                        self.log("NVIDIA GPU with DXVK preference - installing d3d12 DLLs and setting up DLL overrides", "info")
+                        self.install_d3d12_dlls()
+                    else:
+                        self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
+                        self.log("Setting up vkd3d-proton for OpenCL...", "info")
+                        self.setup_vkd3d()
+                else:
+                    self.update_progress(0.4)
+                    self.update_progress_text("Setting up vkd3d-proton for OpenCL...")
+                    self.log("Setting up vkd3d-proton for OpenCL...", "info")
+                    self.setup_vkd3d()
+                
+                self.update_progress(0.8)
+                
+                # Configure OpenCL for all installed Affinity applications
+                self.update_progress_text("Configuring OpenCL for Affinity applications...")
+                apps_to_configure = []
+                
+                # Check which apps are installed
+                app_dirs = {
+                    "Photo": "Photo 2",
+                    "Designer": "Designer 2",
+                    "Publisher": "Publisher 2",
+                    "Add": "Affinity"
+                }
+                
+                for app_name, app_dir_name in app_dirs.items():
+                    app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / app_dir_name
+                    if app_dir.exists():
+                        apps_to_configure.append(app_name)
+                
+                if apps_to_configure:
+                    self.log(f"Configuring OpenCL for: {', '.join(apps_to_configure)}", "info")
+                    for app_name in apps_to_configure:
+                        self.configure_opencl(app_name)
+                else:
+                    self.log("No Affinity applications found to configure", "info")
+                
+                self.update_progress(1.0)
+                self.update_progress_text("OpenCL support enabled!")
+                
+                # Verify OpenCL is enabled
+                if self.is_opencl_enabled():
+                    self.log("\n✓ OpenCL support has been enabled successfully!", "success")
+                    self.log("OpenCL is now configured for all installed Affinity applications.", "info")
+                    # Show success message on main thread
+                    QTimer.singleShot(0, lambda: QMessageBox.information(
+                        self,
+                        "OpenCL Enabled",
+                        "OpenCL support has been successfully enabled!\n\n"
+                        "OpenCL is now configured for all installed Affinity applications.\n"
+                        "You may need to restart Affinity applications for the changes to take effect."
+                    ))
+                else:
+                    self.log("\n⚠ Warning: OpenCL preference may not have been saved correctly", "warning")
+                    self.log("Please check the .opencl_enabled file in your Affinity directory", "warning")
+                    QTimer.singleShot(0, lambda: QMessageBox.warning(
+                        self,
+                        "OpenCL Warning",
+                        "OpenCL support was configured, but the preference may not have been saved correctly.\n\n"
+                        "Please check the log for details."
+                    ))
+                
+                # Refresh installation status
+                QTimer.singleShot(100, self.check_installation_status)
+                
+            except Exception as e:
+                import traceback
+                error_msg = str(e)
+                error_trace = traceback.format_exc()
+                self.log(f"Error enabling OpenCL support: {error_msg}", "error")
+                self.log(f"Traceback: {error_trace}", "error")
+                self.update_progress_text("Error enabling OpenCL support")
+                # Use QTimer to show message box on main thread
+                QTimer.singleShot(0, lambda: QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"An error occurred while enabling OpenCL support:\n\n{error_msg}\n\nCheck the log for details."
+                ))
+        
+        # Start the thread
+        thread = threading.Thread(target=enable_opencl_thread, daemon=True)
+        thread.start()
     
     def _parse_version(self, version_str):
         """Parse version string and return tuple of (major, minor, patch) for comparison"""
