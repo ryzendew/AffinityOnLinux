@@ -141,6 +141,9 @@ sudo zypper install python313-PyQt6
 ```bash
 sudo apt install python3-pyqt6
 ```
+```
+sudo apt install -y python3-pyqt6.qtsvg
+```
 
 **Note:** PyQt6 is required to run the GUI installer. The installer will attempt to install it automatically if missing.
 
