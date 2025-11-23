@@ -137,7 +137,7 @@ sudo dnf install python3-pyqt6
 sudo zypper install python313-PyQt6
 ```
 
-**PikaOS:**
+**PikaOS: Does not work use the Appimage instead**
 ```bash
 sudo apt install python3-pyqt6
 ```
