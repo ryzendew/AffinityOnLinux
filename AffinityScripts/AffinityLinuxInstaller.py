@@ -4370,6 +4370,13 @@ class AffinityInstallerGUI(QMainWindow):
         is_affinity_v2 = any(app in installer_name for app in ["photo", "designer", "publisher"]) and ".exe" in installer_name
         is_webview2 = "webview" in installer_name or "edge" in installer_name
         
+        # Set Windows 11 before installing Affinity
+        if is_affinity_v3 or is_affinity_v2:
+            self.log("Setting Windows version to 11 before Affinity installation...", "info")
+            # Use system winecfg for Affinity installers (they use system wine)
+            self.run_command(["winecfg", "-v", "win11"], check=False, env=env)
+            self.log("✓ Windows version set to 11", "success")
+        
         # Use system Wine for Affinity installations (custom Wine doesn't work for installation)
         if is_affinity_v3 or is_affinity_v2:
             wine = "wine"  # Use system Wine for installation
