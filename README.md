@@ -15,7 +15,7 @@ it has major bugs and issues it's why we don't use it.
 - **Multiple Wine Versions** - Choose from Wine 10.4 (recommended), 10.4 v2 (older CPUs), 10.10, 10.11, or 9.14 (legacy) - all patched specifically for OpenCL support and GPU compatibility
 - **Wine Version Switching** - Easily switch between Wine versions without reinstalling applications
 - **Automated Installation** - Streamlined setup process with dependency management
-- **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
+- **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4 via AppImage/legacy scripts only - GUI installer not supported, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
 - **Desktop Integration** - Automatic desktop entry and shortcut creation
 - **Wine Configuration** - Pre-configured Wine environment optimized for Affinity applications
 - **Settings Save now** - Affinity v3 Settings will save.
@@ -343,7 +343,7 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 ### Supported Distributions
 
 **Officially Supported:**
-- PikaOS 4
+- PikaOS 4 ⚠️ **Note:** The Python GUI installer does not work on PikaOS. Please use the [AppImage version](#appimage-release) instead until this issue is resolved.
 - CachyOS
 - Nobara
 - Arch Linux
@@ -399,7 +399,9 @@ This patched Wine version is automatically downloaded and configured during setu
 
 ### PikaOS Special Instructions
 
-PikaOS users must replace the built-in Wine with WineHQ staging before installation. The installer scripts will display the required commands automatically.
+**Important:** The Python GUI installer does not work on PikaOS. **Please use the [AppImage version](#appimage-release) instead** until this issue is resolved.
+
+For legacy shell scripts: PikaOS users must replace the built-in Wine with WineHQ staging before installation. The installer scripts will display the required commands automatically.
 
 ## Additional Resources
 
