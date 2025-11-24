@@ -11,8 +11,8 @@ it has major bugs and issues it's why we don't use it.
 
 ## Features
 
-- **Full OpenCL Support** - Hardware acceleration enabled out of the box with multiple Wine versions (10.4, 10.10, 10.11, 9.14) patched for OpenCL
-- **Multiple Wine Versions** - Choose from Wine 10.4 (recommended), 10.4 v2 (older CPUs), 10.10, 10.11, or 9.14 (legacy) - all patched specifically for OpenCL support and AMD GPU fixes
+- **Hardware Acceleration** - vkd3d-proton and DXVK provide excellent GPU acceleration (recommended). OpenCL support also available with multiple Wine versions (10.4, 10.10, 10.11, 9.14) patched for OpenCL
+- **Multiple Wine Versions** - Choose from Wine 10.4 (recommended), 10.4 v2 (older CPUs), 10.10, 10.11, or 9.14 (legacy) - all patched specifically for OpenCL support and GPU compatibility
 - **Wine Version Switching** - Easily switch between Wine versions without reinstalling applications
 - **Automated Installation** - Streamlined setup process with dependency management
 - **Cross-Distribution Support** - Works on modern Linux distributions (PikaOS 4, CachyOS, Nobara, Arch, EndeavourOS, XeroLinux, Fedora, openSUSE)
@@ -55,15 +55,15 @@ The AppImage is available from the [GitHub Releases page](https://github.com/ryz
 The AppImage includes:
 - ✅ Full GUI installer functionality
 - ✅ Wine 10.4 with patches for AMD GPU fixes (standard installer supports multiple Wine versions: 10.4, 10.4 v2, 10.10, 10.11, 9.14)
-- ✅ DXVK support for better graphics performance (NVIDIA and AMD GPUs)
+- ✅ DXVK support for better graphics performance (NVIDIA, AMD, and Intel GPUs)
 - ✅ Automated dependency management
 - ✅ All installer features (One-Click Setup, Wine Configuration, etc.)
 
 ### Important Notes
 
-- **OpenCL/vkd3d**: The AppImage does **not** include OpenCL/vkd3d support. For full OpenCL hardware acceleration, use the Python GUI installer or shell scripts which will download and configure vkd3d-proton separately.
-- **Graphics Backend**: The AppImage uses DXVK by default for both NVIDIA and AMD GPUs, providing excellent hardware acceleration without requiring OpenCL.
-- **Performance**: DXVK offers excellent performance for most use cases. If you specifically need OpenCL features, use the standard installer methods.
+- **Graphics Backend**: The AppImage uses DXVK by default for NVIDIA, AMD, and Intel GPUs, providing excellent hardware acceleration. DXVK and vkd3d-proton have largely taken over for OpenCL in modern setups.
+- **OpenCL/vkd3d**: The AppImage does **not** include OpenCL/vkd3d support. For OpenCL hardware acceleration, use the Python GUI installer or shell scripts which will download and configure vkd3d-proton separately.
+- **Performance**: DXVK and vkd3d-proton offer excellent performance for most use cases and are generally more reliable than OpenCL, especially on AMD GPUs. If you specifically need OpenCL features, use the standard installer methods.
 
 ### When to Use AppImage vs. Standard Installer
 
@@ -74,7 +74,8 @@ The AppImage includes:
 - You need a quick, no-setup solution
 
 **Use the Python GUI Installer if:**
-- You need full OpenCL/vkd3d support
+- You need full vkd3d-proton/DXVK support (recommended for hardware acceleration)
+- You need OpenCL support (NVIDIA works well; AMD and Intel may have issues - see GPU Compatibility Notes)
 - You want the latest features and updates
 - You prefer running from source
 - You're doing a permanent installation
@@ -105,9 +106,26 @@ The installer will automatically detect your CPU and recommend the best Wine ver
 
 This patched Wine version is automatically downloaded and configured during setup, providing the best experience for Affinity software on Linux.
 
-## OpenCL Hardware Acceleration
+## Hardware Acceleration
 
-OpenCL support is fully functional with all supported Wine versions (10.4, 10.4 v2, 10.10, 10.11, 9.14), all patched for OpenCL, enabling GPU acceleration for improved performance in Affinity applications. The patched Wine versions include specific fixes for OpenCL and AMD GPU compatibility.
+**Note:** vkd3d-proton and DXVK have largely taken over for OpenCL in modern Wine setups, providing better performance and compatibility for GPU acceleration.
+
+### OpenCL Support
+
+OpenCL support is available with all supported Wine versions (10.4, 10.4 v2, 10.10, 10.11, 9.14), all patched for OpenCL, enabling GPU acceleration for improved performance in Affinity applications. The patched Wine versions include specific fixes for OpenCL and AMD GPU compatibility.
+
+### GPU Compatibility Notes
+
+- **NVIDIA GPUs**: OpenCL works well with NVIDIA GPUs. No known issues.
+- **AMD GPUs**: OpenCL support on AMD GPUs may have issues. **Important:** I cannot fix AMD OpenCL issues as I do not have access to an AMD GPU for testing and debugging. If you experience OpenCL issues with AMD GPUs, consider using vkd3d-proton or DXVK instead, which provide excellent hardware acceleration and are generally more reliable.
+- **Intel GPUs**: OpenCL support on Intel GPUs may have issues. **Important:** I cannot provide support or fix Intel GPU OpenCL issues as I do not have access to an Intel GPU for testing and debugging. If you experience OpenCL issues with Intel GPUs, consider using vkd3d-proton or DXVK instead, which provide excellent hardware acceleration and are generally more reliable.
+
+### vkd3d-proton and DXVK
+
+vkd3d-proton and DXVK are modern alternatives to OpenCL that provide excellent hardware acceleration:
+- **vkd3d-proton**: Provides Direct3D 12 support and is automatically configured by the installer
+- **DXVK**: Provides Direct3D 11 support and excellent performance for NVIDIA, AMD, and Intel GPUs
+- Both are more reliable than OpenCL on many systems and are recommended for better compatibility, especially for AMD and Intel GPUs
 
 <img width="2559" height="1441" alt="OpenCL Hardware Acceleration" src="https://github.com/user-attachments/assets/b5350cbf-09a3-4ba2-9e98-aec86a73986b" />
 
