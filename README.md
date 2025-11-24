@@ -352,7 +352,17 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 - Fedora
 - openSUSE (Tumbleweed/Leap)
 
-**Note:** Ubuntu, Linux Mint, Pop!_OS, and Zorin OS are not officially supported due to outdated package management systems. Users on these distributions must manually install dependencies.
+**Unsupported Distributions (No Support Provided):**
+
+The following distributions are not officially supported and **no support will be provided** for issues encountered on these systems:
+
+- **Linux Mint** - Outdated dependencies and package management systems that frequently cause compatibility issues
+- **Zorin OS** - Outdated dependencies and package management systems that frequently cause compatibility issues  
+- **Manjaro** - Known for being unstable, buggy, and prone to breakage due to its unique update cycle and package management approach
+- **Ubuntu** - Outdated package management systems (users on these distributions must manually install dependencies)
+- **Pop!_OS** - Outdated package management systems (users on these distributions must manually install dependencies)
+
+**Important:** While the installer may still function on these distributions if all required dependencies are manually installed and up-to-date, **we cannot provide support or troubleshooting assistance** for issues encountered on these systems. The reliability and functionality of the installer on these distributions varies greatly and depends heavily on the user's system configuration, dependency versions, and ability to resolve compatibility issues independently.
 
 <details>
 
