@@ -64,6 +64,7 @@ The AppImage includes:
 - **Graphics Backend**: The AppImage uses DXVK by default for NVIDIA, AMD, and Intel GPUs, providing excellent hardware acceleration. DXVK and vkd3d-proton have largely taken over for OpenCL in modern setups.
 - **OpenCL/vkd3d**: The AppImage does **not** include OpenCL/vkd3d support. For OpenCL hardware acceleration, use the Python GUI installer or shell scripts which will download and configure vkd3d-proton separately.
 - **Performance**: DXVK and vkd3d-proton offer excellent performance for most use cases and are generally more reliable than OpenCL, especially on AMD GPUs. If you specifically need OpenCL features, use the standard installer methods.
+- **CPU Compatibility**: AppImage v2 works on any CPU architecture. Other AppImage versions may have compatibility issues on older CPUs. If you experience issues on an older CPU, try the v2 version.
 
 ### When to Use AppImage vs. Standard Installer
 
@@ -72,6 +73,8 @@ The AppImage includes:
 - You prefer not to install Python/PyQt6 system-wide
 - You're testing or trying the installer on a new system
 - You need a quick, no-setup solution
+- You're using an unsupported distribution (Linux Mint, Zorin OS, Manjaro, Ubuntu, Pop!_OS) - AppImage is strongly recommended
+- You have an older CPU - Use AppImage v2 for best compatibility
 
 **Use the Python GUI Installer if:**
 - You need full vkd3d-proton/DXVK support (recommended for hardware acceleration)
@@ -356,13 +359,15 @@ bash -c "$(curl -s https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/re
 
 The following distributions are not officially supported and **no support will be provided** for issues encountered on these systems:
 
-- **Linux Mint** - Outdated dependencies and package management systems that frequently cause compatibility issues
-- **Zorin OS** - Outdated dependencies and package management systems that frequently cause compatibility issues  
-- **Manjaro** - Known for being unstable, buggy, and prone to breakage due to its unique update cycle and package management approach
-- **Ubuntu** - Outdated package management systems (users on these distributions must manually install dependencies)
-- **Pop!_OS** - Outdated package management systems (users on these distributions must manually install dependencies)
+- **Linux Mint** - Outdated dependencies and package management systems that frequently cause compatibility issues. **Recommended:** Use the [AppImage version](#appimage-release) instead.
+- **Zorin OS** - Outdated dependencies and package management systems that frequently cause compatibility issues. **Recommended:** Use the [AppImage version](#appimage-release) instead.
+- **Manjaro** - Known for being unstable, buggy, and prone to breakage due to its unique update cycle and package management approach. **Recommended:** Use the [AppImage version](#appimage-release) instead.
+- **Ubuntu** - Outdated package management systems. **Recommended:** Use the [AppImage version](#appimage-release) instead.
+- **Pop!_OS** - Outdated package management systems. **Recommended:** Use the [AppImage version](#appimage-release) instead.
 
 **Important:** While the installer may still function on these distributions if all required dependencies are manually installed and up-to-date, **we cannot provide support or troubleshooting assistance** for issues encountered on these systems. The reliability and functionality of the installer on these distributions varies greatly and depends heavily on the user's system configuration, dependency versions, and ability to resolve compatibility issues independently.
+
+**For users on unsupported distributions:** The [AppImage version](#appimage-release) is strongly recommended as it is self-contained and avoids dependency conflicts. Note that AppImage v2 works on any CPU, while other AppImage versions may have compatibility issues on older CPUs.
 
 <details>
 
