@@ -119,9 +119,9 @@ OpenCL support is available with all supported Wine versions (10.4, 10.4 v2, 10.
 
 ### GPU Compatibility Notes
 
-- **NVIDIA GPUs**: OpenCL works well with NVIDIA GPUs. No known issues.
-- **AMD GPUs**: OpenCL support on AMD GPUs may have issues. **Important:** I cannot fix AMD OpenCL issues as I do not have access to an AMD GPU for testing and debugging. If you experience OpenCL issues with AMD GPUs, consider using vkd3d-proton or DXVK instead, which provide excellent hardware acceleration and are generally more reliable.
-- **Intel GPUs**: OpenCL support on Intel GPUs may have issues. **Important:** I cannot provide support or fix Intel GPU OpenCL issues as I do not have access to an Intel GPU for testing and debugging. If you experience OpenCL issues with Intel GPUs, consider using vkd3d-proton or DXVK instead, which provide excellent hardware acceleration and are generally more reliable.
+- **NVIDIA GPUs**: OpenCL works well with NVIDIA GPUs. No known issues. Wine GPU bugs on NVIDIA GPUs can typically be addressed.
+- **AMD GPUs**: OpenCL support on AMD GPUs may have issues. **Important:** I cannot fix AMD OpenCL issues or Wine GPU bugs as I do not have access to an AMD GPU for testing and debugging. If you experience OpenCL issues or Wine GPU bugs with AMD GPUs, consider using vkd3d-proton or DXVK instead, which provide excellent hardware acceleration and are generally more reliable.
+- **Intel GPUs**: OpenCL support on Intel GPUs may have issues. **Important:** I cannot provide support or fix Intel GPU OpenCL issues or Wine GPU bugs as I do not have access to an Intel GPU for testing and debugging. If you experience OpenCL issues or Wine GPU bugs with Intel GPUs, consider using vkd3d-proton or DXVK instead, which provide excellent hardware acceleration and are generally more reliable.
 
 ### vkd3d-proton and DXVK
 
