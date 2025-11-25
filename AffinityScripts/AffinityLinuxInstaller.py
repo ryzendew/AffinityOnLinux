@@ -15,6 +15,7 @@ import platform
 import urllib.request
 import urllib.error
 import re
+import json
 from pathlib import Path
 import time
 import signal
@@ -337,6 +338,8 @@ class AffinityInstallerGUI(QMainWindow):
         # Use QTimer to defer these operations until after the window is displayed
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(50, self._deferred_startup_tasks)
+        # Check and update DXVK/vkd3d-proton in background after window is shown
+        QTimer.singleShot(500, self._check_and_update_dxvk_vkd3d)
     
     def _deferred_startup_tasks(self):
         """Run slow startup tasks in background after window is shown"""
@@ -7423,42 +7426,14 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("Wine Binary Setup", "info")
             self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
             
-            # Configure Wine version based on choice
-            if wine_version == "9.14":
-                wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
-                wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
-                archive_format = "gz"
-                wine_display_name = "Wine 9.14 (Legacy - with AMD GPU and OpenCL patches)"
-            elif wine_version == "10.4-v2":
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
-                wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.4 v2 (for older CPUs - with AMD GPU and OpenCL patches)"
-            elif wine_version == "10.10":
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.10.tar.xz"
-                wine_file_name = "ElementalWarrior-wine-10.10.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.10*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.10 (with AMD GPU and OpenCL patches)"
-            elif wine_version == "10.11":
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.11.tar.xz"
-                wine_file_name = "ElementalWarrior-wine-10.11.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.11*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.11 (with AMD GPU and OpenCL patches)"
-            else:
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
-                wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.4 (with AMD GPU and OpenCL patches)"
+            # Get Wine version configuration
+            config = self._get_wine_version_config(wine_version)
+            wine_url = config["wine_url"]
+            wine_file_name = config["wine_file_name"]
+            wine_dir_name = config["wine_dir_name"]
+            wine_dir_pattern = config["wine_dir_pattern"]
+            archive_format = config["archive_format"]
+            wine_display_name = config["wine_display_name"]
             
             self.log(f"Installing: {wine_display_name}", "info")
         
@@ -7594,6 +7569,22 @@ class AffinityInstallerGUI(QMainWindow):
             self.update_progress_text("Setting up Windows Metadata...")
             self.update_progress(0.70)
             self.setup_winmetadata()
+            
+            if self.check_cancelled():
+                return False
+            
+            # Cache all other Wine versions in background (for future switching)
+            self.update_progress_text("Caching other Wine versions...")
+            self.update_progress(0.72)
+            self._download_all_wine_versions_to_cache(wine_version)
+            
+            if self.check_cancelled():
+                return False
+            
+            # Cache DXVK in background (for future switching)
+            self.update_progress_text("Caching DXVK...")
+            self.update_progress(0.73)
+            self._cache_dxvk()
             
             if self.check_cancelled():
                 return False
@@ -7764,12 +7755,258 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("\n✓ WinMetadata reinstallation completed!", "success")
     
+    def get_latest_vkd3d_version(self):
+        """Get the latest vkd3d-proton version from GitHub releases API
+        
+        Returns:
+            str: Latest version tag (e.g., "3.0a") or None if check fails
+        """
+        try:
+            api_url = "https://api.github.com/repos/HansKristian-Work/vkd3d-proton/releases/latest"
+            self.log("Checking for latest vkd3d-proton version...", "info")
+            
+            request = urllib.request.Request(api_url)
+            request.add_header("User-Agent", "AffinityLinuxInstaller")
+            
+            with urllib.request.urlopen(request, timeout=10) as response:
+                data = json.loads(response.read().decode())
+                latest_version = data.get("tag_name", "").lstrip("v")  # Remove 'v' prefix if present
+                
+                if latest_version:
+                    self.log(f"Latest vkd3d-proton version: {latest_version}", "info")
+                    return latest_version
+                else:
+                    self.log("Could not determine latest version from API", "warning")
+                    return None
+        except urllib.error.URLError as e:
+            self.log(f"Failed to check for latest vkd3d-proton version: {e}", "warning")
+            return None
+        except json.JSONDecodeError as e:
+            self.log(f"Failed to parse GitHub API response: {e}", "warning")
+            return None
+        except Exception as e:
+            self.log(f"Error checking for latest vkd3d-proton version: {e}", "warning")
+            return None
+    
+    def get_installed_vkd3d_version(self):
+        """Get the currently installed vkd3d-proton version from cache
+        
+        Returns:
+            str: Installed version or None if not found
+        """
+        version_file = Path(self.directory) / "dxvk" / ".vkd3d_version"
+        if version_file.exists():
+            try:
+                return version_file.read_text().strip()
+            except Exception:
+                return None
+        return None
+    
+    def set_installed_vkd3d_version(self, version):
+        """Store the installed vkd3d-proton version
+        
+        Args:
+            version: Version string to store
+        """
+        cache_dir = Path(self.directory) / "dxvk"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        version_file = cache_dir / ".vkd3d_version"
+        try:
+            version_file.write_text(version)
+        except Exception as e:
+            self.log(f"Failed to save vkd3d version: {e}", "warning")
+    
+    def get_latest_dxvk_version(self):
+        """Get the latest DXVK version from GitHub releases API (normal version, not steamrt-sniper)
+        
+        Returns:
+            str: Latest version tag (e.g., "2.3") or None if check fails
+        """
+        try:
+            api_url = "https://api.github.com/repos/doitsujin/dxvk/releases/latest"
+            self.log("Checking for latest DXVK version...", "info")
+            
+            request = urllib.request.Request(api_url)
+            request.add_header("User-Agent", "AffinityLinuxInstaller")
+            
+            with urllib.request.urlopen(request, timeout=10) as response:
+                data = json.loads(response.read().decode())
+                latest_version = data.get("tag_name", "").lstrip("v")  # Remove 'v' prefix if present
+                
+                if latest_version:
+                    self.log(f"Latest DXVK version: {latest_version}", "info")
+                    return latest_version
+                else:
+                    self.log("Could not determine latest version from API", "warning")
+                    return None
+        except urllib.error.URLError as e:
+            self.log(f"Failed to check for latest DXVK version: {e}", "warning")
+            return None
+        except json.JSONDecodeError as e:
+            self.log(f"Failed to parse GitHub API response: {e}", "warning")
+            return None
+        except Exception as e:
+            self.log(f"Error checking for latest DXVK version: {e}", "warning")
+            return None
+    
+    def get_installed_dxvk_version(self):
+        """Get the currently installed DXVK version from cache
+        
+        Returns:
+            str: Installed version or None if not found
+        """
+        version_file = Path(self.directory) / "dxvk" / ".dxvk_version"
+        if version_file.exists():
+            try:
+                return version_file.read_text().strip()
+            except Exception:
+                return None
+        return None
+    
+    def set_installed_dxvk_version(self, version):
+        """Store the installed DXVK version
+        
+        Args:
+            version: Version string to store
+        """
+        cache_dir = Path(self.directory) / "dxvk"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        version_file = cache_dir / ".dxvk_version"
+        try:
+            version_file.write_text(version)
+        except Exception as e:
+            self.log(f"Failed to save DXVK version: {e}", "warning")
+    
+    def install_dxvk_dlls(self):
+        """Download and install DXVK DLLs next to Affinity executables (not in system32)
+        
+        DXVK DLLs are placed next to the Affinity executables as per best practices.
+        """
+        self.log("Installing DXVK DLLs...", "info")
+        
+        # Get latest version or use default
+        latest_version = self.get_latest_dxvk_version()
+        if not latest_version:
+            # Fallback to current latest known version
+            latest_version = "2.3"
+            self.log(f"Using fallback version: {latest_version}", "info")
+        
+        # Check if we need to update
+        installed_version = self.get_installed_dxvk_version()
+        if installed_version and installed_version == latest_version:
+            self.log(f"DXVK {latest_version} is already installed", "info")
+            return
+        elif installed_version:
+            self.log(f"Updating DXVK from {installed_version} to {latest_version}", "info")
+        
+        dxvk_version = latest_version
+        dxvk_url = f"https://github.com/doitsujin/dxvk/releases/download/v{dxvk_version}/dxvk-{dxvk_version}.tar.gz"
+        cache_dir = Path(self.directory) / "dxvk"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached_dxvk_file = cache_dir / f"dxvk-{dxvk_version}.tar.gz"
+        cached_dxvk_dir = cache_dir / f"dxvk-{dxvk_version}"
+        
+        # Check cache first
+        dxvk_dir = None
+        if cached_dxvk_dir.exists() and (cached_dxvk_dir / "x64").exists():
+            self.log("Using cached DXVK...", "info")
+            dxvk_dir = cached_dxvk_dir
+        else:
+            # Download DXVK
+            self.log(f"Downloading DXVK {dxvk_version}...", "info")
+            dxvk_file = Path(self.directory) / f"dxvk-{dxvk_version}.tar.gz"
+            if not self.download_file(dxvk_url, str(dxvk_file), "DXVK"):
+                self.log("Failed to download DXVK", "error")
+                return
+            
+            # Cache the downloaded file
+            shutil.copy2(dxvk_file, cached_dxvk_file)
+            self.log("Cached DXVK archive", "success")
+            
+            # Extract DXVK
+            self.log("Extracting DXVK...", "info")
+            try:
+                with tarfile.open(dxvk_file, "r:gz") as tar:
+                    tar.extractall(self.directory, filter='data')
+                dxvk_file.unlink()
+                self.log("DXVK extracted", "success")
+            except Exception as e:
+                self.log(f"Failed to extract DXVK: {e}", "error")
+                return
+            
+            # Find extracted directory and cache it
+            dxvk_dir = next(Path(self.directory).glob("dxvk-*"), None)
+            if dxvk_dir:
+                # Cache the extracted directory
+                shutil.copytree(dxvk_dir, cached_dxvk_dir)
+                self.log("Cached DXVK directory", "success")
+            else:
+                self.log("Failed to find extracted DXVK directory", "error")
+                return
+        
+        # Copy DLLs to application directories (next to executables, not system32)
+        app_dirs = {
+            "Photo": "Photo 2",
+            "Designer": "Designer 2",
+            "Publisher": "Publisher 2",
+            "Add": "Affinity"
+        }
+        
+        dxvk_dlls = ["d3d8.dll", "d3d9.dll", "d3d10.dll", "d3d10_1.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"]
+        installed_count = 0
+        
+        for app_name, app_dir_name in app_dirs.items():
+            app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / app_dir_name
+            if app_dir.exists():
+                for dll in dxvk_dlls:
+                    src = dxvk_dir / "x64" / dll
+                    if src.exists():
+                        dst = app_dir / dll
+                        shutil.copy2(src, dst)
+                        installed_count += 1
+                        self.log(f"Installed {dll} to {app_dir_name}", "success")
+        
+        if installed_count > 0:
+            # Store installed version
+            self.set_installed_dxvk_version(dxvk_version)
+            self.log(f"DXVK DLLs installed (version {dxvk_version}) - {installed_count} DLL(s) copied", "success")
+        else:
+            self.log("No DXVK DLLs were installed (no application directories found)", "warning")
+    
     def install_d3d12_dlls(self):
         """Install d3d12.dll and d3d12core.dll from vkd3d-proton and set up DLL overrides"""
         self.log("Installing d3d12.dll and d3d12core.dll...", "info")
         
-        vkd3d_url = "https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
-        vkd3d_file = Path(self.directory) / "vkd3d-proton-2.14.1.tar.zst"
+        # Get latest version or use default
+        latest_version = self.get_latest_vkd3d_version()
+        if not latest_version:
+            # Fallback to current latest known version
+            latest_version = "3.0a"
+            self.log(f"Using fallback version: {latest_version}", "info")
+        
+        # Check if we need to update
+        installed_version = self.get_installed_vkd3d_version()
+        if installed_version and installed_version == latest_version:
+            self.log(f"vkd3d-proton {latest_version} is already installed", "info")
+        elif installed_version:
+            self.log(f"Updating vkd3d-proton from {installed_version} to {latest_version}", "info")
+            # Clear old cache if version changed
+            cache_dir = Path(self.directory) / "dxvk"
+            old_cached_dir = cache_dir / f"vkd3d-proton-{installed_version}"
+            if old_cached_dir.exists():
+                try:
+                    shutil.rmtree(old_cached_dir)
+                    self.log(f"Removed old cached version {installed_version}", "info")
+                except Exception as e:
+                    self.log(f"Warning: Could not remove old cache: {e}", "warning")
+        
+        vkd3d_version = latest_version
+        vkd3d_url = f"https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v{vkd3d_version}/vkd3d-proton-{vkd3d_version}.tar.zst"
+        vkd3d_file_name = f"vkd3d-proton-{vkd3d_version}.tar.zst"
+        cache_dir = Path(self.directory) / "dxvk"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached_vkd3d_file = cache_dir / vkd3d_file_name
+        cached_vkd3d_dir = cache_dir / f"vkd3d-proton-{vkd3d_version}"
         vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
         vkd3d_temp.mkdir(exist_ok=True)
         
@@ -7780,26 +8017,47 @@ class AffinityInstallerGUI(QMainWindow):
             self.setup_d3d12_overrides()
             return
         
-        self.log("Downloading vkd3d-proton for d3d12 DLLs...", "info")
-        if not self.download_file(vkd3d_url, str(vkd3d_file), "vkd3d-proton"):
-            self.log("Failed to download vkd3d-proton", "error")
-            return
-        
-        # Extract vkd3d-proton
-        self.log("Extracting vkd3d-proton...", "info")
-        if self.check_command("unzstd"):
-            tar_file = Path(self.directory) / "vkd3d-proton.tar"
-            success, _, _ = self.run_command(["unzstd", "-f", str(vkd3d_file), "-o", str(tar_file)])
-            if success:
-                with tarfile.open(tar_file, "r") as tar:
-                    tar.extractall(self.directory, filter='data')
-                tar_file.unlink()
-                self.log("vkd3d-proton extracted", "success")
-        
-        vkd3d_file.unlink()
+        # Check cache first
+        vkd3d_dir = None
+        if cached_vkd3d_dir.exists():
+            self.log("Using cached vkd3d-proton...", "info")
+            vkd3d_dir = cached_vkd3d_dir
+        else:
+            # Download vkd3d-proton
+            self.log("Downloading vkd3d-proton for d3d12 DLLs...", "info")
+            vkd3d_file = Path(self.directory) / vkd3d_file_name
+            if not self.download_file(vkd3d_url, str(vkd3d_file), "vkd3d-proton"):
+                self.log("Failed to download vkd3d-proton", "error")
+                return
+            
+            # Cache the downloaded file
+            shutil.copy2(vkd3d_file, cached_vkd3d_file)
+            self.log("Cached vkd3d-proton archive", "success")
+            
+            # Extract vkd3d-proton
+            self.log("Extracting vkd3d-proton...", "info")
+            if self.check_command("unzstd"):
+                tar_file = Path(self.directory) / "vkd3d-proton.tar"
+                success, _, _ = self.run_command(["unzstd", "-f", str(vkd3d_file), "-o", str(tar_file)])
+                if success:
+                    with tarfile.open(tar_file, "r") as tar:
+                        tar.extractall(self.directory, filter='data')
+                    tar_file.unlink()
+                    self.log("vkd3d-proton extracted", "success")
+            
+            vkd3d_file.unlink()
+            
+            # Find extracted directory and cache it
+            vkd3d_dir = next(Path(self.directory).glob("vkd3d-proton-*"), None)
+            if vkd3d_dir:
+                # Cache the extracted directory
+                shutil.copytree(vkd3d_dir, cached_vkd3d_dir)
+                self.log("Cached vkd3d-proton directory", "success")
+            else:
+                self.log("Failed to find extracted vkd3d-proton directory", "error")
+                return
         
         # Copy DLLs
-        vkd3d_dir = next(Path(self.directory).glob("vkd3d-proton-*"), None)
         if vkd3d_dir:
             wine_lib_dir.mkdir(parents=True, exist_ok=True)
             
@@ -7812,8 +8070,13 @@ class AffinityInstallerGUI(QMainWindow):
                         self.log(f"Installed {dll}", "success")
                         break
             
-            shutil.rmtree(vkd3d_dir)
-            self.log("d3d12 DLLs installed", "success")
+            # Only remove if it's not the cached version
+            if vkd3d_dir != cached_vkd3d_dir:
+                shutil.rmtree(vkd3d_dir)
+            
+            # Store installed version
+            self.set_installed_vkd3d_version(vkd3d_version)
+            self.log(f"d3d12 DLLs installed (vkd3d-proton {vkd3d_version})", "success")
         
         # Set up DLL overrides
         self.setup_d3d12_overrides()
@@ -7850,6 +8113,9 @@ class AffinityInstallerGUI(QMainWindow):
         variables, not by copying DLLs to system32.
         """
         self.log("Setting up DLL overrides for DXVK...", "info")
+        
+        # Install/update DXVK DLLs next to executables
+        self.install_dxvk_dlls()
         
         reg_file = Path(self.directory) / "dxvk_overrides.reg"
         with open(reg_file, "w") as f:
@@ -7975,13 +8241,28 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("OpenCL Support Setup", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        vkd3d_url = "https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
-        vkd3d_file = Path(self.directory) / "vkd3d-proton-2.14.1.tar.zst"
+        # Get latest version or use default
+        latest_version = self.get_latest_vkd3d_version()
+        if not latest_version:
+            # Fallback to current latest known version
+            latest_version = "3.0a"
+            self.log(f"Using fallback version: {latest_version}", "info")
+        
+        # Check if we need to update
+        installed_version = self.get_installed_vkd3d_version()
+        if installed_version and installed_version == latest_version:
+            self.log(f"vkd3d-proton {latest_version} is already installed", "info")
+        elif installed_version:
+            self.log(f"Updating vkd3d-proton from {installed_version} to {latest_version}", "info")
+        
+        vkd3d_version = latest_version
+        vkd3d_url = f"https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v{vkd3d_version}/vkd3d-proton-{vkd3d_version}.tar.zst"
+        vkd3d_file = Path(self.directory) / f"vkd3d-proton-{vkd3d_version}.tar.zst"
         vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
         vkd3d_temp.mkdir(exist_ok=True)
         
         self.update_progress_text("Downloading vkd3d-proton...")
-        self.log("Downloading vkd3d-proton...", "info")
+        self.log(f"Downloading vkd3d-proton {vkd3d_version}...", "info")
         if not self.download_file(vkd3d_url, str(vkd3d_file), "vkd3d-proton"):
             self.log("Failed to download vkd3d-proton", "error")
             return
@@ -8016,7 +8297,10 @@ class AffinityInstallerGUI(QMainWindow):
                         break
             
             shutil.rmtree(vkd3d_dir)
-            self.log("vkd3d-proton setup completed", "success")
+            
+            # Store installed version
+            self.set_installed_vkd3d_version(vkd3d_version)
+            self.log(f"vkd3d-proton setup completed (version {vkd3d_version})", "success")
         
         # Set up DLL overrides
         self.setup_d3d12_overrides()
@@ -8154,6 +8438,300 @@ class AffinityInstallerGUI(QMainWindow):
         
         threading.Thread(target=self.setup_wine, args=(wine_version_choice,), daemon=True).start()
     
+    def _get_wine_version_config(self, wine_version):
+        """Get Wine version configuration (URL, filename, etc.)
+        
+        Args:
+            wine_version: "10.4", "10.4-v2", "9.14", "10.10", or "10.11"
+        
+        Returns:
+            dict with wine_url, wine_file_name, wine_dir_name, wine_dir_pattern, archive_format, wine_display_name
+        """
+        if wine_version == "9.14":
+            return {
+                "wine_url": "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz",
+                "wine_file_name": "ElementalWarriorWine-x86_64.tar.gz",
+                "wine_dir_name": "ElementalWarriorWine",
+                "wine_dir_pattern": "ElementalWarriorWine*",
+                "archive_format": "gz",
+                "wine_display_name": "Wine 9.14 (Legacy - with AMD GPU and OpenCL patches)"
+            }
+        elif wine_version == "10.4-v2":
+            return {
+                "wine_url": "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz",
+                "wine_file_name": "ElementalWarrior-wine-10.4-v2.tar.xz",
+                "wine_dir_name": "ElementalWarriorWine",
+                "wine_dir_pattern": "ElementalWarrior-wine-10.4-v2*",
+                "archive_format": "xz",
+                "wine_display_name": "Wine 10.4 v2 (for older CPUs - with AMD GPU and OpenCL patches)"
+            }
+        elif wine_version == "10.10":
+            return {
+                "wine_url": "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.10.tar.xz",
+                "wine_file_name": "ElementalWarrior-wine-10.10.tar.xz",
+                "wine_dir_name": "ElementalWarriorWine",
+                "wine_dir_pattern": "ElementalWarrior-wine-10.10*",
+                "archive_format": "xz",
+                "wine_display_name": "Wine 10.10 (with AMD GPU and OpenCL patches)"
+            }
+        elif wine_version == "10.11":
+            return {
+                "wine_url": "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.11.tar.xz",
+                "wine_file_name": "ElementalWarrior-wine-10.11.tar.xz",
+                "wine_dir_name": "ElementalWarriorWine",
+                "wine_dir_pattern": "ElementalWarrior-wine-10.11*",
+                "archive_format": "xz",
+                "wine_display_name": "Wine 10.11 (with AMD GPU and OpenCL patches)"
+            }
+        else:  # Default to 10.4
+            return {
+                "wine_url": "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz",
+                "wine_file_name": "ElementalWarriorWine-x86_64-10.4.tar.xz",
+                "wine_dir_name": "ElementalWarriorWine",
+                "wine_dir_pattern": "ElementalWarriorWine*",
+                "archive_format": "xz",
+                "wine_display_name": "Wine 10.4 (with AMD GPU and OpenCL patches)"
+            }
+    
+    def _download_wine_to_cache(self, wine_version, cache_dir):
+        """Download a Wine version to cache directory
+        
+        Args:
+            wine_version: "10.4", "10.4-v2", "9.14", "10.10", or "10.11"
+            cache_dir: Path to cache directory
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        config = self._get_wine_version_config(wine_version)
+        wine_file = cache_dir / config["wine_file_name"]
+        wine_dir = cache_dir / wine_version
+        
+        # Check if already cached
+        if wine_dir.exists() and (wine_dir / "bin" / "wine").exists():
+            self.log(f"{config['wine_display_name']} already cached, skipping download", "info")
+            return True
+        
+        # Download Wine binary
+        self.log(f"Caching {config['wine_display_name']}...", "info")
+        if not self.download_file(config["wine_url"], str(wine_file), f"{config['wine_display_name']} binaries"):
+            self.log(f"Failed to cache {config['wine_display_name']}", "warning")
+            return False
+        
+        if self.check_cancelled():
+            return False
+        
+        # Extract Wine
+        self.log(f"Extracting {config['wine_display_name']}...", "info")
+        try:
+            if config["archive_format"] == "gz":
+                with tarfile.open(wine_file, "r:gz") as tar:
+                    tar.extractall(cache_dir, filter='data')
+            elif config["archive_format"] == "xz":
+                try:
+                    import lzma
+                    with lzma.open(wine_file, 'rb') as xz_file:
+                        with tarfile.open(fileobj=xz_file, mode='r') as tar:
+                            tar.extractall(cache_dir, filter='data')
+                except ImportError:
+                    if not self.check_command("xz") and not self.check_command("unxz"):
+                        self.log("xz or unxz is required to extract Wine archive. Please install xz.", "warning")
+                        wine_file.unlink()
+                        return False
+                    tar_file = wine_file.with_suffix('.tar')
+                    xz_cmd = "xz" if self.check_command("xz") else "unxz"
+                    success, _, _ = self.run_command([xz_cmd, "-d", "-k", str(wine_file)], check=True)
+                    if not success:
+                        self.log("Failed to decompress Wine archive", "warning")
+                        wine_file.unlink()
+                        return False
+                    with tarfile.open(tar_file, "r") as tar:
+                        tar.extractall(cache_dir, filter='data')
+                    tar_file.unlink()
+            
+            wine_file.unlink()
+            
+            # Find extracted directory and rename to version name
+            extracted_dir = next(cache_dir.glob(config["wine_dir_pattern"]), None)
+            if extracted_dir:
+                if extracted_dir != wine_dir:
+                    if wine_dir.exists():
+                        shutil.rmtree(wine_dir)
+                    extracted_dir.rename(wine_dir)
+                self.log(f"Cached {config['wine_display_name']}", "success")
+                return True
+            else:
+                self.log(f"Could not find extracted Wine directory for {wine_version}", "warning")
+                return False
+                
+        except Exception as e:
+            self.log(f"Failed to extract cached Wine {wine_version}: {e}", "warning")
+            if wine_file.exists():
+                wine_file.unlink()
+            return False
+    
+    def _download_all_wine_versions_to_cache(self, selected_version):
+        """Download all Wine versions to cache directory (except the one already being installed)
+        
+        Args:
+            selected_version: The version that's already being downloaded/installed
+        """
+        cache_dir = Path(self.directory) / "Wine-Switch"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        all_versions = ["10.4", "10.4-v2", "9.14", "10.10", "10.11"]
+        
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Caching All Wine Versions", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        self.log("Downloading all Wine versions to cache for future switching...", "info")
+        self.log("This helps users with capped internet by avoiding re-downloads.\n", "info")
+        
+        for version in all_versions:
+            if version == selected_version:
+                # Already downloading this one, skip
+                continue
+            
+            if self.check_cancelled():
+                return
+            
+            self._download_wine_to_cache(version, cache_dir)
+        
+        self.log("\n✓ All Wine versions cached successfully!", "success")
+    
+    def _cache_dxvk(self):
+        """Download and cache DXVK to cache directory (for future switching)
+        
+        This helps users with capped internet by avoiding re-downloads.
+        """
+        cache_dir = Path(self.directory) / "dxvk"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Caching DXVK", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        self.log("Downloading DXVK to cache for future switching...", "info")
+        self.log("This helps users with capped internet by avoiding re-downloads.\n", "info")
+        
+        # Get latest version or use default
+        latest_version = self.get_latest_dxvk_version()
+        if not latest_version:
+            # Fallback to current latest known version
+            latest_version = "2.3"
+            self.log(f"Using fallback version: {latest_version}", "info")
+        
+        # Check if already cached
+        cached_dxvk_dir = cache_dir / f"dxvk-{latest_version}"
+        if cached_dxvk_dir.exists() and (cached_dxvk_dir / "x64").exists():
+            self.log(f"DXVK {latest_version} already cached, skipping download", "info")
+            return
+        
+        dxvk_version = latest_version
+        dxvk_url = f"https://github.com/doitsujin/dxvk/releases/download/v{dxvk_version}/dxvk-{dxvk_version}.tar.gz"
+        cached_dxvk_file = cache_dir / f"dxvk-{dxvk_version}.tar.gz"
+        
+        # Download DXVK
+        self.log(f"Caching DXVK {dxvk_version}...", "info")
+        dxvk_file = Path(self.directory) / f"dxvk-{dxvk_version}.tar.gz"
+        if not self.download_file(dxvk_url, str(dxvk_file), "DXVK"):
+            self.log(f"Failed to cache DXVK {dxvk_version}", "warning")
+            return
+        
+        if self.check_cancelled():
+            return
+        
+        # Cache the downloaded file
+        shutil.copy2(dxvk_file, cached_dxvk_file)
+        self.log("Cached DXVK archive", "success")
+        
+        # Extract DXVK
+        self.log(f"Extracting DXVK {dxvk_version}...", "info")
+        try:
+            with tarfile.open(dxvk_file, "r:gz") as tar:
+                tar.extractall(self.directory, filter='data')
+            dxvk_file.unlink()
+            self.log("DXVK extracted", "success")
+        except Exception as e:
+            self.log(f"Failed to extract cached DXVK: {e}", "warning")
+            if dxvk_file.exists():
+                dxvk_file.unlink()
+            return
+        
+        # Find extracted directory and cache it
+        dxvk_dir = next(Path(self.directory).glob("dxvk-*"), None)
+        if dxvk_dir:
+            # Cache the extracted directory
+            shutil.copytree(dxvk_dir, cached_dxvk_dir)
+            self.log("Cached DXVK directory", "success")
+            # Clean up temporary extracted directory
+            shutil.rmtree(dxvk_dir)
+        else:
+            self.log("Could not find extracted DXVK directory", "warning")
+            return
+        
+        # Store cached version
+        self.set_installed_dxvk_version(dxvk_version)
+        self.log(f"\n✓ DXVK {dxvk_version} cached successfully!", "success")
+    
+    def _check_and_update_dxvk_vkd3d(self):
+        """Check if DXVK or vkd3d-proton need updating and update them if needed
+        Also download DXVK if missing.
+        Runs in background thread to avoid blocking GUI.
+        """
+        threading.Thread(target=self._check_and_update_dxvk_vkd3d_thread, daemon=True).start()
+    
+    def _check_and_update_dxvk_vkd3d_thread(self):
+        """Background thread to check and update DXVK/vkd3d-proton"""
+        try:
+            # Only check if Wine is already set up
+            wine_dir = self.get_wine_dir()
+            if not wine_dir.exists():
+                return  # Wine not set up yet, skip check
+            
+            self.log("Checking for DXVK and vkd3d-proton updates...", "info")
+            
+            # Check DXVK
+            latest_dxvk = self.get_latest_dxvk_version()
+            if latest_dxvk:
+                installed_dxvk = self.get_installed_dxvk_version()
+                cache_dir = Path(self.directory) / "dxvk"
+                cached_dxvk_dir = cache_dir / f"dxvk-{latest_dxvk}"
+                
+                # Check if DXVK is missing or outdated
+                if not installed_dxvk or installed_dxvk != latest_dxvk:
+                    if not cached_dxvk_dir.exists() or not (cached_dxvk_dir / "x64").exists():
+                        self.log(f"DXVK {latest_dxvk} is missing or outdated, downloading...", "info")
+                        self._cache_dxvk()
+                    elif installed_dxvk != latest_dxvk:
+                        self.log(f"DXVK update available: {installed_dxvk} -> {latest_dxvk}", "info")
+                        self.log("Updating DXVK cache...", "info")
+                        self._cache_dxvk()
+                else:
+                    # Verify cache exists
+                    if not cached_dxvk_dir.exists() or not (cached_dxvk_dir / "x64").exists():
+                        self.log(f"DXVK {latest_dxvk} cache missing, downloading...", "info")
+                        self._cache_dxvk()
+            
+            # Check vkd3d-proton
+            latest_vkd3d = self.get_latest_vkd3d_version()
+            if latest_vkd3d:
+                installed_vkd3d = self.get_installed_vkd3d_version()
+                cache_dir = Path(self.directory) / "dxvk"
+                cached_vkd3d_dir = cache_dir / f"vkd3d-proton-{latest_vkd3d}"
+                
+                # Check if vkd3d-proton is missing or outdated
+                if not installed_vkd3d or installed_vkd3d != latest_vkd3d:
+                    if not cached_vkd3d_dir.exists():
+                        self.log(f"vkd3d-proton {latest_vkd3d} is missing or outdated, will download when needed", "info")
+                    elif installed_vkd3d != latest_vkd3d:
+                        self.log(f"vkd3d-proton update available: {installed_vkd3d} -> {latest_vkd3d}", "info")
+                        self.log("Update will be downloaded when switching to vkd3d", "info")
+            
+            self.log("DXVK and vkd3d-proton check completed", "success")
+            
+        except Exception as e:
+            self.log(f"Error checking DXVK/vkd3d-proton updates: {e}", "warning")
+    
     def _setup_wine_switch(self, wine_version="10.4"):
         """Setup Wine binary only - for switching versions without reconfiguration
         
@@ -8161,116 +8739,140 @@ class AffinityInstallerGUI(QMainWindow):
             wine_version: "10.4" for Wine 10.4 (recommended), "10.4-v2" for Wine 10.4 v2 (older CPUs), "9.14" for Wine 9.14 (legacy), "10.10" for Wine 10.10, or "10.11" for Wine 10.11
         """
         try:
-            # Configure Wine version based on user's choice
-            # This ensures the exact version selected by the user is downloaded
-            if wine_version == "9.14":
-                wine_url = "https://github.com/seapear/AffinityOnLinux/releases/download/Legacy/ElementalWarriorWine-x86_64.tar.gz"
-                wine_file_name = "ElementalWarriorWine-x86_64.tar.gz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
-                archive_format = "gz"
-                wine_display_name = "Wine 9.14 (Legacy)"
-            elif wine_version == "10.4-v2":
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.4-v2.tar.xz"
-                wine_file_name = "ElementalWarrior-wine-10.4-v2.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.4-v2*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.4 v2"
-            elif wine_version == "10.10":
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.10.tar.xz"
-                wine_file_name = "ElementalWarrior-wine-10.10.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.10*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.10"
-            elif wine_version == "10.11":
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarrior-wine-10.11.tar.xz"
-                wine_file_name = "ElementalWarrior-wine-10.11.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarrior-wine-10.11*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.11"
-            else:
-                # Default to Wine 10.4 if version is "10.4" or anything else
-                wine_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/ElementalWarriorWine-x86_64-10.4.tar.xz"
-                wine_file_name = "ElementalWarriorWine-x86_64-10.4.tar.xz"
-                wine_dir_name = "ElementalWarriorWine"
-                wine_dir_pattern = "ElementalWarriorWine*"  # Actual extracted directory name
-                archive_format = "xz"
-                wine_display_name = "Wine 10.4"
+            # Get Wine version configuration
+            config = self._get_wine_version_config(wine_version)
+            wine_url = config["wine_url"]
+            wine_file_name = config["wine_file_name"]
+            wine_dir_name = config["wine_dir_name"]
+            wine_dir_pattern = config["wine_dir_pattern"]
+            archive_format = config["archive_format"]
+            wine_display_name = config["wine_display_name"]
             
-            # Log which version is being downloaded
-            self.log(f"Selected version: {wine_version} -> Downloading: {wine_display_name}", "info")
-            self.log(f"Download URL: {wine_url}", "info")
+            # Check cache first
+            cache_dir = Path(self.directory) / "Wine-Switch"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cached_wine_dir = cache_dir / wine_version
             
-            # Create directory
-            Path(self.directory).mkdir(parents=True, exist_ok=True)
-            
-            if self.check_cancelled():
-                return False
-            
-            # Download Wine binary
-            wine_file = Path(self.directory) / wine_file_name
-            self.update_progress_text(f"Downloading {wine_display_name}...")
-            self.update_progress(0.4)
-            self.log(f"Downloading {wine_display_name}...", "info")
-            if not self.download_file(wine_url, str(wine_file), f"{wine_display_name} binaries"):
-                self.log(f"Failed to download {wine_display_name}", "error")
-                return False
-            
-            if self.check_cancelled():
-                return False
-            
-            # Extract Wine
-            self.update_progress_text("Extracting Wine binary...")
-            self.update_progress(0.6)
-            self.log("Extracting Wine binary...", "info")
-            try:
-                if archive_format == "gz":
-                    with tarfile.open(wine_file, "r:gz") as tar:
-                        tar.extractall(self.directory, filter='data')
-                elif archive_format == "xz":
-                    try:
-                        import lzma
-                        with lzma.open(wine_file, 'rb') as xz_file:
-                            with tarfile.open(fileobj=xz_file, mode='r') as tar:
-                                tar.extractall(self.directory, filter='data')
-                    except ImportError:
-                        if not self.check_command("xz") and not self.check_command("unxz"):
-                            self.log("xz or unxz is required to extract Wine archive. Please install xz.", "error")
-                            return False
-                        tar_file = wine_file.with_suffix('.tar')
-                        xz_cmd = "xz" if self.check_command("xz") else "unxz"
-                        success, _, _ = self.run_command([xz_cmd, "-d", "-k", str(wine_file)], check=True)
-                        if not success:
-                            self.log("Failed to decompress Wine archive", "error")
-                            return False
-                        with tarfile.open(tar_file, "r") as tar:
-                            tar.extractall(self.directory, filter='data')
-                        tar_file.unlink()
+            if cached_wine_dir.exists() and (cached_wine_dir / "bin" / "wine").exists():
+                # Use cached version
+                self.log(f"Using cached {wine_display_name}...", "info")
+                self.update_progress_text(f"Using cached {wine_display_name}...")
+                self.update_progress(0.3)
                 
-                wine_file.unlink()
-                self.log("Wine binary extracted", "success")
-            except Exception as e:
-                self.log(f"Failed to extract Wine: {e}", "error")
-                return False
-            
-            if self.check_cancelled():
-                return False
-            
-            # Find and link Wine directory
-            self.update_progress(0.8)
-            wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
-            if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
-                target = Path(self.directory) / wine_dir_name
-                if target.exists() or target.is_symlink():
-                    if target.is_symlink():
-                        target.unlink()
-                    elif target.is_dir():
-                        shutil.rmtree(target)
-                target.symlink_to(wine_dir)
-                self.log("Wine symlink created", "success")
+                # Create directory
+                Path(self.directory).mkdir(parents=True, exist_ok=True)
+                
+                if self.check_cancelled():
+                    return False
+                
+                # Copy from cache
+                self.update_progress_text("Copying Wine from cache...")
+                self.update_progress(0.5)
+                self.log("Copying Wine from cache...", "info")
+                
+                # Find and link Wine directory
+                wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
+                if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
+                    target = Path(self.directory) / wine_dir_name
+                    if target.exists() or target.is_symlink():
+                        if target.is_symlink():
+                            target.unlink()
+                        elif target.is_dir():
+                            shutil.rmtree(target)
+                    target.symlink_to(wine_dir)
+                else:
+                    # Copy from cache
+                    target = Path(self.directory) / wine_dir_name
+                    if target.exists() or target.is_symlink():
+                        if target.is_symlink():
+                            target.unlink()
+                        elif target.is_dir():
+                            shutil.rmtree(target)
+                    shutil.copytree(cached_wine_dir, target)
+                
+                self.log("Wine copied from cache", "success")
+            else:
+                # Download and cache
+                self.log(f"Selected version: {wine_version} -> Downloading: {wine_display_name}", "info")
+                self.log(f"Download URL: {wine_url}", "info")
+                
+                # Create directory
+                Path(self.directory).mkdir(parents=True, exist_ok=True)
+                
+                if self.check_cancelled():
+                    return False
+                
+                # Download Wine binary
+                wine_file = Path(self.directory) / wine_file_name
+                self.update_progress_text(f"Downloading {wine_display_name}...")
+                self.update_progress(0.4)
+                self.log(f"Downloading {wine_display_name}...", "info")
+                if not self.download_file(wine_url, str(wine_file), f"{wine_display_name} binaries"):
+                    self.log(f"Failed to download {wine_display_name}", "error")
+                    return False
+                
+                if self.check_cancelled():
+                    return False
+                
+                # Extract Wine
+                self.update_progress_text("Extracting Wine binary...")
+                self.update_progress(0.6)
+                self.log("Extracting Wine binary...", "info")
+                try:
+                    if archive_format == "gz":
+                        with tarfile.open(wine_file, "r:gz") as tar:
+                            tar.extractall(self.directory, filter='data')
+                    elif archive_format == "xz":
+                        try:
+                            import lzma
+                            with lzma.open(wine_file, 'rb') as xz_file:
+                                with tarfile.open(fileobj=xz_file, mode='r') as tar:
+                                    tar.extractall(self.directory, filter='data')
+                        except ImportError:
+                            if not self.check_command("xz") and not self.check_command("unxz"):
+                                self.log("xz or unxz is required to extract Wine archive. Please install xz.", "error")
+                                return False
+                            tar_file = wine_file.with_suffix('.tar')
+                            xz_cmd = "xz" if self.check_command("xz") else "unxz"
+                            success, _, _ = self.run_command([xz_cmd, "-d", "-k", str(wine_file)], check=True)
+                            if not success:
+                                self.log("Failed to decompress Wine archive", "error")
+                                return False
+                            with tarfile.open(tar_file, "r") as tar:
+                                tar.extractall(self.directory, filter='data')
+                            tar_file.unlink()
+                    
+                    wine_file.unlink()
+                    self.log("Wine binary extracted", "success")
+                except Exception as e:
+                    self.log(f"Failed to extract Wine: {e}", "error")
+                    return False
+                
+                # Cache this version for future use
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                extracted_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
+                if extracted_dir:
+                    cached_wine_dir = cache_dir / wine_version
+                    if cached_wine_dir.exists():
+                        shutil.rmtree(cached_wine_dir)
+                    shutil.copytree(extracted_dir, cached_wine_dir)
+                    self.log(f"Cached {wine_display_name} for future use", "success")
+                
+                if self.check_cancelled():
+                    return False
+                
+                # Find and link Wine directory
+                self.update_progress(0.8)
+                wine_dir = next(Path(self.directory).glob(wine_dir_pattern), None)
+                if wine_dir and wine_dir != Path(self.directory) / wine_dir_name:
+                    target = Path(self.directory) / wine_dir_name
+                    if target.exists() or target.is_symlink():
+                        if target.is_symlink():
+                            target.unlink()
+                        elif target.is_dir():
+                            shutil.rmtree(target)
+                    target.symlink_to(wine_dir)
+                    self.log("Wine symlink created", "success")
             
             # Verify Wine binary
             self.update_progress(0.9)
