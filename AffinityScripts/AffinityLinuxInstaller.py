@@ -868,6 +868,26 @@ class AffinityInstallerGUI(QMainWindow):
                     background-color: #3c3c3c;
                     border-radius: 3px;
                 }
+                QScrollArea {
+                    border: none;
+                    background-color: transparent;
+                }
+                QScrollBar:vertical {
+                    background-color: #2d2d2d;
+                    width: 12px;
+                    border-radius: 6px;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #555555;
+                    border-radius: 6px;
+                    min-height: 30px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #666666;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
+                }
             """
         else:
             return """
@@ -1007,6 +1027,26 @@ class AffinityInstallerGUI(QMainWindow):
                 QSlider::add-page:horizontal {
                     background-color: #e0e0e0;
                     border-radius: 3px;
+                }
+                QScrollArea {
+                    border: none;
+                    background-color: transparent;
+                }
+                QScrollBar:vertical {
+                    background-color: #f5f5f5;
+                    width: 12px;
+                    border-radius: 6px;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #c0c0c0;
+                    border-radius: 6px;
+                    min-height: 30px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #a0a0a0;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
                 }
             """
     
@@ -2552,24 +2592,37 @@ class AffinityInstallerGUI(QMainWindow):
         dialog.setModal(True)
         dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        # Responsive sizing
+        # Responsive sizing - improved for all screen sizes
         screen = dialog.screen().availableGeometry()
         screen_width = screen.width()
         screen_height = screen.height()
         
         if screen_width < 800 or screen_height < 600:
             min_width = min(350, int(screen_width * 0.9))
-            min_height = min(200, int(screen_height * 0.8))
+            min_height = min(200, int(screen_height * 0.7))
             default_width = min(450, int(screen_width * 0.85))
-            default_height = min(220, int(screen_height * 0.7))
+            default_height = min(220, int(screen_height * 0.65))
+            max_width = int(screen_width * 0.95)
+            max_height = int(screen_height * 0.85)
+        elif screen_width < 1280 or screen_height < 720:
+            min_width = 400
+            min_height = 200
+            default_width = 500
+            default_height = 240
+            max_width = int(screen_width * 0.9)
+            max_height = int(screen_height * 0.85)
         else:
             min_width = 400
             min_height = 200
             default_width = 500
             default_height = 240
+            max_width = 700
+            max_height = 500
         
         dialog.setMinimumWidth(min_width)
         dialog.setMinimumHeight(min_height)
+        dialog.setMaximumWidth(max_width)
+        dialog.setMaximumHeight(max_height)
         dialog.resize(default_width, default_height)
         dialog.setSizeGripEnabled(True)
         
@@ -2804,28 +2857,43 @@ class AffinityInstallerGUI(QMainWindow):
         dialog.setModal(True)
         dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        # Responsive sizing - smaller minimums for small displays, but still usable
-        # Get screen size to adjust minimums
+        # Responsive sizing - adapt to screen size and content
+        # Get screen size to adjust sizes
         screen = dialog.screen().availableGeometry()
         screen_width = screen.width()
         screen_height = screen.height()
         
-        # Adaptive minimum sizes based on screen size
+        # Calculate optimal sizes based on screen size
+        # Account for 5 Wine version options now
         if screen_width < 800 or screen_height < 600:
-            # Small screen - use smaller minimums
+            # Small screen - use smaller sizes
             min_width = min(400, int(screen_width * 0.9))
-            min_height = min(300, int(screen_height * 0.8))
+            min_height = min(350, int(screen_height * 0.7))
             default_width = min(500, int(screen_width * 0.85))
-            default_height = min(380, int(screen_height * 0.75))
+            default_height = min(450, int(screen_height * 0.65))
+            max_width = int(screen_width * 0.95)
+            max_height = int(screen_height * 0.85)
+        elif screen_width < 1280 or screen_height < 720:
+            # Medium screen
+            min_width = 500
+            min_height = 400
+            default_width = 650
+            default_height = 550
+            max_width = int(screen_width * 0.9)
+            max_height = int(screen_height * 0.85)
         else:
-            # Normal screen
-            min_width = 450
-            min_height = 320
-            default_width = 600
-            default_height = 400
+            # Large screen
+            min_width = 550
+            min_height = 450
+            default_width = 700
+            default_height = 600
+            max_width = 900
+            max_height = 800
         
         dialog.setMinimumWidth(min_width)
         dialog.setMinimumHeight(min_height)
+        dialog.setMaximumWidth(max_width)
+        dialog.setMaximumHeight(max_height)
         dialog.resize(default_width, default_height)
         
         # Make dialog resizable
@@ -2922,6 +2990,26 @@ class AffinityInstallerGUI(QMainWindow):
                 QPushButton#okButton:pressed, QPushButton#installButton:pressed {
                     background-color: #3db9a0;
                 }
+                QScrollArea {
+                    border: none;
+                    background-color: transparent;
+                }
+                QScrollBar:vertical {
+                    background-color: #2d2d2d;
+                    width: 12px;
+                    border-radius: 6px;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #555555;
+                    border-radius: 6px;
+                    min-height: 30px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #666666;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
+                }
             """
         else:
             dialog_style = """
@@ -3013,6 +3101,26 @@ class AffinityInstallerGUI(QMainWindow):
                 QPushButton#installButton:pressed {
                     background-color: #3d8b40;
                 }
+                QScrollArea {
+                    border: none;
+                    background-color: transparent;
+                }
+                QScrollBar:vertical {
+                    background-color: #f5f5f5;
+                    width: 12px;
+                    border-radius: 6px;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #c0c0c0;
+                    border-radius: 6px;
+                    min-height: 30px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #a0a0a0;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
+                }
             """
         
         dialog.setStyleSheet(dialog_style)
@@ -3041,13 +3149,22 @@ class AffinityInstallerGUI(QMainWindow):
         desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(desc_label)
         
-        # Options container - matching NVIDIA dialog structure
+        # Options container with scroll area for better scaling
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         options_container = QFrame()
         options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         options_layout = QVBoxLayout(options_container)
         options_layout.setSpacing(8)
         options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
         options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        scroll_area.setWidget(options_container)
         
         # Detect CPU generation to determine if Wine 10.4 v2 should be recommended
         cpu_gen, is_older_cpu = self.detect_cpu_generation()
@@ -3150,7 +3267,8 @@ class AffinityInstallerGUI(QMainWindow):
         options_layout.addWidget(wine_1011_frame)
         button_group.addButton(wine_1011_radio, 4)
         
-        main_layout.addWidget(options_container, 1)
+        # Add scroll area to main layout with stretch factor
+        main_layout.addWidget(scroll_area, 1)
         
         # Buttons - fixed at bottom, responsive sizing
         button_layout = QHBoxLayout()
@@ -4947,24 +5065,37 @@ class AffinityInstallerGUI(QMainWindow):
         dialog.setModal(True)
         dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         
-        # Responsive sizing
+        # Responsive sizing - improved for all screen sizes
         screen = dialog.screen().availableGeometry()
         screen_width = screen.width()
         screen_height = screen.height()
         
         if screen_width < 800 or screen_height < 600:
             min_width = min(400, int(screen_width * 0.9))
-            min_height = min(300, int(screen_height * 0.8))
+            min_height = min(300, int(screen_height * 0.7))
             default_width = min(500, int(screen_width * 0.85))
-            default_height = min(350, int(screen_height * 0.7))
+            default_height = min(350, int(screen_height * 0.65))
+            max_width = int(screen_width * 0.95)
+            max_height = int(screen_height * 0.85)
+        elif screen_width < 1280 or screen_height < 720:
+            min_width = 450
+            min_height = 320
+            default_width = 550
+            default_height = 380
+            max_width = int(screen_width * 0.9)
+            max_height = int(screen_height * 0.85)
         else:
             min_width = 450
             min_height = 320
             default_width = 550
             default_height = 380
+            max_width = 800
+            max_height = 700
         
         dialog.setMinimumWidth(min_width)
         dialog.setMinimumHeight(min_height)
+        dialog.setMaximumWidth(max_width)
+        dialog.setMaximumHeight(max_height)
         dialog.resize(default_width, default_height)
         dialog.setSizeGripEnabled(True)
         
@@ -5143,6 +5274,26 @@ class AffinityInstallerGUI(QMainWindow):
                 QPushButton#okButton:pressed {
                     background-color: #3d8b40;
                 }
+                QScrollArea {
+                    border: none;
+                    background-color: transparent;
+                }
+                QScrollBar:vertical {
+                    background-color: #f5f5f5;
+                    width: 12px;
+                    border-radius: 6px;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #c0c0c0;
+                    border-radius: 6px;
+                    min-height: 30px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #a0a0a0;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
+                }
             """
         
         dialog.setStyleSheet(dialog_style)
@@ -5172,13 +5323,22 @@ class AffinityInstallerGUI(QMainWindow):
         desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(desc_label)
         
-        # Options container
+        # Options container with scroll area for better scaling
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         options_container = QFrame()
         options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         options_layout = QVBoxLayout(options_container)
         options_layout.setSpacing(8)
         options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
         options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        scroll_area.setWidget(options_container)
         
         # Radio buttons in styled frames
         button_group = QButtonGroup()
@@ -5207,7 +5367,7 @@ class AffinityInstallerGUI(QMainWindow):
         button_group.addButton(vkd3d_radio, 0)
         button_group.addButton(dxvk_radio, 1)
         
-        main_layout.addWidget(options_container, 1)
+        main_layout.addWidget(scroll_area, 1)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -5423,13 +5583,22 @@ class AffinityInstallerGUI(QMainWindow):
         desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(desc_label)
         
-        # Options container
+        # Options container with scroll area for better scaling
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         options_container = QFrame()
         options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         options_layout = QVBoxLayout(options_container)
         options_layout.setSpacing(8)
         options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
         options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        scroll_area.setWidget(options_container)
         
         # Create radio buttons for each GPU
         button_group = QButtonGroup(dialog)
@@ -5464,7 +5633,7 @@ class AffinityInstallerGUI(QMainWindow):
                 button_group.addButton(radio, gpus.index(gpu))
                 radio_buttons.append((gpu["id"], radio))
         
-        main_layout.addWidget(options_container, 1)
+        main_layout.addWidget(scroll_area, 1)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -6383,17 +6552,30 @@ class AffinityInstallerGUI(QMainWindow):
             
             if screen_width < 800 or screen_height < 600:
                 min_width = min(400, int(screen_width * 0.9))
-                min_height = min(300, int(screen_height * 0.8))
+                min_height = min(300, int(screen_height * 0.7))
                 default_width = min(500, int(screen_width * 0.85))
-                default_height = min(350, int(screen_height * 0.7))
+                default_height = min(350, int(screen_height * 0.65))
+                max_width = int(screen_width * 0.95)
+                max_height = int(screen_height * 0.85)
+            elif screen_width < 1280 or screen_height < 720:
+                min_width = 450
+                min_height = 320
+                default_width = 550
+                default_height = 380
+                max_width = int(screen_width * 0.9)
+                max_height = int(screen_height * 0.85)
             else:
                 min_width = 450
                 min_height = 320
                 default_width = 550
                 default_height = 380
+                max_width = 800
+                max_height = 700
             
             dialog.setMinimumWidth(min_width)
             dialog.setMinimumHeight(min_height)
+            dialog.setMaximumWidth(max_width)
+            dialog.setMaximumHeight(max_height)
             dialog.resize(default_width, default_height)
             dialog.setSizeGripEnabled(True)
             dialog.setStyleSheet(self.get_dialog_stylesheet())
@@ -6418,13 +6600,22 @@ class AffinityInstallerGUI(QMainWindow):
             desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             main_layout.addWidget(desc_label)
             
-            # Options container
+            # Options container with scroll area for better scaling
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+            scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            
             options_container = QFrame()
             options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             options_layout = QVBoxLayout(options_container)
             options_layout.setSpacing(8)
             options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
             options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+            
+            scroll_area.setWidget(options_container)
             
             button_group = QButtonGroup()
             apps = [
@@ -6449,7 +6640,7 @@ class AffinityInstallerGUI(QMainWindow):
                 button_group.addButton(radio, idx)
                 radio_buttons[idx] = app_code
             
-            main_layout.addWidget(options_container, 1)
+            main_layout.addWidget(scroll_area, 1)
             
             # Buttons
             button_layout = QHBoxLayout()
@@ -6511,17 +6702,30 @@ class AffinityInstallerGUI(QMainWindow):
         
         if screen_width < 800 or screen_height < 600:
             min_width = min(400, int(screen_width * 0.9))
-            min_height = min(280, int(screen_height * 0.8))
+            min_height = min(280, int(screen_height * 0.7))
             default_width = min(500, int(screen_width * 0.85))
-            default_height = min(320, int(screen_height * 0.7))
+            default_height = min(320, int(screen_height * 0.65))
+            max_width = int(screen_width * 0.95)
+            max_height = int(screen_height * 0.85)
+        elif screen_width < 1280 or screen_height < 720:
+            min_width = 450
+            min_height = 300
+            default_width = 550
+            default_height = 350
+            max_width = int(screen_width * 0.9)
+            max_height = int(screen_height * 0.85)
         else:
             min_width = 450
             min_height = 300
             default_width = 550
             default_height = 350
+            max_width = 800
+            max_height = 600
         
         dialog.setMinimumWidth(min_width)
         dialog.setMinimumHeight(min_height)
+        dialog.setMaximumWidth(max_width)
+        dialog.setMaximumHeight(max_height)
         dialog.resize(default_width, default_height)
         dialog.setSizeGripEnabled(True)
         dialog.setStyleSheet(self.get_dialog_stylesheet())
@@ -6546,13 +6750,22 @@ class AffinityInstallerGUI(QMainWindow):
         desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(desc_label)
         
-        # Options container
+        # Options container with scroll area for better scaling
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         options_container = QFrame()
         options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         options_layout = QVBoxLayout(options_container)
         options_layout.setSpacing(8)
         options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
         options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        scroll_area.setWidget(options_container)
         
         button_group = QButtonGroup()
         
@@ -6579,7 +6792,7 @@ class AffinityInstallerGUI(QMainWindow):
         options_layout.addWidget(custom_frame)
         button_group.addButton(custom_radio, 1)
         
-        main_layout.addWidget(options_container, 1)
+        main_layout.addWidget(scroll_area, 1)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -8826,10 +9039,10 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("WebView2 Runtime not found. Proceeding with installation...", "info")
         
         try:
-            # Step 1: Set Windows 7 compatibility mode
-            self.log("Setting Windows 7 compatibility mode...", "info")
-            self.run_command([str(wine_cfg), "-v", "win7"], check=False, env=env)
-            self.log("Windows 7 compatibility mode set", "success")
+            # Step 1: Set Windows 11 compatibility mode
+            self.log("Setting Windows 11 compatibility mode...", "info")
+            self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
+            self.log("Windows 11 compatibility mode set", "success")
             
             # Step 2: Download Microsoft Edge WebView2 Runtime
             self.log("Downloading Microsoft Edge WebView2 Runtime...", "info")
@@ -8872,12 +9085,7 @@ class AffinityInstallerGUI(QMainWindow):
             disable_edge_update_reg.unlink()
             self.log("Edge Update services disabled", "success")
             
-            # Step 5: Set back to Windows 11 compatibility
-            self.log("Setting Windows 11 compatibility mode...", "info")
-            self.run_command([str(wine_cfg), "-v", "win11"], check=False, env=env)
-            self.log("Windows 11 compatibility mode set", "success")
-            
-            # Step 6: Set msedgewebview2.exe to Windows 7 compatibility
+            # Step 5: Set msedgewebview2.exe to Windows 7 compatibility
             self.log("Setting msedgewebview2.exe to Windows 7 compatibility...", "info")
             webview2_win7_reg = Path(self.directory) / "webview2-win7-cap.reg"
             with open(webview2_win7_reg, "w") as f:
@@ -10673,17 +10881,30 @@ class AffinityInstallerGUI(QMainWindow):
         
         if screen_width < 800 or screen_height < 600:
             min_width = min(350, int(screen_width * 0.9))
-            min_height = min(280, int(screen_height * 0.8))
+            min_height = min(280, int(screen_height * 0.7))
             default_width = min(450, int(screen_width * 0.85))
-            default_height = min(320, int(screen_height * 0.7))
+            default_height = min(320, int(screen_height * 0.65))
+            max_width = int(screen_width * 0.95)
+            max_height = int(screen_height * 0.85)
+        elif screen_width < 1280 or screen_height < 720:
+            min_width = 400
+            min_height = 300
+            default_width = 500
+            default_height = 350
+            max_width = int(screen_width * 0.9)
+            max_height = int(screen_height * 0.85)
         else:
             min_width = 400
             min_height = 300
             default_width = 500
             default_height = 350
+            max_width = 750
+            max_height = 600
         
         dialog.setMinimumWidth(min_width)
         dialog.setMinimumHeight(min_height)
+        dialog.setMaximumWidth(max_width)
+        dialog.setMaximumHeight(max_height)
         dialog.resize(default_width, default_height)
         dialog.setSizeGripEnabled(True)
         
@@ -10771,6 +10992,26 @@ class AffinityInstallerGUI(QMainWindow):
                 }
                 QPushButton#okButton:pressed {
                     background-color: #3db9a0;
+                }
+                QScrollArea {
+                    border: none;
+                    background-color: transparent;
+                }
+                QScrollBar:vertical {
+                    background-color: #2d2d2d;
+                    width: 12px;
+                    border-radius: 6px;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #555555;
+                    border-radius: 6px;
+                    min-height: 30px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #666666;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
                 }
             """
         else:
@@ -10862,6 +11103,26 @@ class AffinityInstallerGUI(QMainWindow):
                 QPushButton#okButton:pressed {
                     background-color: #3d8b40;
                 }
+                QScrollArea {
+                    border: none;
+                    background-color: transparent;
+                }
+                QScrollBar:vertical {
+                    background-color: #f5f5f5;
+                    width: 12px;
+                    border-radius: 6px;
+                }
+                QScrollBar::handle:vertical {
+                    background-color: #c0c0c0;
+                    border-radius: 6px;
+                    min-height: 30px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background-color: #a0a0a0;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
+                }
             """
         
         dialog.setStyleSheet(dialog_style)
@@ -10886,13 +11147,22 @@ class AffinityInstallerGUI(QMainWindow):
         desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(desc_label)
         
-        # Options container
+        # Options container with scroll area for better scaling
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         options_container = QFrame()
         options_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         options_layout = QVBoxLayout(options_container)
         options_layout.setSpacing(8)
         options_margin = 8 if (screen_width >= 800 and screen_height >= 600) else 6
         options_layout.setContentsMargins(options_margin, options_margin, options_margin, options_margin)
+        
+        scroll_area.setWidget(options_container)
         
         button_group = QButtonGroup()
         
@@ -10931,7 +11201,7 @@ class AffinityInstallerGUI(QMainWindow):
         button_group.addButton(opengl_radio, 1)
         button_group.addButton(gdi_radio, 2)
         
-        main_layout.addWidget(options_container, 1)
+        main_layout.addWidget(scroll_area, 1)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -11281,17 +11551,30 @@ class AffinityInstallerGUI(QMainWindow):
         
         if screen_width < 800 or screen_height < 600:
             min_width = min(400, int(screen_width * 0.9))
-            min_height = min(350, int(screen_height * 0.8))
+            min_height = min(350, int(screen_height * 0.7))
             default_width = min(500, int(screen_width * 0.85))
-            default_height = min(400, int(screen_height * 0.7))
+            default_height = min(400, int(screen_height * 0.65))
+            max_width = int(screen_width * 0.95)
+            max_height = int(screen_height * 0.85)
+        elif screen_width < 1280 or screen_height < 720:
+            min_width = 450
+            min_height = 380
+            default_width = 550
+            default_height = 420
+            max_width = int(screen_width * 0.9)
+            max_height = int(screen_height * 0.85)
         else:
             min_width = 450
             min_height = 380
             default_width = 550
             default_height = 420
+            max_width = 800
+            max_height = 700
         
         dialog.setMinimumWidth(min_width)
         dialog.setMinimumHeight(min_height)
+        dialog.setMaximumWidth(max_width)
+        dialog.setMaximumHeight(max_height)
         dialog.resize(default_width, default_height)
         dialog.setSizeGripEnabled(True)
         dialog.setStyleSheet(self.get_dialog_stylesheet())
