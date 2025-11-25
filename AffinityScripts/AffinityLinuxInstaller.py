@@ -5749,7 +5749,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.set_dxvk_vkd3d_preference("vkd3d")
             self.log("Set preference to VKD3D", "success")
             
-            # 3. Remove DXVK DLL overrides (if any)
+            # 3. Remove DXVK DLL overrides and DLLs from system32 (if any)
             self.remove_dxvk_overrides()
             
             # 4. Set up DLL overrides for vkd3d
@@ -6095,7 +6095,7 @@ class AffinityInstallerGUI(QMainWindow):
                 f"• Removed vkd3d-proton DLLs\n"
                 f"• Removed vkd3d DLL overrides\n"
                 f"• Reinstalled d3d12.dll and d3d12core.dll (required for compatibility)\n"
-                f"• Set up DLL overrides for DXVK (d3d11, d3d10, d3d10_1, d3d10core, dxgi) in Wine registry\n"
+                f"• Set up DLL overrides for DXVK (d3d8, d3d9, d3d10, d3d10_1, d3d10core, d3d11, dxgi) in Wine registry\n"
                 f"• Updated {updated_count} desktop entry/entries\n"
                 f"• All Affinity applications will now use DXVK for graphics acceleration",
                 "info"
@@ -7842,18 +7842,26 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
     
     def setup_dxvk_overrides(self):
-        """Set up DLL overrides for DXVK (d3d11, d3d10, d3d10_1, d3d10core, dxgi)"""
+        """
+        Set up DLL overrides for DXVK (d3d8, d3d9, d3d10, d3d10_1, d3d10core, d3d11, dxgi)
+        
+        Note: DXVK DLLs should NEVER be installed to system32. If DXVK DLLs are found in
+        system32, they should be removed. DXVK works via DLL overrides and environment
+        variables, not by copying DLLs to system32.
+        """
         self.log("Setting up DLL overrides for DXVK...", "info")
         
         reg_file = Path(self.directory) / "dxvk_overrides.reg"
         with open(reg_file, "w") as f:
             f.write("REGEDIT4\n")
             f.write("[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]\n")
-            f.write('"d3d11"="native"\n')
-            f.write('"d3d10"="native"\n')
-            f.write('"d3d10_1"="native"\n')
-            f.write('"d3d10core"="native"\n')
-            f.write('"dxgi"="native"\n')
+            f.write('"d3d8"="native,builtin"\n')
+            f.write('"d3d9"="native,builtin"\n')
+            f.write('"d3d10"="native,builtin"\n')
+            f.write('"d3d10_1"="native,builtin"\n')
+            f.write('"d3d10core"="native,builtin"\n')
+            f.write('"d3d11"="native,builtin"\n')
+            f.write('"dxgi"="native,builtin"\n')
         
         regedit = self.get_wine_path("regedit")
         env = os.environ.copy()
@@ -7868,14 +7876,14 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
     
     def remove_dxvk_overrides(self):
-        """Remove DLL overrides for DXVK (d3d11, d3d10, d3d10_1, d3d10core, dxgi)"""
+        """Remove DLL overrides for DXVK (d3d8, d3d9, d3d10, d3d10_1, d3d10core, d3d11, dxgi)"""
         self.log("Removing DLL overrides for DXVK...", "info")
         
         wine = self.get_wine_path("wine")
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
         
-        dxvk_dlls = ["d3d11", "d3d10", "d3d10_1", "d3d10core", "dxgi"]
+        dxvk_dlls = ["d3d8", "d3d9", "d3d10", "d3d10_1", "d3d10core", "d3d11", "dxgi"]
         removed_count = 0
         
         for dll in dxvk_dlls:
@@ -7892,6 +7900,32 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Removed {removed_count} DXVK DLL override(s)", "success")
         else:
             self.log("No DXVK DLL overrides found to remove", "info")
+        
+        # Also remove DXVK DLLs from system32 if they exist
+        self.remove_dxvk_dlls_from_system32()
+    
+    def remove_dxvk_dlls_from_system32(self):
+        """Remove DXVK DLLs from system32 directory"""
+        self.log("Removing DXVK DLLs from system32...", "info")
+        
+        system32_dir = Path(self.directory) / "drive_c" / "windows" / "system32"
+        dxvk_dlls = ["d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"]
+        removed_count = 0
+        
+        for dll in dxvk_dlls:
+            dll_path = system32_dir / dll
+            if dll_path.exists():
+                try:
+                    dll_path.unlink()
+                    self.log(f"Removed {dll} from system32", "success")
+                    removed_count += 1
+                except Exception as e:
+                    self.log(f"Warning: Could not remove {dll} from system32: {e}", "warning")
+        
+        if removed_count > 0:
+            self.log(f"Removed {removed_count} DXVK DLL(s) from system32", "success")
+        else:
+            self.log("No DXVK DLLs found in system32 to remove", "info")
     
     def remove_d3d12_overrides(self):
         """Remove DLL overrides for vkd3d (d3d12, d3d12core)"""
