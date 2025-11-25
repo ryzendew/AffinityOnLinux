@@ -5749,7 +5749,14 @@ class AffinityInstallerGUI(QMainWindow):
             self.set_dxvk_vkd3d_preference("vkd3d")
             self.log("Set preference to VKD3D", "success")
             
-            # 3. Copy DLLs to application directories
+            # 3. Remove DXVK DLL overrides (if any)
+            self.remove_dxvk_overrides()
+            
+            # 4. Set up DLL overrides for vkd3d
+            self.log("Setting up DLL overrides for vkd3d...", "info")
+            self.setup_d3d12_overrides()
+            
+            # 5. Copy DLLs to application directories
             self.log("Copying d3d12 DLLs to application directories...", "info")
             wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
             vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
@@ -5771,7 +5778,7 @@ class AffinityInstallerGUI(QMainWindow):
                                 self.log(f"Copied {dll} to {app_dir_name}", "success")
                                 break
             
-            # 4. Update all desktop entries (remove DXVK env vars)
+            # 6. Update all desktop entries (remove DXVK env vars)
             self.log("Updating desktop entries (removing DXVK environment variables)...", "info")
             desktop_dir = Path.home() / ".local" / "share" / "applications"
             if not desktop_dir.exists():
@@ -5869,7 +5876,8 @@ class AffinityInstallerGUI(QMainWindow):
                 f"Successfully switched to VKD3D!\n\n"
                 f"• Installed vkd3d-proton with OpenCL support\n"
                 f"• Installed d3d12.dll and d3d12core.dll\n"
-                f"• Set up DLL overrides in Wine registry\n"
+                f"• Removed DXVK DLL overrides\n"
+                f"• Set up DLL overrides for d3d12 and d3d12core in Wine registry\n"
                 f"• Updated {updated_count} desktop entry/entries\n"
                 f"• All Affinity applications will now use VKD3D with OpenCL support",
                 "info"
@@ -5958,11 +5966,18 @@ class AffinityInstallerGUI(QMainWindow):
             self.set_dxvk_vkd3d_preference("dxvk")
             self.log("Set preference to DXVK", "success")
             
-            # 5. Reinstall d3d12 DLLs and overrides (needed even with DXVK)
+            # 5. Remove vkd3d DLL overrides (if any)
+            self.remove_d3d12_overrides()
+            
+            # 6. Set up DLL overrides for DXVK
+            self.log("Setting up DLL overrides for DXVK...", "info")
+            self.setup_dxvk_overrides()
+            
+            # 7. Reinstall d3d12 DLLs and overrides (needed even with DXVK)
             self.log("Reinstalling d3d12 DLLs and setting up DLL overrides...", "info")
             self.install_d3d12_dlls()
             
-            # 6. Copy DLLs back to application directories
+            # 8. Copy DLLs back to application directories
             self.log("Copying d3d12 DLLs to application directories...", "info")
             wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
             vkd3d_temp = Path(self.directory) / "vkd3d_dlls"
@@ -5978,7 +5993,7 @@ class AffinityInstallerGUI(QMainWindow):
                                 self.log(f"Copied {dll} to {app_dir_name}", "success")
                                 break
             
-            # 7. Update all desktop entries
+            # 9. Update all desktop entries
             self.log("Updating desktop entries with DXVK environment variables...", "info")
             desktop_dir = Path.home() / ".local" / "share" / "applications"
             if not desktop_dir.exists():
@@ -6078,8 +6093,9 @@ class AffinityInstallerGUI(QMainWindow):
                 "Switch to DXVK Complete",
                 f"Successfully switched to DXVK!\n\n"
                 f"• Removed vkd3d-proton DLLs\n"
+                f"• Removed vkd3d DLL overrides\n"
                 f"• Reinstalled d3d12.dll and d3d12core.dll (required for compatibility)\n"
-                f"• Set up DLL overrides in Wine registry\n"
+                f"• Set up DLL overrides for DXVK (d3d11, d3d10, d3d10_1, d3d10core, dxgi) in Wine registry\n"
                 f"• Updated {updated_count} desktop entry/entries\n"
                 f"• All Affinity applications will now use DXVK for graphics acceleration",
                 "info"
@@ -7824,6 +7840,84 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("DLL overrides configured for d3d12", "success")
         else:
             self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
+    
+    def setup_dxvk_overrides(self):
+        """Set up DLL overrides for DXVK (d3d11, d3d10, d3d10_1, d3d10core, dxgi)"""
+        self.log("Setting up DLL overrides for DXVK...", "info")
+        
+        reg_file = Path(self.directory) / "dxvk_overrides.reg"
+        with open(reg_file, "w") as f:
+            f.write("REGEDIT4\n")
+            f.write("[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]\n")
+            f.write('"d3d11"="native"\n')
+            f.write('"d3d10"="native"\n')
+            f.write('"d3d10_1"="native"\n')
+            f.write('"d3d10core"="native"\n')
+            f.write('"dxgi"="native"\n')
+        
+        regedit = self.get_wine_path("regedit")
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        
+        success, _, stderr = self.run_command([str(regedit), str(reg_file)], check=False, env=env, capture=True)
+        reg_file.unlink()
+        
+        if success:
+            self.log("DLL overrides configured for DXVK", "success")
+        else:
+            self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
+    
+    def remove_dxvk_overrides(self):
+        """Remove DLL overrides for DXVK (d3d11, d3d10, d3d10_1, d3d10core, dxgi)"""
+        self.log("Removing DLL overrides for DXVK...", "info")
+        
+        wine = self.get_wine_path("wine")
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        
+        dxvk_dlls = ["d3d11", "d3d10", "d3d10_1", "d3d10core", "dxgi"]
+        removed_count = 0
+        
+        for dll in dxvk_dlls:
+            success, _, _ = self.run_command(
+                [str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", dll, "/f"],
+                check=False,
+                env=env,
+                capture=True
+            )
+            if success:
+                removed_count += 1
+        
+        if removed_count > 0:
+            self.log(f"Removed {removed_count} DXVK DLL override(s)", "success")
+        else:
+            self.log("No DXVK DLL overrides found to remove", "info")
+    
+    def remove_d3d12_overrides(self):
+        """Remove DLL overrides for vkd3d (d3d12, d3d12core)"""
+        self.log("Removing DLL overrides for vkd3d...", "info")
+        
+        wine = self.get_wine_path("wine")
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        
+        vkd3d_dlls = ["d3d12", "d3d12core"]
+        removed_count = 0
+        
+        for dll in vkd3d_dlls:
+            success, _, _ = self.run_command(
+                [str(wine), "reg", "delete", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", dll, "/f"],
+                check=False,
+                env=env,
+                capture=True
+            )
+            if success:
+                removed_count += 1
+        
+        if removed_count > 0:
+            self.log(f"Removed {removed_count} vkd3d DLL override(s)", "success")
+        else:
+            self.log("No vkd3d DLL overrides found to remove", "info")
     
     def setup_vkd3d(self):
         """Setup vkd3d-proton for OpenCL"""
