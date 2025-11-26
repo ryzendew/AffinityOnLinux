@@ -5611,29 +5611,20 @@ class AffinityInstallerGUI(QMainWindow):
     
     def get_current_backend(self):
         """Detect which graphics backend is currently being used (dxvk or vkd3d)"""
-        # Check if AMD GPU (always uses DXVK)
-        if self.has_amd_gpu():
+        # Check preference first (applies to all GPU types)
+        preference = self.get_dxvk_vkd3d_preference()
+        if preference == "dxvk":
             return "dxvk"
+        elif preference == "vkd3d":
+            return "vkd3d"
         
-        # Check NVIDIA preference
-        if self.has_nvidia_gpu():
-            preference = self.get_dxvk_vkd3d_preference()
-            if preference == "dxvk":
-                return "dxvk"
-            elif preference == "vkd3d":
-                return "vkd3d"
-            # If no preference set, check if vkd3d DLLs exist (default to vkd3d if found)
-            wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
-            if wine_lib_dir.exists() and (wine_lib_dir / "d3d12.dll").exists():
-                return "vkd3d"
-            return "dxvk"  # Default to DXVK if no preference and no vkd3d found
-        
-        # For other GPUs, check if vkd3d exists
+        # If no preference set, check if vkd3d DLLs exist
         wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
         if wine_lib_dir.exists() and (wine_lib_dir / "d3d12.dll").exists():
             return "vkd3d"
         
-        return "dxvk"  # Default to DXVK
+        # Default to DXVK (for AMD, NVIDIA, and other GPUs)
+        return "dxvk"
     
     def get_dxvk_env_vars(self):
         """Get DXVK environment variables for AMD GPU or NVIDIA GPU with DXVK preference"""
