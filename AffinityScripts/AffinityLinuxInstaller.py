@@ -8387,13 +8387,6 @@ class AffinityInstallerGUI(QMainWindow):
     
     def setup_vkd3d(self):
         """Setup vkd3d-proton for OpenCL"""
-        # Skip vkd3d installation if AMD GPU is detected (use DXVK instead)
-        if self.has_amd_gpu():
-            self.log("AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead", "info")
-            # Still install d3d12 DLLs and overrides
-            self.install_d3d12_dlls()
-            return
-        
         # Check NVIDIA GPU preference
         if self.has_nvidia_gpu():
             preference = self.get_dxvk_vkd3d_preference()
