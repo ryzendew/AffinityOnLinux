@@ -334,6 +334,25 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log("Welcome! Please use the buttons on the right to get started.", "info")
         
+        system_specs = self._get_system_specs()
+        if system_specs:
+            self.log("", "info")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
+            self.log("System Specifications:", "info")
+            for spec in system_specs:
+                self.log(f"  {spec}", "info")
+            self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
+            
+            if self.log_file:
+                try:
+                    self.log_file.write(f"\nSystem Specifications:\n")
+                    for spec in system_specs:
+                        self.log_file.write(f"  {spec}\n")
+                    self.log_file.write(f"{'='*80}\n")
+                    self.log_file.flush()
+                except Exception:
+                    pass
+        
         # Start background tasks after window is shown
         # Use QTimer to defer these operations until after the window is displayed
         from PyQt6.QtCore import QTimer
@@ -2406,12 +2425,101 @@ class AffinityInstallerGUI(QMainWindow):
         """Add message to log (thread-safe via signal)"""
         self.log_signal.emit(message, level)
     
+    def _get_system_specs(self):
+        """Gather system specifications"""
+        specs = []
+        
+        try:
+            uname = platform.uname()
+            specs.append(f"OS: {uname.system} {uname.release}")
+            specs.append(f"Architecture: {uname.machine}")
+        except Exception:
+            pass
+        
+        try:
+            distro_info = {}
+            if Path("/etc/os-release").exists():
+                with open("/etc/os-release", "r") as f:
+                    for line in f:
+                        if "=" in line:
+                            key, value = line.strip().split("=", 1)
+                            distro_info[key] = value.strip('"')
+            if "PRETTY_NAME" in distro_info:
+                specs.append(f"Distribution: {distro_info['PRETTY_NAME']}")
+            elif "NAME" in distro_info:
+                version = distro_info.get("VERSION_ID", "")
+                specs.append(f"Distribution: {distro_info['NAME']} {version}".strip())
+        except Exception:
+            pass
+        
+        try:
+            cpu_info = ""
+            if Path("/proc/cpuinfo").exists():
+                with open("/proc/cpuinfo", "r") as f:
+                    cpu_info = f.read()
+            
+            if cpu_info:
+                for line in cpu_info.split("\n"):
+                    if "model name" in line.lower():
+                        cpu_model = line.split(":", 1)[1].strip()
+                        specs.append(f"CPU: {cpu_model}")
+                        break
+                
+                cpu_count = cpu_info.count("processor")
+                if cpu_count > 0:
+                    specs.append(f"CPU Cores: {cpu_count}")
+        except Exception:
+            pass
+        
+        try:
+            mem_info = ""
+            if Path("/proc/meminfo").exists():
+                with open("/proc/meminfo", "r") as f:
+                    mem_info = f.read()
+            
+            if mem_info:
+                for line in mem_info.split("\n"):
+                    if line.startswith("MemTotal:"):
+                        mem_kb = int(line.split()[1])
+                        mem_gb = mem_kb / (1024 * 1024)
+                        specs.append(f"RAM: {mem_gb:.1f} GB")
+                        break
+        except Exception:
+            pass
+        
+        try:
+            gpu_info = []
+            if Path("/proc/driver/nvidia/version").exists():
+                try:
+                    with open("/proc/driver/nvidia/version", "r") as f:
+                        nvidia_version = f.read().strip()
+                        gpu_info.append(f"NVIDIA Driver: {nvidia_version.split()[7] if len(nvidia_version.split()) > 7 else 'Detected'}")
+                except Exception:
+                    pass
+            
+            try:
+                result = subprocess.run(["lspci"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and result.stdout:
+                    for line in result.stdout.split("\n"):
+                        if "vga" in line.lower() or "3d" in line.lower() or "display" in line.lower():
+                            gpu_line = line.split(":", 2)[-1].strip()
+                            if gpu_line:
+                                gpu_info.append(f"GPU: {gpu_line}")
+                                break
+            except Exception:
+                pass
+            
+            if gpu_info:
+                specs.extend(gpu_info)
+        except Exception:
+            pass
+        
+        return specs
+    
     def _init_log_file(self):
         """Initialize log file"""
         try:
-            # Open log file in append mode
             self.log_file = open(self.log_file_path, 'a', encoding='utf-8')
-            # Write header
             log_header = f"\n{'='*80}\n"
             log_header += f"Affinity Linux Installer - Session Started\n"
             log_header += f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -2419,7 +2527,6 @@ class AffinityInstallerGUI(QMainWindow):
             self.log_file.write(log_header)
             self.log_file.flush()
         except Exception as e:
-            # If we can't open the log file, continue without file logging
             self.log_file = None
     
     def _log_safe(self, message, level="info"):
@@ -3171,104 +3278,130 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Detect CPU generation to determine if Wine 10.4 v2 should be recommended
         cpu_gen, is_older_cpu = self.detect_cpu_generation()
+        is_v2_cpu = (cpu_gen == "V2")
         
         # Create button group to ensure only one radio button is selected at a time
         button_group = QButtonGroup(dialog)
         
-        # Wine 10.4 option - clean frame with radio button and description
-        wine_104_frame = QFrame()
-        wine_104_frame.setObjectName("optionFrame")
-        wine_104_layout = QVBoxLayout(wine_104_frame)
-        wine_104_layout.setContentsMargins(12, 10, 12, 10)
-        wine_104_layout.setSpacing(6)
-        wine_104_radio = QRadioButton("Wine 10.4")
-        wine_104_radio.setChecked(not is_older_cpu)
-        wine_104_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        wine_104_layout.addWidget(wine_104_radio)
-        wine_104_desc = QLabel("Latest version with AMD GPU and OpenCL patches. Best compatibility and performance for most systems.")
-        wine_104_desc.setObjectName("optionDescription")
-        wine_104_desc.setWordWrap(True)
-        wine_104_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_104_layout.addWidget(wine_104_desc)
-        options_layout.addWidget(wine_104_frame)
-        button_group.addButton(wine_104_radio, 0)
-        
-        # Wine 10.4 v2 option - clean frame with radio button and description
-        wine_104v2_frame = QFrame()
-        wine_104v2_frame.setObjectName("optionFrame")
-        wine_104v2_layout = QVBoxLayout(wine_104v2_frame)
-        wine_104v2_layout.setContentsMargins(12, 10, 12, 10)
-        wine_104v2_layout.setSpacing(6)
-        wine_104v2_radio = QRadioButton("Wine 10.4 v2 (Older CPUs)")
-        if is_older_cpu:
+        # If CPU is V2, only show Wine 10.4 v2
+        if is_v2_cpu:
+            wine_104v2_frame = QFrame()
+            wine_104v2_frame.setObjectName("optionFrame")
+            wine_104v2_layout = QVBoxLayout(wine_104v2_frame)
+            wine_104v2_layout.setContentsMargins(12, 10, 12, 10)
+            wine_104v2_layout.setSpacing(6)
+            wine_104v2_radio = QRadioButton("Wine 10.4 v2 (Older CPUs)")
             wine_104v2_radio.setChecked(True)
-        wine_104v2_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        wine_104v2_layout.addWidget(wine_104v2_radio)
-        wine_104v2_desc = QLabel("Optimized for older CPUs (V1-V3 generations). Use this if you have a CPU from 2014-2020 (Zen/Broadwell through Zen 2/Coffee Lake).")
-        wine_104v2_desc.setObjectName("optionDescription")
-        wine_104v2_desc.setWordWrap(True)
-        wine_104v2_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_104v2_layout.addWidget(wine_104v2_desc)
-        # Add CPU info if detected
-        if cpu_gen != "Unknown":
-            cpu_info_label = QLabel(f"🧩 Detected: {cpu_gen}")
-            cpu_info_label.setObjectName("optionDescription")
-            cpu_info_label.setWordWrap(True)
-            cpu_info_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-            wine_104v2_layout.addWidget(cpu_info_label)
-        options_layout.addWidget(wine_104v2_frame)
-        button_group.addButton(wine_104v2_radio, 1)
-        
-        # Wine 9.14 option - clean frame with radio button and description
-        wine_914_frame = QFrame()
-        wine_914_frame.setObjectName("optionFrame")
-        wine_914_layout = QVBoxLayout(wine_914_frame)
-        wine_914_layout.setContentsMargins(12, 10, 12, 10)
-        wine_914_layout.setSpacing(6)
-        wine_914_radio = QRadioButton("Wine 9.14 (Legacy)")
-        wine_914_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        wine_914_layout.addWidget(wine_914_radio)
-        wine_914_desc = QLabel("Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.")
-        wine_914_desc.setObjectName("optionDescription")
-        wine_914_desc.setWordWrap(True)
-        wine_914_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_914_layout.addWidget(wine_914_desc)
-        options_layout.addWidget(wine_914_frame)
-        button_group.addButton(wine_914_radio, 2)
-        
-        # Wine 10.10 option - clean frame with radio button and description
-        wine_1010_frame = QFrame()
-        wine_1010_frame.setObjectName("optionFrame")
-        wine_1010_layout = QVBoxLayout(wine_1010_frame)
-        wine_1010_layout.setContentsMargins(12, 10, 12, 10)
-        wine_1010_layout.setSpacing(6)
-        wine_1010_radio = QRadioButton("Wine 10.10")
-        wine_1010_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        wine_1010_layout.addWidget(wine_1010_radio)
-        wine_1010_desc = QLabel("ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.")
-        wine_1010_desc.setObjectName("optionDescription")
-        wine_1010_desc.setWordWrap(True)
-        wine_1010_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_1010_layout.addWidget(wine_1010_desc)
-        options_layout.addWidget(wine_1010_frame)
-        button_group.addButton(wine_1010_radio, 3)
-        
-        # Wine 10.11 option - clean frame with radio button and description
-        wine_1011_frame = QFrame()
-        wine_1011_frame.setObjectName("optionFrame")
-        wine_1011_layout = QVBoxLayout(wine_1011_frame)
-        wine_1011_layout.setContentsMargins(12, 10, 12, 10)
-        wine_1011_layout.setSpacing(6)
-        wine_1011_radio = QRadioButton("Wine 10.11")
-        wine_1011_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        wine_1011_layout.addWidget(wine_1011_radio)
-        wine_1011_desc = QLabel("ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.")
-        wine_1011_desc.setObjectName("optionDescription")
-        wine_1011_desc.setWordWrap(True)
-        wine_1011_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        wine_1011_layout.addWidget(wine_1011_desc)
-        options_layout.addWidget(wine_1011_frame)
-        button_group.addButton(wine_1011_radio, 4)
+            wine_104v2_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            wine_104v2_layout.addWidget(wine_104v2_radio)
+            wine_104v2_desc = QLabel("Optimized for older CPUs (V1-V3 generations). Use this if you have a CPU from 2014-2020 (Zen/Broadwell through Zen 2/Coffee Lake).")
+            wine_104v2_desc.setObjectName("optionDescription")
+            wine_104v2_desc.setWordWrap(True)
+            wine_104v2_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            wine_104v2_layout.addWidget(wine_104v2_desc)
+            if cpu_gen != "Unknown":
+                cpu_info_label = QLabel(f"🧩 Detected: {cpu_gen}")
+                cpu_info_label.setObjectName("optionDescription")
+                cpu_info_label.setWordWrap(True)
+                cpu_info_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+                wine_104v2_layout.addWidget(cpu_info_label)
+            options_layout.addWidget(wine_104v2_frame)
+            button_group.addButton(wine_104v2_radio, 1)
+        else:
+            # Wine 10.4 option - clean frame with radio button and description
+            wine_104_frame = QFrame()
+            wine_104_frame.setObjectName("optionFrame")
+            wine_104_layout = QVBoxLayout(wine_104_frame)
+            wine_104_layout.setContentsMargins(12, 10, 12, 10)
+            wine_104_layout.setSpacing(6)
+            wine_104_radio = QRadioButton("Wine 10.4")
+            wine_104_radio.setChecked(not is_older_cpu)
+            wine_104_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            wine_104_layout.addWidget(wine_104_radio)
+            wine_104_desc = QLabel("Latest version with AMD GPU and OpenCL patches. Best compatibility and performance for most systems.")
+            wine_104_desc.setObjectName("optionDescription")
+            wine_104_desc.setWordWrap(True)
+            wine_104_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            wine_104_layout.addWidget(wine_104_desc)
+            options_layout.addWidget(wine_104_frame)
+            button_group.addButton(wine_104_radio, 0)
+            
+            # Wine 10.4 v2 option - clean frame with radio button and description
+            wine_104v2_frame = QFrame()
+            wine_104v2_frame.setObjectName("optionFrame")
+            wine_104v2_layout = QVBoxLayout(wine_104v2_frame)
+            wine_104v2_layout.setContentsMargins(12, 10, 12, 10)
+            wine_104v2_layout.setSpacing(6)
+            wine_104v2_radio = QRadioButton("Wine 10.4 v2 (Older CPUs)")
+            if is_older_cpu:
+                wine_104v2_radio.setChecked(True)
+            wine_104v2_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            wine_104v2_layout.addWidget(wine_104v2_radio)
+            wine_104v2_desc = QLabel("Optimized for older CPUs (V1-V3 generations). Use this if you have a CPU from 2014-2020 (Zen/Broadwell through Zen 2/Coffee Lake).")
+            wine_104v2_desc.setObjectName("optionDescription")
+            wine_104v2_desc.setWordWrap(True)
+            wine_104v2_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            wine_104v2_layout.addWidget(wine_104v2_desc)
+            # Add CPU info if detected
+            if cpu_gen != "Unknown":
+                cpu_info_label = QLabel(f"🧩 Detected: {cpu_gen}")
+                cpu_info_label.setObjectName("optionDescription")
+                cpu_info_label.setWordWrap(True)
+                cpu_info_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+                wine_104v2_layout.addWidget(cpu_info_label)
+            options_layout.addWidget(wine_104v2_frame)
+            button_group.addButton(wine_104v2_radio, 1)
+            
+            # Wine 9.14 option - clean frame with radio button and description
+            wine_914_frame = QFrame()
+            wine_914_frame.setObjectName("optionFrame")
+            wine_914_layout = QVBoxLayout(wine_914_frame)
+            wine_914_layout.setContentsMargins(12, 10, 12, 10)
+            wine_914_layout.setSpacing(6)
+            wine_914_radio = QRadioButton("Wine 9.14 (Legacy)")
+            wine_914_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            wine_914_layout.addWidget(wine_914_radio)
+            wine_914_desc = QLabel("Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.")
+            wine_914_desc.setObjectName("optionDescription")
+            wine_914_desc.setWordWrap(True)
+            wine_914_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            wine_914_layout.addWidget(wine_914_desc)
+            options_layout.addWidget(wine_914_frame)
+            button_group.addButton(wine_914_radio, 2)
+            
+            # Wine 10.10 option - clean frame with radio button and description
+            wine_1010_frame = QFrame()
+            wine_1010_frame.setObjectName("optionFrame")
+            wine_1010_layout = QVBoxLayout(wine_1010_frame)
+            wine_1010_layout.setContentsMargins(12, 10, 12, 10)
+            wine_1010_layout.setSpacing(6)
+            wine_1010_radio = QRadioButton("Wine 10.10")
+            wine_1010_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            wine_1010_layout.addWidget(wine_1010_radio)
+            wine_1010_desc = QLabel("ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.")
+            wine_1010_desc.setObjectName("optionDescription")
+            wine_1010_desc.setWordWrap(True)
+            wine_1010_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            wine_1010_layout.addWidget(wine_1010_desc)
+            options_layout.addWidget(wine_1010_frame)
+            button_group.addButton(wine_1010_radio, 3)
+            
+            # Wine 10.11 option - clean frame with radio button and description
+            wine_1011_frame = QFrame()
+            wine_1011_frame.setObjectName("optionFrame")
+            wine_1011_layout = QVBoxLayout(wine_1011_frame)
+            wine_1011_layout.setContentsMargins(12, 10, 12, 10)
+            wine_1011_layout.setSpacing(6)
+            wine_1011_radio = QRadioButton("Wine 10.11")
+            wine_1011_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+            wine_1011_layout.addWidget(wine_1011_radio)
+            wine_1011_desc = QLabel("ElementalWarrior Wine 10.11 with AMD GPU and OpenCL patches. Alternative version for testing compatibility.")
+            wine_1011_desc.setObjectName("optionDescription")
+            wine_1011_desc.setWordWrap(True)
+            wine_1011_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+            wine_1011_layout.addWidget(wine_1011_desc)
+            options_layout.addWidget(wine_1011_frame)
+            button_group.addButton(wine_1011_radio, 4)
         
         # Add scroll area to main layout with stretch factor
         main_layout.addWidget(scroll_area, 1)
@@ -3300,16 +3433,19 @@ class AffinityInstallerGUI(QMainWindow):
         # Get result
         result = dialog.exec()
         if result == QDialog.DialogCode.Accepted:
-            if wine_104_radio.isChecked():
-                self.question_dialog_response = "Wine 10.4 (Recommended)"
-            elif wine_104v2_radio.isChecked():
+            if is_v2_cpu:
                 self.question_dialog_response = "Wine 10.4 v2 (Older CPUs)"
-            elif wine_914_radio.isChecked():
-                self.question_dialog_response = "Wine 9.14 (Legacy)"
-            elif wine_1010_radio.isChecked():
-                self.question_dialog_response = "Wine 10.10"
-            elif wine_1011_radio.isChecked():
-                self.question_dialog_response = "Wine 10.11"
+            else:
+                if wine_104_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.4 (Recommended)"
+                elif wine_104v2_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.4 v2 (Older CPUs)"
+                elif wine_914_radio.isChecked():
+                    self.question_dialog_response = "Wine 9.14 (Legacy)"
+                elif wine_1010_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.10"
+                elif wine_1011_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.11"
         else:
             # User cancelled - return "Cancel" to match expected format
             self.question_dialog_response = "Cancel"
@@ -11487,10 +11623,16 @@ class AffinityInstallerGUI(QMainWindow):
         # Create desktop shortcut
         desktop_shortcut = Path.home() / "Desktop" / desktop_file.name
         if desktop_shortcut.parent.exists():
-            shutil.copy2(desktop_file, desktop_shortcut)
+            try:
+                shutil.copy2(desktop_file, desktop_shortcut)
+                self.log("Desktop shortcut created", "success")
+            except PermissionError:
+                self.log(f"Could not create desktop shortcut (permission denied): {desktop_shortcut}", "warning")
+                self.log("Desktop entry is still available in the applications menu", "info")
+            except Exception as e:
+                self.log(f"Could not create desktop shortcut: {e}", "warning")
         
         self.log(f"Desktop entry created: {desktop_file}", "success")
-        self.log("Desktop shortcut created", "success")
     
     def _download_affinity_installer_thread(self, save_path_obj: Path):
         """Worker: Download Affinity installer and end operation."""

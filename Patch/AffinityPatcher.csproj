@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <AssemblyName>AffinityPatcher</AssemblyName>
     <RootNamespace>AffinityPatcher</RootNamespace>
+    <EnableSourceLink>false</EnableSourceLink>
+    <EnableSourceControl>false</EnableSourceControl>
   </PropertyGroup>
 
   <ItemGroup>
