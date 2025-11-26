@@ -6031,13 +6031,14 @@ class AffinityInstallerGUI(QMainWindow):
             )
     
     def switch_to_dxvk(self):
-        """Remove vkd3d and switch to DXVK, updating all desktop entries"""
+        """Remove vkd3d and switch to DXVK using winetricks, updating all desktop entries"""
         # Confirm with user
         reply = QMessageBox.question(
             self,
             "Switch to DXVK",
             "This will:\n\n"
             "• Remove vkd3d-proton DLLs from Wine and application directories\n"
+            "• Install DXVK via winetricks\n"
             "• Reinstall d3d12.dll and d3d12core.dll (required for compatibility)\n"
             "• Set preference to use DXVK instead\n"
             "• Update all desktop entries to use DXVK environment variables\n\n"
@@ -6054,6 +6055,16 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
         try:
+            # 0. Kill wineserver to avoid version mismatch issues
+            self.log("Stopping wineserver to avoid version conflicts...", "info")
+            wineserver = self.get_wine_path("wineserver")
+            env = os.environ.copy()
+            env["WINEPREFIX"] = self.directory
+            self.run_command([str(wineserver), "-k"], check=False, env=env, capture=True)
+            import time
+            time.sleep(1)  # Brief pause to ensure wineserver has stopped
+            self.log("Wineserver stopped", "success")
+            
             # 1. Remove vkd3d DLLs from Wine library directory
             wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
             if wine_lib_dir.exists():
@@ -6108,9 +6119,9 @@ class AffinityInstallerGUI(QMainWindow):
             # 5. Remove vkd3d DLL overrides (if any)
             self.remove_d3d12_overrides()
             
-            # 6. Set up DLL overrides for DXVK
-            self.log("Setting up DLL overrides for DXVK...", "info")
-            self.setup_dxvk_overrides()
+            # 6. Install DXVK via winetricks
+            self.log("Installing DXVK via winetricks...", "info")
+            self.install_dxvk_dlls()
             
             # 7. Reinstall d3d12 DLLs and overrides (needed even with DXVK)
             self.log("Reinstalling d3d12 DLLs and setting up DLL overrides...", "info")
@@ -6233,8 +6244,8 @@ class AffinityInstallerGUI(QMainWindow):
                 f"Successfully switched to DXVK!\n\n"
                 f"• Removed vkd3d-proton DLLs\n"
                 f"• Removed vkd3d DLL overrides\n"
+                f"• Installed DXVK via winetricks\n"
                 f"• Reinstalled d3d12.dll and d3d12core.dll (required for compatibility)\n"
-                f"• Set up DLL overrides for DXVK (d3d8, d3d9, d3d10, d3d10_1, d3d10core, d3d11, dxgi) in Wine registry\n"
                 f"• Updated {updated_count} desktop entry/entries\n"
                 f"• All Affinity applications will now use DXVK for graphics acceleration",
                 "info"
@@ -7717,20 +7728,17 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Cache DXVK in background (for future switching)
-            self.update_progress_text("Caching DXVK...")
-            self.update_progress(0.73)
-            self._cache_dxvk()
-            
             if self.check_cancelled():
                 return False
             
             # Setup vkd3d-proton (only if OpenCL is enabled and not AMD GPU)
             if self.is_opencl_enabled():
                 if self.has_amd_gpu():
-                    self.update_progress_text("AMD GPU detected - installing d3d12 DLLs for DXVK...")
+                    self.update_progress_text("AMD GPU detected - installing DXVK via winetricks...")
                     self.update_progress(0.80)
-                    self.log("AMD GPU detected - installing d3d12 DLLs and setting up DLL overrides", "info")
+                    self.log("AMD GPU detected - installing DXVK via winetricks", "info")
+                    self.install_dxvk_dlls()
+                    self.log("Installing d3d12 DLLs for compatibility...", "info")
                     self.install_d3d12_dlls()
                 elif self.has_nvidia_gpu():
                     # Ask NVIDIA users to choose between DXVK and vkd3d
@@ -7986,128 +7994,139 @@ class AffinityInstallerGUI(QMainWindow):
             return None
     
     def get_installed_dxvk_version(self):
-        """Get the currently installed DXVK version from cache
+        """Check if DXVK is installed via winetricks
         
         Returns:
-            str: Installed version or None if not found
+            str: "winetricks" if installed, None if not found
         """
-        version_file = Path(self.directory) / "dxvk" / ".dxvk_version"
-        if version_file.exists():
-            try:
-                return version_file.read_text().strip()
-            except Exception:
-                return None
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        wine = self.get_wine_path("wine")
+        
+        dxvk_dlls = ["d3d8", "d3d9", "d3d11", "dxgi"]
+        for dll in dxvk_dlls:
+            success, stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", dll],
+                check=False,
+                env=env,
+                capture=True
+            )
+            if success and "native" in stdout:
+                return "winetricks"
         return None
     
     def set_installed_dxvk_version(self, version):
-        """Store the installed DXVK version
+        """Mark DXVK as installed (for compatibility)
         
         Args:
-            version: Version string to store
+            version: Version string (typically "winetricks")
         """
-        cache_dir = Path(self.directory) / "dxvk"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        version_file = cache_dir / ".dxvk_version"
-        try:
-            version_file.write_text(version)
-        except Exception as e:
-            self.log(f"Failed to save DXVK version: {e}", "warning")
+        pass
     
     def install_dxvk_dlls(self):
-        """Download and install DXVK DLLs next to Affinity executables (not in system32)
+        """Install DXVK using winetricks and ensure DLL overrides are set correctly
         
-        DXVK DLLs are placed next to the Affinity executables as per best practices.
+        DXVK is installed via winetricks which should handle DLL overrides, but we verify
+        and set them up if needed to ensure proper functionality.
         """
-        self.log("Installing DXVK DLLs...", "info")
+        self.log("Installing DXVK via winetricks...", "info")
         
-        # Get latest version or use default
-        latest_version = self.get_latest_dxvk_version()
-        if not latest_version:
-            # Fallback to current latest known version
-            latest_version = "2.3"
-            self.log(f"Using fallback version: {latest_version}", "info")
+        env = os.environ.copy()
+        env["WINEPREFIX"] = self.directory
+        env["WINETRICKS_GUI"] = "0"
+        env["DISPLAY"] = env.get("DISPLAY", ":0")
+        env = self.get_winetricks_env_with_tkg(env)
         
-        # Check if we need to update
-        installed_version = self.get_installed_dxvk_version()
-        if installed_version and installed_version == latest_version:
-            self.log(f"DXVK {latest_version} is already installed", "info")
-            return
-        elif installed_version:
-            self.log(f"Updating DXVK from {installed_version} to {latest_version}", "info")
+        success = self.run_command_streaming(
+            ["winetricks", "--unattended", "--verbose", "--force", "--no-isolate", "--optout", "dxvk"],
+            env=env,
+            progress_callback=None
+        )
         
-        dxvk_version = latest_version
-        dxvk_url = f"https://github.com/doitsujin/dxvk/releases/download/v{dxvk_version}/dxvk-{dxvk_version}.tar.gz"
-        cache_dir = Path(self.directory) / "dxvk"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cached_dxvk_file = cache_dir / f"dxvk-{dxvk_version}.tar.gz"
-        cached_dxvk_dir = cache_dir / f"dxvk-{dxvk_version}"
+        # Always check for 64-bit DLLs regardless of winetricks success
+        # (winetricks may fail but still install 32-bit DLLs, or may fail completely)
+        system32_dir = Path(self.directory) / "drive_c" / "windows" / "system32"
+        dxvk_dll_names = ["d3d8.dll", "d3d9.dll", "d3d10.dll", "d3d10_1.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"]
+        missing_64bit = [dll for dll in dxvk_dll_names if not (system32_dir / dll).exists()]
         
-        # Check cache first
-        dxvk_dir = None
-        if cached_dxvk_dir.exists() and (cached_dxvk_dir / "x64").exists():
-            self.log("Using cached DXVK...", "info")
-            dxvk_dir = cached_dxvk_dir
-        else:
-            # Download DXVK
-            self.log(f"Downloading DXVK {dxvk_version}...", "info")
-            dxvk_file = Path(self.directory) / f"dxvk-{dxvk_version}.tar.gz"
-            if not self.download_file(dxvk_url, str(dxvk_file), "DXVK"):
-                self.log("Failed to download DXVK", "error")
-                return
+        if missing_64bit:
+            self.log("64-bit DXVK DLLs missing in system32, downloading DXVK release...", "info")
+            latest_version = self.get_latest_dxvk_version()
+            if not latest_version:
+                latest_version = "2.3"
             
-            # Cache the downloaded file
-            shutil.copy2(dxvk_file, cached_dxvk_file)
-            self.log("Cached DXVK archive", "success")
+            dxvk_url = f"https://github.com/doitsujin/dxvk/releases/download/v{latest_version}/dxvk-{latest_version}.tar.gz"
+            dxvk_file = Path(self.directory) / f"dxvk-{latest_version}.tar.gz"
             
-            # Extract DXVK
-            self.log("Extracting DXVK...", "info")
-            try:
-                with tarfile.open(dxvk_file, "r:gz") as tar:
-                    tar.extractall(self.directory, filter='data')
-                dxvk_file.unlink()
-                self.log("DXVK extracted", "success")
-            except Exception as e:
-                self.log(f"Failed to extract DXVK: {e}", "error")
-                return
-            
-            # Find extracted directory and cache it
-            dxvk_dir = next(Path(self.directory).glob("dxvk-*"), None)
-            if dxvk_dir:
-                # Cache the extracted directory
-                shutil.copytree(dxvk_dir, cached_dxvk_dir)
-                self.log("Cached DXVK directory", "success")
+            if self.download_file(dxvk_url, str(dxvk_file), "DXVK"):
+                try:
+                    import tarfile
+                    with tarfile.open(dxvk_file, "r:gz") as tar:
+                        extracted_count = 0
+                        for member in tar.getmembers():
+                            if member.name.startswith(f"dxvk-{latest_version}/x64/") and member.name.endswith(".dll"):
+                                dll_name = Path(member.name).name
+                                if dll_name in missing_64bit:
+                                    member.name = dll_name
+                                    tar.extract(member, system32_dir, filter='data')
+                                    extracted_count += 1
+                                    self.log(f"Extracted 64-bit {dll_name} to system32", "info")
+                        
+                        if extracted_count > 0:
+                            self.log(f"Extracted {extracted_count} 64-bit DXVK DLL(s) to system32", "success")
+                        else:
+                            self.log("No 64-bit DLLs found in DXVK archive", "warning")
+                except Exception as e:
+                    self.log(f"Failed to extract DXVK: {e}", "warning")
+                finally:
+                    if dxvk_file.exists():
+                        dxvk_file.unlink()
             else:
-                self.log("Failed to find extracted DXVK directory", "error")
-                return
-        
-        # Copy DLLs to application directories (next to executables, not system32)
-        app_dirs = {
-            "Photo": "Photo 2",
-            "Designer": "Designer 2",
-            "Publisher": "Publisher 2",
-            "Add": "Affinity"
-        }
-        
-        dxvk_dlls = ["d3d8.dll", "d3d9.dll", "d3d10.dll", "d3d10_1.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll"]
-        installed_count = 0
-        
-        for app_name, app_dir_name in app_dirs.items():
-            app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / app_dir_name
-            if app_dir.exists():
-                for dll in dxvk_dlls:
-                    src = dxvk_dir / "x64" / dll
-                    if src.exists():
-                        dst = app_dir / dll
-                        shutil.copy2(src, dst)
-                        installed_count += 1
-                        self.log(f"Installed {dll} to {app_dir_name}", "success")
-        
-        if installed_count > 0:
-            # Store installed version
-            self.set_installed_dxvk_version(dxvk_version)
-            self.log(f"DXVK DLLs installed (version {dxvk_version}) - {installed_count} DLL(s) copied", "success")
+                self.log("Failed to download DXVK, DLLs may not work correctly", "warning")
         else:
-            self.log("No DXVK DLLs were installed (no application directories found)", "warning")
+            self.log("64-bit DXVK DLLs verified in system32", "success")
+        
+        if success:
+            self.log("DXVK installed via winetricks, verifying installation...", "info")
+        else:
+            self.log("Winetricks installation failed, but continuing with manual DXVK setup...", "warning")
+        
+        # Verify and set up DLL overrides (regardless of winetricks success)
+        wine = self.get_wine_path("wine")
+        dxvk_dlls = ["d3d8", "d3d9", "d3d10", "d3d10_1", "d3d10core", "d3d11", "dxgi"]
+        override_count = 0
+        
+        for dll in dxvk_dlls:
+            success_check, stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", dll],
+                check=False,
+                env=env,
+                capture=True
+            )
+            if success_check and "native" in stdout:
+                override_count += 1
+        
+        if override_count < len(dxvk_dlls):
+            self.log("Setting up DLL overrides for DXVK...", "info")
+            reg_file = Path(self.directory) / "dxvk_overrides.reg"
+            with open(reg_file, "w") as f:
+                f.write("REGEDIT4\n")
+                f.write("[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]\n")
+                for dll in dxvk_dlls:
+                    f.write(f'"{dll}"="native,builtin"\n')
+            
+            regedit = self.get_wine_path("regedit")
+            reg_success, _, stderr = self.run_command([str(regedit), str(reg_file)], check=False, env=env, capture=True)
+            reg_file.unlink()
+            
+            if reg_success:
+                self.log("DXVK DLL overrides configured", "success")
+            else:
+                self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
+        else:
+            self.log(f"DXVK DLL overrides verified ({override_count} DLLs)", "success")
+        
+        self.set_installed_dxvk_version("winetricks")
     
     def install_d3d12_dlls(self):
         """Install d3d12.dll and d3d12core.dll from vkd3d-proton and set up DLL overrides"""
@@ -8242,48 +8261,52 @@ class AffinityInstallerGUI(QMainWindow):
     
     def setup_dxvk_overrides(self):
         """
-        Set up DLL overrides for DXVK (d3d8, d3d9, d3d10, d3d10_1, d3d10core, d3d11, dxgi)
+        Set up DLL overrides for DXVK in Wine registry
         
-        Note: DXVK DLLs should NEVER be installed to system32. If DXVK DLLs are found in
-        system32, they should be removed. DXVK works via DLL overrides and environment
-        variables, not by copying DLLs to system32.
+        DXVK is installed via winetricks which automatically sets up DLL overrides.
+        This function verifies the installation and ensures overrides are correct.
         """
-        self.log("Setting up DLL overrides for DXVK...", "info")
+        self.log("Verifying DXVK installation via winetricks...", "info")
         
-        # Install/update DXVK DLLs next to executables
-        self.install_dxvk_dlls()
-        
-        reg_file = Path(self.directory) / "dxvk_overrides.reg"
-        with open(reg_file, "w") as f:
-            f.write("REGEDIT4\n")
-            f.write("[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]\n")
-            f.write('"d3d8"="native,builtin"\n')
-            f.write('"d3d9"="native,builtin"\n')
-            f.write('"d3d10"="native,builtin"\n')
-            f.write('"d3d10_1"="native,builtin"\n')
-            f.write('"d3d10core"="native,builtin"\n')
-            f.write('"d3d11"="native,builtin"\n')
-            f.write('"dxgi"="native,builtin"\n')
-        
-        regedit = self.get_wine_path("regedit")
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
-        
-        success, _, stderr = self.run_command([str(regedit), str(reg_file)], check=False, env=env, capture=True)
-        reg_file.unlink()
-        
-        if success:
-            self.log("DLL overrides configured for DXVK", "success")
-        else:
-            self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
-    
-    def remove_dxvk_overrides(self):
-        """Remove DLL overrides for DXVK (d3d8, d3d9, d3d10, d3d10_1, d3d10core, d3d11, dxgi)"""
-        self.log("Removing DLL overrides for DXVK...", "info")
+        env["WINETRICKS_GUI"] = "0"
+        env["DISPLAY"] = env.get("DISPLAY", ":0")
+        env = self.get_winetricks_env_with_tkg(env)
         
         wine = self.get_wine_path("wine")
+        
+        dxvk_dlls = ["d3d8", "d3d9", "d3d10", "d3d10_1", "d3d10core", "d3d11", "dxgi"]
+        override_count = 0
+        
+        for dll in dxvk_dlls:
+            success, stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", dll],
+                check=False,
+                env=env,
+                capture=True
+            )
+            if success and "native" in stdout:
+                override_count += 1
+        
+        if override_count > 0:
+            self.log(f"DXVK DLL overrides verified ({override_count} DLLs)", "success")
+        else:
+            self.log("DXVK DLL overrides not found - winetricks should have set them up", "warning")
+            self.log("Installing DXVK via winetricks to set up overrides...", "info")
+            self.install_dxvk_dlls()
+    
+    def remove_dxvk_overrides(self):
+        """Remove DXVK via winetricks and clean up DLL overrides"""
+        self.log("Removing DXVK via winetricks...", "info")
+        
         env = os.environ.copy()
         env["WINEPREFIX"] = self.directory
+        env["WINETRICKS_GUI"] = "0"
+        env["DISPLAY"] = env.get("DISPLAY", ":0")
+        env = self.get_winetricks_env_with_tkg(env)
+        
+        wine = self.get_wine_path("wine")
         
         dxvk_dlls = ["d3d8", "d3d9", "d3d10", "d3d10_1", "d3d10core", "d3d11", "dxgi"]
         removed_count = 0
@@ -8303,8 +8326,15 @@ class AffinityInstallerGUI(QMainWindow):
         else:
             self.log("No DXVK DLL overrides found to remove", "info")
         
-        # Also remove DXVK DLLs from system32 if they exist
         self.remove_dxvk_dlls_from_system32()
+        
+        cache_dir = Path(self.directory) / "dxvk"
+        if cache_dir.exists():
+            try:
+                shutil.rmtree(cache_dir)
+                self.log("Removed DXVK cache directory", "success")
+            except Exception as e:
+                self.log(f"Warning: Could not remove DXVK cache: {e}", "warning")
     
     def remove_dxvk_dlls_from_system32(self):
         """Remove DXVK DLLs from system32 directory"""
@@ -8736,78 +8766,11 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("\n✓ All Wine versions cached successfully!", "success")
     
     def _cache_dxvk(self):
-        """Download and cache DXVK to cache directory (for future switching)
+        """DXVK is now handled by winetricks, which manages its own caching.
         
-        This helps users with capped internet by avoiding re-downloads.
+        This function is kept for compatibility but no longer performs manual caching.
         """
-        cache_dir = Path(self.directory) / "dxvk"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        self.log("Caching DXVK", "info")
-        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-        self.log("Downloading DXVK to cache for future switching...", "info")
-        self.log("This helps users with capped internet by avoiding re-downloads.\n", "info")
-        
-        # Get latest version or use default
-        latest_version = self.get_latest_dxvk_version()
-        if not latest_version:
-            # Fallback to current latest known version
-            latest_version = "2.3"
-            self.log(f"Using fallback version: {latest_version}", "info")
-        
-        # Check if already cached
-        cached_dxvk_dir = cache_dir / f"dxvk-{latest_version}"
-        if cached_dxvk_dir.exists() and (cached_dxvk_dir / "x64").exists():
-            self.log(f"DXVK {latest_version} already cached, skipping download", "info")
-            return
-        
-        dxvk_version = latest_version
-        dxvk_url = f"https://github.com/doitsujin/dxvk/releases/download/v{dxvk_version}/dxvk-{dxvk_version}.tar.gz"
-        cached_dxvk_file = cache_dir / f"dxvk-{dxvk_version}.tar.gz"
-        
-        # Download DXVK
-        self.log(f"Caching DXVK {dxvk_version}...", "info")
-        dxvk_file = Path(self.directory) / f"dxvk-{dxvk_version}.tar.gz"
-        if not self.download_file(dxvk_url, str(dxvk_file), "DXVK"):
-            self.log(f"Failed to cache DXVK {dxvk_version}", "warning")
-            return
-        
-        if self.check_cancelled():
-            return
-        
-        # Cache the downloaded file
-        shutil.copy2(dxvk_file, cached_dxvk_file)
-        self.log("Cached DXVK archive", "success")
-        
-        # Extract DXVK
-        self.log(f"Extracting DXVK {dxvk_version}...", "info")
-        try:
-            with tarfile.open(dxvk_file, "r:gz") as tar:
-                tar.extractall(self.directory, filter='data')
-            dxvk_file.unlink()
-            self.log("DXVK extracted", "success")
-        except Exception as e:
-            self.log(f"Failed to extract cached DXVK: {e}", "warning")
-            if dxvk_file.exists():
-                dxvk_file.unlink()
-            return
-        
-        # Find extracted directory and cache it
-        dxvk_dir = next(Path(self.directory).glob("dxvk-*"), None)
-        if dxvk_dir:
-            # Cache the extracted directory
-            shutil.copytree(dxvk_dir, cached_dxvk_dir)
-            self.log("Cached DXVK directory", "success")
-            # Clean up temporary extracted directory
-            shutil.rmtree(dxvk_dir)
-        else:
-            self.log("Could not find extracted DXVK directory", "warning")
-            return
-        
-        # Store cached version
-        self.set_installed_dxvk_version(dxvk_version)
-        self.log(f"\n✓ DXVK {dxvk_version} cached successfully!", "success")
+        self.log("DXVK caching is handled automatically by winetricks", "info")
     
     def _check_and_update_dxvk_vkd3d(self):
         """Check if DXVK or vkd3d-proton need updating and update them if needed
@@ -8817,36 +8780,40 @@ class AffinityInstallerGUI(QMainWindow):
         threading.Thread(target=self._check_and_update_dxvk_vkd3d_thread, daemon=True).start()
     
     def _check_and_update_dxvk_vkd3d_thread(self):
-        """Background thread to check and update DXVK/vkd3d-proton"""
+        """Background thread to check DXVK/vkd3d-proton status"""
         try:
             # Only check if Wine is already set up
             wine_dir = self.get_wine_dir()
             if not wine_dir.exists():
                 return  # Wine not set up yet, skip check
             
-            self.log("Checking for DXVK and vkd3d-proton updates...", "info")
+            self.log("Checking DXVK and vkd3d-proton status...", "info")
             
-            # Check DXVK
-            latest_dxvk = self.get_latest_dxvk_version()
-            if latest_dxvk:
-                installed_dxvk = self.get_installed_dxvk_version()
-                cache_dir = Path(self.directory) / "dxvk"
-                cached_dxvk_dir = cache_dir / f"dxvk-{latest_dxvk}"
-                
-                # Check if DXVK is missing or outdated
-                if not installed_dxvk or installed_dxvk != latest_dxvk:
-                    if not cached_dxvk_dir.exists() or not (cached_dxvk_dir / "x64").exists():
-                        self.log(f"DXVK {latest_dxvk} is missing or outdated, downloading...", "info")
-                        self._cache_dxvk()
-                    elif installed_dxvk != latest_dxvk:
-                        self.log(f"DXVK update available: {installed_dxvk} -> {latest_dxvk}", "info")
-                        self.log("Updating DXVK cache...", "info")
-                        self._cache_dxvk()
+            # Check if DXVK is installed via winetricks
+            env = os.environ.copy()
+            env["WINEPREFIX"] = self.directory
+            wine = self.get_wine_path("wine")
+            
+            dxvk_installed = False
+            dxvk_dlls = ["d3d8", "d3d9", "d3d11", "dxgi"]
+            for dll in dxvk_dlls:
+                success, stdout, _ = self.run_command(
+                    [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", dll],
+                    check=False,
+                    env=env,
+                    capture=True
+                )
+                if success and "native" in stdout:
+                    dxvk_installed = True
+                    break
+            
+            if dxvk_installed:
+                self.log("DXVK is installed via winetricks", "info")
+            else:
+                if self.has_amd_gpu():
+                    self.log("AMD GPU detected - DXVK should be installed via winetricks", "info")
                 else:
-                    # Verify cache exists
-                    if not cached_dxvk_dir.exists() or not (cached_dxvk_dir / "x64").exists():
-                        self.log(f"DXVK {latest_dxvk} cache missing, downloading...", "info")
-                        self._cache_dxvk()
+                    self.log("DXVK not installed (will be installed when switching to DXVK)", "info")
             
             # Check vkd3d-proton
             latest_vkd3d = self.get_latest_vkd3d_version()
