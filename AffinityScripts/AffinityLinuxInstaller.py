@@ -3436,16 +3436,16 @@ class AffinityInstallerGUI(QMainWindow):
             if is_v2_cpu:
                 self.question_dialog_response = "Wine 10.4 v2 (Older CPUs)"
             else:
-            if wine_104_radio.isChecked():
-                self.question_dialog_response = "Wine 10.4 (Recommended)"
-            elif wine_104v2_radio.isChecked():
-                self.question_dialog_response = "Wine 10.4 v2 (Older CPUs)"
-            elif wine_914_radio.isChecked():
-                self.question_dialog_response = "Wine 9.14 (Legacy)"
-            elif wine_1010_radio.isChecked():
-                self.question_dialog_response = "Wine 10.10"
-            elif wine_1011_radio.isChecked():
-                self.question_dialog_response = "Wine 10.11"
+                if wine_104_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.4 (Recommended)"
+                elif wine_104v2_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.4 v2 (Older CPUs)"
+                elif wine_914_radio.isChecked():
+                    self.question_dialog_response = "Wine 9.14 (Legacy)"
+                elif wine_1010_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.10"
+                elif wine_1011_radio.isChecked():
+                    self.question_dialog_response = "Wine 10.11"
         else:
             # User cancelled - return "Cancel" to match expected format
             self.question_dialog_response = "Cancel"
@@ -5612,11 +5612,11 @@ class AffinityInstallerGUI(QMainWindow):
     def get_current_backend(self):
         """Detect which graphics backend is currently being used (dxvk or vkd3d)"""
         # Check preference first (applies to all GPU types)
-            preference = self.get_dxvk_vkd3d_preference()
-            if preference == "dxvk":
-                return "dxvk"
-            elif preference == "vkd3d":
-                return "vkd3d"
+        preference = self.get_dxvk_vkd3d_preference()
+        if preference == "dxvk":
+            return "dxvk"
+        elif preference == "vkd3d":
+            return "vkd3d"
         
         # If no preference set, check if vkd3d DLLs exist
         wine_lib_dir = self.get_wine_dir() / "lib" / "wine" / "vkd3d-proton" / "x86_64-windows"
@@ -8052,7 +8052,7 @@ class AffinityInstallerGUI(QMainWindow):
             if self.download_file(dxvk_url, str(dxvk_file), "DXVK"):
                 try:
                     import tarfile
-                with tarfile.open(dxvk_file, "r:gz") as tar:
+                    with tarfile.open(dxvk_file, "r:gz") as tar:
                         extracted_count = 0
                         for member in tar.getmembers():
                             if member.name.startswith(f"dxvk-{latest_version}/x64/") and member.name.endswith(".dll"):
@@ -8067,7 +8067,7 @@ class AffinityInstallerGUI(QMainWindow):
                             self.log(f"Extracted {extracted_count} 64-bit DXVK DLL(s) to system32", "success")
                         else:
                             self.log("No 64-bit DLLs found in DXVK archive", "warning")
-            except Exception as e:
+                except Exception as e:
                     self.log(f"Failed to extract DXVK: {e}", "warning")
                 finally:
                     if dxvk_file.exists():
@@ -8079,7 +8079,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         if success:
             self.log("DXVK installed via winetricks, verifying installation...", "info")
-            else:
+        else:
             self.log("Winetricks installation failed, but continuing with manual DXVK setup...", "warning")
         
         # Verify and set up DLL overrides (regardless of winetricks success)
@@ -8112,7 +8112,7 @@ class AffinityInstallerGUI(QMainWindow):
             
             if reg_success:
                 self.log("DXVK DLL overrides configured", "success")
-        else:
+            else:
                 self.log(f"Warning: Could not configure DLL overrides: {stderr}", "warning")
         else:
             self.log(f"DXVK DLL overrides verified ({override_count} DLLs)", "success")
@@ -8793,7 +8793,7 @@ class AffinityInstallerGUI(QMainWindow):
             
             if dxvk_installed:
                 self.log("DXVK is installed via winetricks", "info")
-                else:
+            else:
                 if self.has_amd_gpu():
                     self.log("AMD GPU detected - DXVK should be installed via winetricks", "info")
                 else:
@@ -11575,7 +11575,7 @@ class AffinityInstallerGUI(QMainWindow):
         desktop_shortcut = Path.home() / "Desktop" / desktop_file.name
         if desktop_shortcut.parent.exists():
             try:
-            shutil.copy2(desktop_file, desktop_shortcut)
+                shutil.copy2(desktop_file, desktop_shortcut)
                 self.log("Desktop shortcut created", "success")
             except PermissionError:
                 self.log(f"Could not create desktop shortcut (permission denied): {desktop_shortcut}", "warning")
