@@ -3405,12 +3405,14 @@ class AffinityInstallerGUI(QMainWindow):
         self.waiting_for_question_response = True
         self.question_dialog_signal.emit(title, message, buttons)
         
-        # Wait for response with timeout
-        max_wait = 300  # 30 seconds
-        waited = 0
-        while self.waiting_for_question_response and waited < max_wait:
+        # Wait for response indefinitely - let user take all the time they need
+        # Only exit if operation is actually cancelled by user (via cancel button)
+        while self.waiting_for_question_response:
+            # Check if operation was cancelled by user (not timeout)
+            if self.operation_cancelled:
+                self.waiting_for_question_response = False
+                return "Cancel"
             time.sleep(0.1)
-            waited += 1
         
         return self.question_dialog_response or "Cancel"
     
@@ -10147,6 +10149,11 @@ class AffinityInstallerGUI(QMainWindow):
         elif "publisher" in filename_lower or "publisher" in filename_no_spaces:
             app_name = "Publisher"
             self.log(f"Detected: Affinity Publisher (from filename: {Path(installer_path).name})", "info")
+        elif ("affinity" in filename_lower or "affinity" in filename_no_spaces) and \
+             ("x64" in filename_lower or "x64" in filename_no_spaces) and \
+             "photo" not in filename_lower and "designer" not in filename_lower and "publisher" not in filename_lower:
+            app_name = "Add"
+            self.log(f"Detected: Affinity (Unified) v3 (from filename: {Path(installer_path).name})", "info")
         else:
             self.log(f"Could not detect Affinity app from filename: {Path(installer_path).name}", "warning")
             self.log("Desktop entry will not be created automatically for non-Affinity apps.", "info")
@@ -10209,6 +10216,14 @@ class AffinityInstallerGUI(QMainWindow):
             
             # Restore WinMetadata
             self.restore_winmetadata()
+            
+            # Set up wintypes.dll and Wine overrides for Affinity apps (v2 and v3)
+            if app_name in ["Photo", "Designer", "Publisher", "Add"]:
+                self.log("Setting up wintypes.dll and Wine overrides...", "info")
+                # Set up DLL override for wintypes.dll
+                self.setup_wintypes_dll_override()
+                # Copy wintypes.dll for the installed app
+                self.setup_wintypes_dll(app_name)
             
             # If it's an Affinity app, automatically create desktop entry and configure OpenCL
             if app_name in ["Photo", "Designer", "Publisher"]:
