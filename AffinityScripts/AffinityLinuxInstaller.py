@@ -11392,6 +11392,15 @@ class AffinityInstallerGUI(QMainWindow):
             if wine_entry.exists():
                 wine_entry.unlink()
         
+        # Remove duplicate wine-protocol-affinity.desktop file
+        wine_protocol_entry = desktop_dir / "wine-protocol-affinity.desktop"
+        if wine_protocol_entry.exists():
+            try:
+                wine_protocol_entry.unlink()
+                self.log("Removed duplicate wine-protocol-affinity.desktop", "info")
+            except Exception as e:
+                self.log(f"Warning: Could not remove wine-protocol-affinity.desktop: {e}", "warning")
+        
         # Create desktop shortcut
         desktop_shortcut = Path.home() / "Desktop" / desktop_file.name
         if desktop_shortcut.parent.exists():
