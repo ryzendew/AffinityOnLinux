@@ -2132,6 +2132,15 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(troubleshoot_group)
         
+        # Patches section
+        patches_group = self.create_button_group(
+            "Patches",
+            [
+                ("Return Colors (v3)", self.apply_return_colors, "Restore colored icons in Affinity v3 (replaces monochrome icons with v2 colored icons). Requires .NET SDK 10.0+", "wand"),
+            ]
+        )
+        container_layout.addWidget(patches_group)
+        
         # Launch section
         launch_group = self.create_button_group(
             "Launch",
@@ -11205,6 +11214,75 @@ class AffinityInstallerGUI(QMainWindow):
         major, minor, patch = self._parse_version(version_str)
         return major >= min_major
     
+    def check_dotnet_sdk_10(self):
+        """Check if .NET SDK version 10.0 or newer is installed"""
+        # First, try to run dotnet --version
+        success, stdout, _ = self.run_command(
+            ["dotnet", "--version"],
+            check=False,
+            capture=True
+        )
+        if success and stdout:
+            version = stdout.strip()
+            major, minor, patch = self._parse_version(version)
+            if major >= 10:
+                self.log(f".NET SDK 10.0+ found (version {version})", "success")
+                return True
+            else:
+                self.log(f".NET SDK found but version {version} is too old (need 10.0+)", "warning")
+                return False
+        
+        # If dotnet command not found, check if it's installed via package manager
+        if self.distro in ["fedora", "nobara"]:
+            success, stdout, _ = self.run_command(
+                ["dnf", "list", "installed", "dotnet-sdk*"],
+                check=False,
+                capture=True
+            )
+            if success and stdout:
+                for line in stdout.split('\n'):
+                    if 'dotnet-sdk' in line.lower() and 'installed' in line.lower():
+                        match = re.search(r'dotnet-sdk-(\d+)\.(\d+)', line)
+                        if match:
+                            major = int(match.group(1))
+                            if major >= 10:
+                                self.log(f".NET SDK 10.0+ package found via dnf: {line.split()[0]}", "success")
+                                return True
+        
+        elif self.distro in ["arch", "cachyos", "endeavouros", "xerolinux"]:
+            success, stdout, _ = self.run_command(
+                ["pacman", "-Q"],
+                check=False,
+                capture=True
+            )
+            if success and stdout:
+                for line in stdout.split('\n'):
+                    if 'dotnet-sdk' in line.lower():
+                        match = re.search(r'dotnet-sdk-(\d+)\.(\d+)', line)
+                        if match:
+                            major = int(match.group(1))
+                            if major >= 10:
+                                self.log(f".NET SDK 10.0+ package found via pacman: {line.split()[0]}", "success")
+                                return True
+        
+        elif self.distro in ["pikaos", "pop", "debian"]:
+            success, stdout, _ = self.run_command(
+                ["dpkg", "-l", "dotnet-sdk*"],
+                check=False,
+                capture=True
+            )
+            if success and stdout:
+                for line in stdout.split('\n'):
+                    if 'dotnet-sdk' in line.lower() and line.startswith('ii'):
+                        match = re.search(r'dotnet-sdk-(\d+)\.(\d+)', line)
+                        if match:
+                            major = int(match.group(1))
+                            if major >= 10:
+                                self.log(f".NET SDK 10.0+ package found via dpkg: {line.split()[1]}", "success")
+                                return True
+        
+        return False
+    
     def check_dotnet_sdk(self):
         """Check if .NET SDK version 8.0 or newer is installed"""
         # First, try to run dotnet --version
@@ -11335,7 +11413,7 @@ class AffinityInstallerGUI(QMainWindow):
         return False
     
     def ensure_patcher_files(self, silent=False):
-        """Ensure AffinityPatcher files are available in .AffinityLinux/Patch/"""
+        """Ensure AffinityPatcher and ReturnColors files are available in .AffinityLinux/Patch/"""
         try:
             # Destination: .AffinityLinux/Patch/
             dest_patch_dir = Path(self.directory) / "Patch"
@@ -11399,6 +11477,115 @@ class AffinityInstallerGUI(QMainWindow):
                 dest_file = dest_patch_dir / filename
                 if not dest_file.exists():
                     all_exist = False
+            
+            # Download ReturnColors from GitHub
+            returncolors_dest = dest_patch_dir / "return-affinity-colors"
+            returncolors_repo = "https://github.com/ShawnTheBeachy/return-affinity-colors.git"
+            
+            # Check if ReturnColors project folder exists (it's inside return-affinity-colors/ReturnColors/)
+            returncolors_project_exists = (returncolors_dest.exists() and 
+                                          (returncolors_dest / "ReturnColors").exists() and 
+                                          (returncolors_dest / "ReturnColors" / "ReturnColors.csproj").exists())
+            
+            if not returncolors_project_exists:
+                if not silent:
+                    self.log("Downloading ReturnColors from GitHub...", "info")
+                
+                # Try git clone first (preferred method)
+                if self.check_command("git"):
+                    try:
+                        # Remove existing directory if it exists but is incomplete
+                        if returncolors_dest.exists():
+                            shutil.rmtree(returncolors_dest)
+                        
+                        # Clone the repository
+                        success, stdout, stderr = self.run_command(
+                            ["git", "clone", "--depth", "1", returncolors_repo, str(returncolors_dest)],
+                            check=False,
+                            capture=True
+                        )
+                        
+                        if success:
+                            if not silent:
+                                self.log("ReturnColors downloaded from GitHub via git", "success")
+                        else:
+                            if not silent:
+                                self.log(f"Git clone failed: {stderr[:200] if stderr else 'Unknown error'}", "warning")
+                            # Fall through to zip download
+                            if returncolors_dest.exists():
+                                shutil.rmtree(returncolors_dest)
+                    except Exception as e:
+                        if not silent:
+                            self.log(f"Error cloning ReturnColors: {e}", "warning")
+                        if returncolors_dest.exists():
+                            try:
+                                shutil.rmtree(returncolors_dest)
+                            except:
+                                pass
+                
+                # Fallback: Download as zip and extract
+                if not returncolors_project_exists:
+                    try:
+                        import zipfile
+                        import tempfile
+                        
+                        # Download zip from GitHub
+                        zip_url = "https://github.com/ShawnTheBeachy/return-affinity-colors/archive/refs/heads/main.zip"
+                        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+                        temp_zip_path = Path(temp_zip.name)
+                        temp_zip.close()
+                        
+                        if not silent:
+                            self.log("Downloading ReturnColors as ZIP from GitHub...", "info")
+                        
+                        if self.download_file(zip_url, str(temp_zip_path), "ReturnColors ZIP"):
+                            # Extract zip
+                            with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                                # Extract to a temp directory first
+                                temp_extract = dest_patch_dir / ".temp_returncolors"
+                                if temp_extract.exists():
+                                    shutil.rmtree(temp_extract)
+                                temp_extract.mkdir(exist_ok=True)
+                                zip_ref.extractall(temp_extract)
+                                
+                                # Move the extracted folder to the correct location
+                                extracted_folder = temp_extract / "return-affinity-colors-main"
+                                if extracted_folder.exists():
+                                    if returncolors_dest.exists():
+                                        shutil.rmtree(returncolors_dest)
+                                    extracted_folder.rename(returncolors_dest)
+                                
+                                # Clean up temp directory
+                                if temp_extract.exists():
+                                    try:
+                                        shutil.rmtree(temp_extract)
+                                    except:
+                                        pass
+                            
+                            # Clean up zip file
+                            temp_zip_path.unlink()
+                            
+                            # Verify the structure is correct
+                            if returncolors_dest.exists() and (returncolors_dest / "ReturnColors").exists() and (returncolors_dest / "ReturnColors" / "ReturnColors.csproj").exists():
+                                if not silent:
+                                    self.log("ReturnColors downloaded and extracted from GitHub", "success")
+                            else:
+                                if not silent:
+                                    self.log("ReturnColors extraction failed - folder structure not found", "warning")
+                                # Try to find the correct structure
+                                if returncolors_dest.exists():
+                                    # Check if ReturnColors folder is at the root
+                                    if (returncolors_dest / "ReturnColors.csproj").exists():
+                                        # The zip might have extracted differently, move files
+                                        pass  # Structure is already correct
+                        else:
+                            if not silent:
+                                self.log("Failed to download ReturnColors ZIP from GitHub", "warning")
+                    except Exception as e:
+                        if not silent:
+                            self.log(f"Error downloading ReturnColors: {e}", "warning")
+            elif not silent:
+                self.log("ReturnColors already exists in .AffinityLinux/Patch/", "info")
             
             if files_copied and not silent:
                 self.log("Patcher files are ready in .AffinityLinux/Patch/", "success")
@@ -11514,6 +11701,127 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"Output: {stdout}", "warning")
             return False
     
+    def build_return_colors(self):
+        """Build the ReturnColors .NET project"""
+        # Use Patch directory from .AffinityLinux
+        patch_dir = Path(self.directory) / "Patch"
+        # ReturnColors is downloaded from GitHub, so it's in return-affinity-colors/ReturnColors/
+        returncolors_repo_dir = patch_dir / "return-affinity-colors"
+        returncolors_dir = returncolors_repo_dir / "ReturnColors"
+        
+        # Also check the old location for backwards compatibility
+        if not returncolors_dir.exists():
+            old_returncolors_dir = patch_dir / "ReturnColors"
+            if old_returncolors_dir.exists():
+                returncolors_dir = old_returncolors_dir
+        
+        if not returncolors_dir.exists():
+            self.log(f"ReturnColors directory not found: {returncolors_dir}", "warning")
+            self.log("Attempting to download ReturnColors from GitHub...", "info")
+            # Try to ensure it's downloaded
+            self.ensure_patcher_files(silent=True)
+            # Check again after download attempt
+            returncolors_repo_dir = patch_dir / "return-affinity-colors"
+            returncolors_dir = returncolors_repo_dir / "ReturnColors"
+            if not returncolors_dir.exists():
+                old_returncolors_dir = patch_dir / "ReturnColors"
+                if old_returncolors_dir.exists():
+                    returncolors_dir = old_returncolors_dir
+            if not returncolors_dir.exists():
+                self.log(f"ReturnColors directory still not found after download attempt", "error")
+                return None
+        
+        csproj_file = returncolors_dir / "ReturnColors.csproj"
+        if not csproj_file.exists():
+            self.log(f"ReturnColors.csproj not found: {csproj_file}", "warning")
+            return None
+        
+        self.log(f"Building ReturnColors from: {returncolors_dir}", "info")
+        
+        # Build the project
+        output_dir = returncolors_dir / "bin" / "Release"
+        success, stdout, stderr = self.run_command(
+            ["dotnet", "build", str(csproj_file), "-c", "Release", "-o", str(output_dir)],
+            check=False,
+            capture=True
+        )
+        
+        if not success:
+            self.log(f"Failed to build ReturnColors: {stderr}", "warning")
+            if stdout:
+                self.log(f"Build output: {stdout}", "warning")
+            return None
+        
+        # Find the built executable
+        possible_names = [
+            "ReturnColors",  # Native executable (Linux)
+            "ReturnColors.dll",  # DLL (runnable with dotnet)
+            "ReturnColors.exe",  # Windows executable (unlikely on Linux)
+        ]
+        
+        returncolors_exe = None
+        for name in possible_names:
+            candidate = output_dir / name
+            if candidate.exists():
+                returncolors_exe = candidate
+                break
+        
+        if returncolors_exe and returncolors_exe.exists():
+            self.log(f"ReturnColors built successfully: {returncolors_exe}", "success")
+            return returncolors_exe
+        else:
+            if output_dir.exists():
+                files = list(output_dir.glob("*"))
+                self.log(f"Files in output directory: {[f.name for f in files]}", "warning")
+            self.log(f"Built ReturnColors not found at expected location: {output_dir}", "warning")
+            return None
+    
+    def run_return_colors_colorize(self, affinity_dir):
+        """Run ReturnColors colorize command to restore colored icons"""
+        if not Path(affinity_dir).exists():
+            self.log(f"Affinity directory not found: {affinity_dir}", "warning")
+            return False
+        
+        # Build ReturnColors if needed
+        returncolors_exe = self.build_return_colors()
+        if not returncolors_exe:
+            self.log("ReturnColors not available, skipping icon colorization", "info")
+            return False
+        
+        self.log("Running ReturnColors to restore colored icons...", "info")
+        
+        # Run ReturnColors colorize command
+        # The command expects: colorize <directory>
+        if returncolors_exe.suffix == ".dll":
+            cmd = ["dotnet", str(returncolors_exe), "colorize", str(affinity_dir)]
+        else:
+            cmd = [str(returncolors_exe), "colorize", str(affinity_dir)]
+        
+        success, stdout, stderr = self.run_command(
+            cmd,
+            check=False,
+            capture=True
+        )
+        
+        if success:
+            self.log("ReturnColors colorize completed successfully", "success")
+            if stdout:
+                # Log the output
+                for line in stdout.strip().split('\n'):
+                    if line.strip():
+                        if "success" in line.lower() or "completed" in line.lower():
+                            self.log(line, "success")
+                        elif "error" in line.lower() or "failed" in line.lower():
+                            self.log(line, "error")
+                        else:
+                            self.log(line, "info")
+            return True
+        else:
+            self.log(f"ReturnColors colorize failed: {stderr}", "warning")
+            if stdout:
+                self.log(f"Output: {stdout}", "warning")
+            return False
+    
     def patch_affinity_dll(self, app_name):
         """Patch the Serif.Affinity.dll for Affinity v3 (Unified)"""
         # Only patch Affinity v3 (Unified)
@@ -11523,6 +11831,9 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Patching Affinity DLL for settings fix...", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Ensure patcher files (including ReturnColors) are available
+        self.ensure_patcher_files(silent=True)
         
         # Check if .NET SDK is available, try to install if missing
         if not self.check_dotnet_sdk():
@@ -11554,7 +11865,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("The DLL may not be installed yet. Patching will be skipped.", "warning")
             return False
         
-        # Run the patcher
+        # Run the settings patcher
         return self.run_affinity_patcher(str(dll_path))
     
     def create_desktop_entry(self, app_name):
@@ -12281,6 +12592,109 @@ class AffinityInstallerGUI(QMainWindow):
         except Exception as e:
             self.log(f"Error installing .NET SDK: {e}", "error")
             return False
+    
+    def apply_return_colors(self):
+        """Apply ReturnColors patch to restore colored icons in Affinity v3"""
+        self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        self.log("Return Colors (Affinity v3)", "info")
+        self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+        
+        # Check if Wine is set up
+        wine_binary = self.get_wine_path("wine")
+        if not wine_binary.exists():
+            self.log("Wine is not set up yet. Please setup Wine environment first.", "error")
+            QMessageBox.warning(
+                self,
+                "Wine Not Ready",
+                "Wine setup must complete before applying patches.\n"
+                "Please setup Wine environment first."
+            )
+            return
+        
+        # Check if Affinity v3 is installed
+        affinity_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / "Affinity"
+        dll_path = affinity_dir / "Serif.Affinity.dll"
+        
+        if not dll_path.exists():
+            self.log("Affinity v3 (Unified) is not installed.", "error")
+            self.log(f"Expected DLL at: {dll_path}", "info")
+            self.show_message(
+                "Affinity v3 Not Found",
+                "Affinity v3 (Unified) is not installed.\n\n"
+                "This patch only works for Affinity v3 (Unified).\n"
+                "Please install Affinity v3 first using the 'Affinity (Unified)' button.",
+                "error"
+            )
+            return
+        
+        self.start_operation("Return Colors")
+        
+        # Ensure patcher files are available
+        self.ensure_patcher_files()
+        
+        # Check if .NET SDK 10.0+ is installed (required for ReturnColors)
+        if not self.check_dotnet_sdk_10():
+            self.log(".NET SDK 10.0+ is required for ReturnColors patch", "error")
+            self.log("ReturnColors requires .NET SDK 10.0 or newer to build.", "info")
+            self.log("Please install .NET SDK 10.0 manually:", "info")
+            
+            install_instructions = ""
+            if self.distro in ["arch", "cachyos"]:
+                self.log("  sudo pacman -S dotnet-sdk-10.0", "info")
+                install_instructions = "sudo pacman -S dotnet-sdk-10.0"
+            elif self.distro in ["endeavouros", "xerolinux"]:
+                self.log("  sudo pacman -S dotnet-sdk-10.0", "info")
+                install_instructions = "sudo pacman -S dotnet-sdk-10.0"
+            elif self.distro in ["fedora", "nobara"]:
+                self.log("  sudo dnf install dotnet-sdk-10.0", "info")
+                install_instructions = "sudo dnf install dotnet-sdk-10.0"
+            elif self.distro in ["pikaos", "pop", "debian"]:
+                self.log("  sudo apt install dotnet-sdk-10.0", "info")
+                self.log("  (May require Microsoft's .NET repository)", "warning")
+                install_instructions = "sudo apt install dotnet-sdk-10.0\n(May require Microsoft's .NET repository)"
+            elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
+                self.log("  sudo zypper install dotnet-sdk-10.0", "info")
+                install_instructions = "sudo zypper install dotnet-sdk-10.0"
+            else:
+                self.log("  Please install .NET SDK 10.0 from: https://dotnet.microsoft.com/download", "info")
+                install_instructions = "Install from: https://dotnet.microsoft.com/download"
+            
+            self.end_operation()
+            self.show_message(
+                ".NET SDK 10.0 Required",
+                "ReturnColors patch requires .NET SDK 10.0 or newer to build.\n\n"
+                f"Please install it manually:\n{install_instructions}\n\n"
+                "After installing, restart the installer and try again.",
+                "error"
+            )
+            return
+        
+        # Run ReturnColors colorize
+        success = self.run_return_colors_colorize(str(affinity_dir))
+        
+        if success:
+            self.log("\n✓ ReturnColors patch applied successfully!", "success")
+            self.log("Affinity v3 icons have been restored to colored versions.", "info")
+            self.end_operation()
+            self.show_message(
+                "Patch Applied Successfully",
+                "ReturnColors patch has been applied successfully!\n\n"
+                "Affinity v3 icons have been restored to colored versions.\n"
+                "You may need to restart Affinity v3 to see the changes.",
+                "info"
+            )
+        else:
+            self.log("\n✗ ReturnColors patch failed", "error")
+            self.end_operation()
+            self.show_message(
+                "Patch Failed",
+                "Failed to apply ReturnColors patch.\n\n"
+                "Please check the log for details and ensure:\n"
+                "• Affinity v3 is installed\n"
+                "• .NET SDK is installed\n"
+                "• ReturnColors files are available",
+                "error"
+            )
     
     def fix_affinity_settings(self):
         """Fix Affinity v3 settings by patching the DLL"""
