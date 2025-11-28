@@ -7667,46 +7667,107 @@ class AffinityInstallerGUI(QMainWindow):
             if hasattr(self, 'current_operation') and self.current_operation == "Setting up Wine environment":
                 self.end_operation()
     
+    def _download_and_extract_winmetadata(self, extract_to_dir):
+        """Download WinMetadata.tar.xz and extract it to the specified directory"""
+        try:
+            # Create temp directory for download
+            temp_dir = Path(self.directory) / ".temp_winmetadata"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(exist_ok=True)
+            
+            winmetadata_url = "https://github.com/ryzendew/AffinityOnLinux/releases/download/10.4-Wine-Affinity/WinMetadata.tar.xz"
+            winmetadata_file = temp_dir / "WinMetadata.tar.xz"
+            
+            self.log("Downloading WinMetadata...", "info")
+            if not self.download_file(winmetadata_url, str(winmetadata_file), "WinMetadata"):
+                self.log("Failed to download WinMetadata", "error")
+                return False
+            
+            self.log("Extracting WinMetadata...", "info")
+            self.update_progress_text("Extracting Windows Metadata...")
+            
+            # Extract tar.xz file
+            try:
+                import lzma
+                with lzma.open(winmetadata_file, 'rb') as xz_file:
+                    with tarfile.open(fileobj=xz_file, mode='r') as tar:
+                        tar.extractall(extract_to_dir, filter='data')
+            except ImportError:
+                # Fallback to using xz command if lzma module is not available
+                if not self.check_command("xz") and not self.check_command("unxz"):
+                    self.log("xz or unxz is required to extract WinMetadata. Please install xz.", "error")
+                    return False
+                tar_file = winmetadata_file.with_suffix('.tar')
+                xz_cmd = "xz" if self.check_command("xz") else "unxz"
+                success, _, _ = self.run_command([xz_cmd, "-d", "-k", str(winmetadata_file)], check=True)
+                if not success:
+                    self.log("Failed to decompress WinMetadata archive", "error")
+                    return False
+                with tarfile.open(tar_file, "r") as tar:
+                    tar.extractall(extract_to_dir, filter='data')
+                tar_file.unlink()
+            
+            # Clean up temp directory
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
+            
+            self.log("WinMetadata downloaded and extracted", "success")
+            return True
+        except Exception as e:
+            self.log(f"Failed to download and extract WinMetadata: {e}", "error")
+            return False
+    
+    def _download_wintypes_dll(self, output_path):
+        """Download wintypes.dll to the specified path"""
+        try:
+            wintypes_url = "https://github.com/ElementalWarrior/wine-wintypes.dll-for-affinity/raw/refs/heads/master/wintypes_shim.dll.so"
+            
+            self.log("Downloading wintypes.dll...", "info")
+            if not self.download_file(wintypes_url, str(output_path), "wintypes.dll"):
+                self.log("Failed to download wintypes.dll", "error")
+                return False
+            
+            self.log("wintypes.dll downloaded", "success")
+            return True
+        except Exception as e:
+            self.log(f"Failed to download wintypes.dll: {e}", "error")
+            return False
+    
     def setup_winmetadata(self):
-        """Download and extract WinMetadata"""
+        """Download and install WinMetadata to system32"""
         self.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Windows Metadata Installation", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        winmetadata_zip = Path(self.directory) / "Winmetadata.zip"
         system32_dir = Path(self.directory) / "drive_c" / "windows" / "system32"
         system32_dir.mkdir(parents=True, exist_ok=True)
         
         self.update_progress_text("Downloading Windows Metadata...")
-        self.log("Downloading Windows metadata...", "info")
-        if not self.download_file(
-            "https://archive.org/download/win-metadata/WinMetadata.zip",
-            str(winmetadata_zip),
-            "WinMetadata"
-        ):
-            self.log("Failed to download WinMetadata", "warning")
-            return
-        
-        # Extract WinMetadata
-        self.update_progress_text("Extracting Windows Metadata...")
-        self.log("Extracting Windows metadata...", "info")
+        self.log("Downloading and installing Windows metadata...", "info")
         try:
-            if self.check_command("7z"):
-                success, _, _ = self.run_command([
-                    "7z", "x", str(winmetadata_zip), f"-o{system32_dir}", "-y"
-                ])
-                if success:
-                    self.log("WinMetadata extracted using 7z", "success")
-                    return
-            elif self.check_command("unzip"):
-                with zipfile.ZipFile(winmetadata_zip, 'r') as zip_ref:
-                    zip_ref.extractall(system32_dir)
-                self.log("WinMetadata extracted using unzip", "success")
+            winmetadata_dest = system32_dir / "WinMetadata"
+            
+            # Remove existing WinMetadata if it exists
+            if winmetadata_dest.exists():
+                shutil.rmtree(winmetadata_dest)
+                self.log("Removed existing WinMetadata folder", "info")
+            
+            # Download and extract WinMetadata
+            if not self._download_and_extract_winmetadata(system32_dir):
+                self.log("WinMetadata will not be installed", "warning")
                 return
-            else:
-                self.log("Neither 7z nor unzip available", "error")
+            
+            # Verify WinMetadata was extracted
+            if not winmetadata_dest.exists():
+                self.log("WinMetadata extraction failed - folder not found", "error")
+                return
+            
+            self.log("WinMetadata installed to system32", "success")
         except Exception as e:
-            self.log(f"Extraction failed: {e}", "error")
+            self.log(f"Failed to install WinMetadata: {e}", "error")
     
     def reinstall_winmetadata(self):
         """Remove old WinMetadata folder and reinstall fresh"""
@@ -7755,22 +7816,20 @@ class AffinityInstallerGUI(QMainWindow):
             except Exception as e:
                 self.log(f"Warning: Could not fully remove old folder: {e}", "warning")
         
-        # Also remove the zip file to force re-download
-        winmetadata_zip = Path(self.directory) / "Winmetadata.zip"
-        if winmetadata_zip.exists():
-            self.log("Removing cached WinMetadata.zip to force fresh download...", "info")
-            try:
-                winmetadata_zip.unlink()
-                self.log("Cached zip file removed", "success")
-            except Exception as e:
-                self.log(f"Warning: Could not remove cached zip: {e}", "warning")
-        
         # Ensure system32 directory exists
         system32_dir.mkdir(parents=True, exist_ok=True)
         
-        # Reinstall WinMetadata
+        # Reinstall WinMetadata by downloading and extracting
         self.log("Installing fresh WinMetadata...", "info")
         self.setup_winmetadata()
+        
+        # Set up wintypes.dll override
+        self.log("Setting up wintypes.dll override...", "info")
+        self.setup_wintypes_dll_override()
+        
+        # Copy wintypes.dll for all installed Affinity apps (v2 and v3)
+        self.log("Copying wintypes.dll for installed Affinity apps...", "info")
+        self.copy_wintypes_dll_for_all_apps()
         
         self.log("\n✓ WinMetadata reinstallation completed!", "success")
     
@@ -10455,17 +10514,7 @@ class AffinityInstallerGUI(QMainWindow):
                 except Exception as e:
                     self.log(f"Warning: Could not fully remove old folder: {e}", "warning")
             
-            # Also remove the zip file to force re-download
-            winmetadata_zip = Path(self.directory) / "Winmetadata.zip"
-            if winmetadata_zip.exists():
-                self.log("Removing cached WinMetadata.zip to force fresh download...", "info")
-                try:
-                    winmetadata_zip.unlink()
-                    self.log("Cached zip file removed", "success")
-                except Exception as e:
-                    self.log(f"Warning: Could not remove cached zip: {e}", "warning")
-            
-            # Reinstall WinMetadata
+            # Reinstall WinMetadata by downloading and extracting
             self.log("Installing fresh WinMetadata...", "info")
             self.setup_winmetadata()
             
@@ -10596,8 +10645,19 @@ class AffinityInstallerGUI(QMainWindow):
             else:
                 self.log("OpenCL support is disabled, skipping configuration", "info")
             
-            # For Affinity v3 (Unified), patch the DLL to fix settings saving
+            # For Affinity v2 apps (Photo, Designer, Publisher), copy wintypes.dll and set override
+            if is_affinity_v2:
+                self.update_progress_text("Configuring wintypes.dll for v2 app...")
+                self.update_progress(0.82)
+                self.setup_wintypes_dll(app_name)
+            
+            # For Affinity v3 (Unified), copy wintypes.dll and set override, then patch the DLL
             if app_name == "Add" or app_name == "Affinity (Unified)":
+                # Copy wintypes.dll and set override
+                self.update_progress_text("Configuring wintypes.dll for v3 app...")
+                self.update_progress(0.82)
+                self.setup_wintypes_dll(app_name)
+                
                 # Patch the DLL to fix settings saving
                 self.update_progress_text("Patching DLL for settings fix...")
                 self.update_progress(0.85)
@@ -10623,6 +10683,160 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(f"Installation error: {e}", "error")
             self.show_message("Installation Error", f"An error occurred:\n{e}", "error")
     
+    def setup_wintypes_dll(self, app_name):
+        """Download and copy wintypes.dll next to exe and set up DLL override for Affinity v2 and v3 apps"""
+        try:
+            # Get app directory and exe path
+            app_dir = None
+            exe_path = None
+            
+            # Handle v2 apps (Photo, Designer, Publisher)
+            if app_name in ["Photo", "Designer", "Publisher"]:
+                app_names = {
+                    "Photo": ("Photo 2", "Photo.exe"),
+                    "Designer": ("Designer 2", "Designer.exe"),
+                    "Publisher": ("Publisher 2", "Publisher.exe")
+                }
+                dir_name, exe = app_names.get(app_name, (None, None))
+                if dir_name and exe:
+                    app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / dir_name
+                    exe_path = app_dir / exe
+            
+            # Handle v3 (Unified) app
+            elif app_name == "Add" or app_name == "Affinity (Unified)":
+                app_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity" / "Affinity"
+                exe_path = app_dir / "Affinity.exe"
+            
+            if not app_dir or not exe_path or not exe_path.exists():
+                self.log(f"Exe not found for {app_name}, skipping wintypes.dll setup", "warning")
+                return
+            
+            # Download wintypes.dll to temp location first
+            temp_dir = Path(self.directory) / ".temp_wintypes"
+            temp_dir.mkdir(exist_ok=True)
+            wintypes_temp = temp_dir / "wintypes.dll"
+            
+            if not self._download_wintypes_dll(wintypes_temp):
+                self.log(f"Failed to download wintypes.dll for {app_name}", "warning")
+                return
+            
+            # Copy wintypes.dll next to exe
+            wintypes_dest = app_dir / "wintypes.dll"
+            shutil.copy2(wintypes_temp, wintypes_dest)
+            self.log(f"Copied wintypes.dll to {wintypes_dest}", "success")
+            
+            # Clean up temp file
+            try:
+                wintypes_temp.unlink()
+            except Exception:
+                pass
+            
+            # Set up DLL override for wintypes.dll as Native (Windows)
+            self.setup_wintypes_dll_override()
+        except Exception as e:
+            self.log(f"Error setting up wintypes.dll: {e}", "warning")
+    
+    def setup_wintypes_dll_override(self):
+        """Set up DLL override for wintypes.dll as Native (Windows)"""
+        try:
+            env = os.environ.copy()
+            env["WINEPREFIX"] = self.directory
+            
+            # Check if override already exists
+            wine = self.get_wine_path("wine")
+            success_check, stdout, _ = self.run_command(
+                [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides", "/v", "wintypes"],
+                check=False,
+                env=env,
+                capture=True
+            )
+            
+            if success_check and "native" in stdout:
+                self.log("wintypes.dll override already configured", "info")
+            else:
+                # Create registry file for wintypes override
+                reg_file = Path(self.directory) / "wintypes_override.reg"
+                with open(reg_file, "w") as f:
+                    f.write("REGEDIT4\n")
+                    f.write("[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]\n")
+                    f.write('"wintypes"="native"\n')
+                
+                regedit = self.get_wine_path("regedit")
+                reg_success, _, stderr = self.run_command([str(regedit), str(reg_file)], check=False, env=env, capture=True)
+                reg_file.unlink()
+                
+                if reg_success:
+                    self.log("wintypes.dll override configured as Native (Windows)", "success")
+                else:
+                    self.log(f"Warning: Could not configure wintypes.dll override: {stderr}", "warning")
+        except Exception as e:
+            self.log(f"Error setting up wintypes.dll override: {e}", "warning")
+    
+    def copy_wintypes_dll_for_all_apps(self):
+        """Download and copy wintypes.dll for all installed Affinity apps (v2 and v3)"""
+        try:
+            affinity_dir = Path(self.directory) / "drive_c" / "Program Files" / "Affinity"
+            if not affinity_dir.exists():
+                self.log("Affinity installation directory not found", "warning")
+                return
+            
+            # Download wintypes.dll to temp location first
+            temp_dir = Path(self.directory) / ".temp_wintypes"
+            temp_dir.mkdir(exist_ok=True)
+            wintypes_temp = temp_dir / "wintypes.dll"
+            
+            if not self._download_wintypes_dll(wintypes_temp):
+                self.log("Failed to download wintypes.dll", "warning")
+                return
+            
+            copied_count = 0
+            
+            # Check for v2 apps (Photo 2, Designer 2, Publisher 2)
+            v2_apps = [
+                ("Photo 2", "Photo.exe"),
+                ("Designer 2", "Designer.exe"),
+                ("Publisher 2", "Publisher.exe")
+            ]
+            
+            for dir_name, exe in v2_apps:
+                app_dir = affinity_dir / dir_name
+                exe_path = app_dir / exe
+                
+                if exe_path.exists():
+                    wintypes_dest = app_dir / "wintypes.dll"
+                    try:
+                        shutil.copy2(wintypes_temp, wintypes_dest)
+                        self.log(f"Copied wintypes.dll to {wintypes_dest}", "info")
+                        copied_count += 1
+                    except Exception as e:
+                        self.log(f"Warning: Could not copy wintypes.dll to {dir_name}: {e}", "warning")
+            
+            # Check for v3 (Unified) app
+            v3_app_dir = affinity_dir / "Affinity"
+            v3_exe_path = v3_app_dir / "Affinity.exe"
+            
+            if v3_exe_path.exists():
+                wintypes_dest = v3_app_dir / "wintypes.dll"
+                try:
+                    shutil.copy2(wintypes_temp, wintypes_dest)
+                    self.log(f"Copied wintypes.dll to {wintypes_dest}", "info")
+                    copied_count += 1
+                except Exception as e:
+                    self.log(f"Warning: Could not copy wintypes.dll to Affinity v3: {e}", "warning")
+            
+            # Clean up temp file
+            try:
+                wintypes_temp.unlink()
+            except Exception:
+                pass
+            
+            if copied_count > 0:
+                self.log(f"Copied wintypes.dll for {copied_count} app(s)", "success")
+            else:
+                self.log("No Affinity apps found to copy wintypes.dll", "info")
+        except Exception as e:
+            self.log(f"Error copying wintypes.dll for all apps: {e}", "warning")
+    
     def restore_winmetadata(self):
         """Restore WinMetadata after installation"""
         self.log("Restoring Windows metadata files...", "info")
@@ -10631,27 +10845,30 @@ class AffinityInstallerGUI(QMainWindow):
         self.run_command(["wineserver", "-k"], check=False)
         time.sleep(2)
         
-        winmetadata_zip = Path(self.directory) / "Winmetadata.zip"
         system32_dir = Path(self.directory) / "drive_c" / "windows" / "system32"
+        system32_dir.mkdir(parents=True, exist_ok=True)
         
-        if winmetadata_zip.exists():
-            # Re-extract
-            try:
-                if self.check_command("7z"):
-                    self.run_command([
-                        "7z", "x", str(winmetadata_zip),
-                        f"-o{system32_dir}", "-y"
-                    ], check=False)
-                elif self.check_command("unzip"):
-                    with zipfile.ZipFile(winmetadata_zip, 'r') as zip_ref:
-                        zip_ref.extractall(system32_dir)
-                self.log("WinMetadata restored", "success")
-            except Exception as e:
-                self.log(f"Failed to restore WinMetadata: {e}", "warning")
-        else:
-            # Re-download if not cached
-            self.log("WinMetadata.zip not found, downloading...", "info")
-            self.setup_winmetadata()
+        try:
+            winmetadata_dest = system32_dir / "WinMetadata"
+            
+            # Remove existing WinMetadata if it exists
+            if winmetadata_dest.exists():
+                shutil.rmtree(winmetadata_dest)
+                self.log("Removed existing WinMetadata folder", "info")
+            
+            # Download and extract WinMetadata
+            if not self._download_and_extract_winmetadata(system32_dir):
+                self.log("Failed to restore WinMetadata", "warning")
+                return
+            
+            # Verify WinMetadata was extracted
+            if not winmetadata_dest.exists():
+                self.log("WinMetadata restoration failed - folder not found", "warning")
+                return
+            
+            self.log("WinMetadata restored", "success")
+        except Exception as e:
+            self.log(f"Failed to restore WinMetadata: {e}", "warning")
     
     def is_opencl_enabled(self):
         """Check if OpenCL is enabled"""
