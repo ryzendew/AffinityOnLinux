@@ -11415,19 +11415,19 @@ class AffinityInstallerGUI(QMainWindow):
     def ensure_patcher_files(self, silent=False):
         """Ensure AffinityPatcher and ReturnColors files are available in .AffinityLinux/Patch/"""
         try:
-            # Destination: .AffinityLinux/Patch/
-            dest_patch_dir = Path(self.directory) / "Patch"
+            # Destination: .AffinityLinux/Patch/AffinityPatcherSettings/
+            dest_patch_dir = Path(self.directory) / "Patch" / "AffinityPatcherSettings"
             dest_patch_dir.mkdir(parents=True, exist_ok=True)
             
             # Files to copy/download
             files_to_get = {
-                "AffinityPatcher.cs": "https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/main/Patch/AffinityPatcher.cs",
-                "AffinityPatcher.csproj": "https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/main/Patch/AffinityPatcher.csproj"
+                "AffinityPatcher.cs": "https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/main/Patch/AffinityPatcherSettings/AffinityPatcher.cs",
+                "AffinityPatcher.csproj": "https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/main/Patch/AffinityPatcherSettings/AffinityPatcher.csproj"
             }
             
             # First, try to copy from local repository if available
             script_dir = Path(__file__).parent
-            source_patch_dir = script_dir.parent / "Patch"
+            source_patch_dir = script_dir.parent / "Patch" / "AffinityPatcherSettings"
             
             files_copied = False
             files_downloaded = False
@@ -11448,7 +11448,7 @@ class AffinityInstallerGUI(QMainWindow):
                         shutil.copy2(source_file, dest_file)
                         files_copied = True
                         if not silent:
-                            self.log(f"Copied {filename} to .AffinityLinux/Patch/", "info")
+                            self.log(f"Copied {filename} to .AffinityLinux/Patch/AffinityPatcherSettings/", "info")
                         continue
                     except Exception as e:
                         if not silent:
@@ -11462,7 +11462,7 @@ class AffinityInstallerGUI(QMainWindow):
                         if self.download_file(github_url, str(dest_file), filename):
                             files_downloaded = True
                             if not silent:
-                                self.log(f"Downloaded {filename} to .AffinityLinux/Patch/", "success")
+                                self.log(f"Downloaded {filename} to .AffinityLinux/Patch/AffinityPatcherSettings/", "success")
                         else:
                             all_exist = False
                             if not silent:
@@ -11478,8 +11478,8 @@ class AffinityInstallerGUI(QMainWindow):
                 if not dest_file.exists():
                     all_exist = False
             
-            # Download ReturnColors from GitHub
-            returncolors_dest = dest_patch_dir / "return-affinity-colors"
+            # Download ReturnColors from GitHub (still in Patch/ directory, not in AffinityPatcherSettings/)
+            returncolors_dest = Path(self.directory) / "Patch" / "return-affinity-colors"
             returncolors_repo = "https://github.com/ShawnTheBeachy/return-affinity-colors.git"
             
             # Check if ReturnColors project folder exists (it's inside return-affinity-colors/ReturnColors/)
@@ -11602,11 +11602,11 @@ class AffinityInstallerGUI(QMainWindow):
     
     def build_affinity_patcher(self):
         """Build the AffinityPatcher .NET project"""
-        # Use Patch directory from .AffinityLinux (ensured to be available)
-        patch_dir = Path(self.directory) / "Patch"
+        # Use Patch/AffinityPatcherSettings directory from .AffinityLinux (ensured to be available)
+        patch_dir = Path(self.directory) / "Patch" / "AffinityPatcherSettings"
         
         if not patch_dir.exists():
-            self.log(f"Patch directory not found: {patch_dir}", "error")
+            self.log(f"AffinityPatcherSettings directory not found: {patch_dir}", "error")
             return None
         
         csproj_file = patch_dir / "AffinityPatcher.csproj"
@@ -11616,10 +11616,17 @@ class AffinityInstallerGUI(QMainWindow):
         
         self.log(f"Building AffinityPatcher from: {patch_dir}", "info")
         
-        # Build the project
+        # Build the project - use absolute path and prevent building project references
+        # Output directory is within the AffinityPatcherSettings folder
         output_dir = patch_dir / "bin" / "Release"
+        # Use --no-incremental for clean build and -p:BuildProjectReferences=false to prevent building other projects
+        # Also use absolute path to ensure we're building the correct project
+        # The issue is that MSBuild might be picking up files from return-affinity-colors subdirectory
+        # So we explicitly build only the project file and disable project references
+        csproj_absolute = csproj_file.resolve()
         success, stdout, stderr = self.run_command(
-            ["dotnet", "build", str(csproj_file), "-c", "Release", "-o", str(output_dir)],
+            ["dotnet", "build", str(csproj_absolute), "-c", "Release", "-o", str(output_dir.resolve()), 
+             "--no-incremental", "-p:BuildProjectReferences=false", "/p:DisableImplicitNuGetFallbackFolder=true"],
             check=False,
             capture=True
         )
