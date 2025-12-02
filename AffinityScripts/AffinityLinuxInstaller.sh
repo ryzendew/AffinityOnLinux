@@ -638,6 +638,7 @@ setup_wine() {
             print_warning "Could not find vkd3d-proton directory after extraction"
         fi
     fi
+    fi
     
     # Setup Wine
     print_header "Wine Configuration"
