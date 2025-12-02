@@ -848,27 +848,27 @@ setup_wine() {
     print_progress ".NET 4.8 installation attempted"
     
     print_step "Installing Windows core fonts..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout corefonts >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout corefonts || true
     print_progress "Core fonts installation attempted"
     
     print_step "Installing Visual C++ Redistributables 2022..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout vcrun2022 >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout vcrun2022 || true
     print_progress "VC++ 2022 installation attempted"
     
     print_step "Installing MSXML 3.0..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout msxml3 >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout msxml3 || true
     print_progress "MSXML 3.0 installation attempted"
     
     print_step "Installing MSXML 6.0..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout msxml6 >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout msxml6 || true
     print_progress "MSXML 6.0 installation attempted"
     
     print_step "Installing Tahoma font..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout tahoma >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout tahoma || true
     print_progress "Tahoma font installation attempted"
     
     print_step "Configuring Wine to use Vulkan renderer..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout renderer=vulkan || true
     print_success "Wine configured with Vulkan renderer"
     
     print_info "Note: The above installations may take several minutes. Errors are normal if components are already installed."
