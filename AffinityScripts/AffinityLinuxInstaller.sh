@@ -398,6 +398,200 @@ install_dependencies() {
 # Wine Setup Functions
 # ==========================================
 
+# ==========================================
+# GPU Detection and Selection Functions
+# ==========================================
+
+# Function to detect and select GPU for hybrid graphics systems
+detect_and_select_gpu() {
+    local directory=$1
+    
+    print_header "GPU Detection"
+    
+    # Arrays to store GPU information
+    declare -a GPU_LIST
+    declare -a GPU_TYPE
+    declare -a GPU_ID
+    
+    print_step "Detecting available GPUs..."
+    
+    # Parse lspci output for VGA/3D controllers
+    while IFS= read -r line; do
+        # Extract bus ID (e.g., "01:00.0")
+        bus_id=$(echo "$line" | cut -d' ' -f1)
+        
+        # Extract GPU info (everything after the third colon)
+        gpu_info=$(echo "$line" | cut -d':' -f3-)
+        
+        # Determine GPU type and add to arrays
+        if echo "$line" | grep -qi "nvidia"; then
+            GPU_LIST+=("$gpu_info")
+            GPU_TYPE+=("nvidia")
+            GPU_ID+=("$bus_id")
+            print_info "Found NVIDIA GPU: $gpu_info"
+        elif echo "$line" | grep -qi "amd\|radeon\|ati"; then
+            GPU_LIST+=("$gpu_info")
+            GPU_TYPE+=("amd")
+            GPU_ID+=("$bus_id")
+            print_info "Found AMD GPU: $gpu_info"
+        elif echo "$line" | grep -qi "intel"; then
+            GPU_LIST+=("$gpu_info")
+            GPU_TYPE+=("intel")
+            GPU_ID+=("$bus_id")
+            print_info "Found Intel GPU: $gpu_info"
+        fi
+    done < <(lspci | grep -iE 'vga|3d|display')
+    
+    # Count GPUs
+    local gpu_count=${#GPU_LIST[@]}
+    
+    if [ $gpu_count -eq 0 ]; then
+        print_warning "No GPU detected. Installation will continue with default settings."
+        export SELECTED_GPU_TYPE="unknown"
+        return 0
+    fi
+    
+    echo ""
+    print_success "Found $gpu_count GPU(s)"
+    echo ""
+    
+    # If only one GPU, use it automatically
+    if [ $gpu_count -eq 1 ]; then
+        print_info "Single GPU detected, using: ${GPU_LIST[0]}"
+        export SELECTED_GPU_TYPE="${GPU_TYPE[0]}"
+        export SELECTED_GPU_NAME="${GPU_LIST[0]}"
+        
+        # Set environment variables based on GPU type
+        case "${GPU_TYPE[0]}" in
+            nvidia)
+                print_success "Configuring for NVIDIA GPU"
+                export __NV_PRIME_RENDER_OFFLOAD=1
+                export __VK_LAYER_NV_optimus=NVIDIA_only
+                export __GLX_VENDOR_LIBRARY_NAME=nvidia
+                export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json
+                export DRI_PRIME=1
+                ;;
+            amd)
+                print_success "Configuring for AMD GPU"
+                export DRI_PRIME=1
+                export RADV_PERFTEST=aco
+                export AMD_VULKAN_ICD=RADV
+                ;;
+            intel)
+                print_success "Configuring for Intel iGPU"
+                export DRI_PRIME=0
+                ;;
+        esac
+    else
+        # Multiple GPUs detected - show selection menu
+        print_warning "Multiple GPUs detected. Please select which one to use for Affinity:"
+        echo ""
+        
+        for i in "${!GPU_LIST[@]}"; do
+            idx=$((i + 1))
+            gpu_name="${GPU_LIST[$i]}"
+            gpu_type="${GPU_TYPE[$i]}"
+            
+            # Add visual indicator based on type
+            case "$gpu_type" in
+                nvidia)
+                    echo -e "  ${GREEN}[$idx] 🟢 NVIDIA:${NC} $gpu_name"
+                    ;;
+                amd)
+                    echo -e "  ${RED}[$idx] 🔴 AMD:${NC} $gpu_name"
+                    ;;
+                intel)
+                    echo -e "  ${BLUE}[$idx] 🔵 Intel:${NC} $gpu_name"
+                    ;;
+            esac
+        done
+        
+        echo ""
+        
+        # Recommend discrete GPU if available
+        local recommended=""
+        for i in "${!GPU_TYPE[@]}"; do
+            if [[ "${GPU_TYPE[$i]}" == "nvidia" ]] || [[ "${GPU_TYPE[$i]}" == "amd" ]]; then
+                recommended=$((i + 1))
+                break
+            fi
+        done
+        
+        if [ -n "$recommended" ]; then
+            print_info "Recommended: Option $recommended (discrete GPU for better performance)"
+            echo ""
+        fi
+        
+        # Get user selection
+        local selection=""
+        while true; do
+            echo -n "Select GPU [1-$gpu_count]: "
+            read -r selection
+            
+            # Validate input
+            if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "$gpu_count" ]; then
+                break
+            else
+                print_error "Invalid selection. Please enter a number between 1 and $gpu_count."
+            fi
+        done
+        
+        # Adjust for 0-based array indexing
+        local selected_idx=$((selection - 1))
+        local selected_gpu="${GPU_LIST[$selected_idx]}"
+        local selected_type="${GPU_TYPE[$selected_idx]}"
+        
+        echo ""
+        print_success "Selected: $selected_gpu"
+        echo ""
+        
+        export SELECTED_GPU_TYPE="$selected_type"
+        export SELECTED_GPU_NAME="$selected_gpu"
+        
+        # Set environment variables based on selection
+        case "$selected_type" in
+            nvidia)
+                print_info "Configuring environment for NVIDIA GPU..."
+                export __NV_PRIME_RENDER_OFFLOAD=1
+                export __VK_LAYER_NV_optimus=NVIDIA_only
+                export __GLX_VENDOR_LIBRARY_NAME=nvidia
+                export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json
+                export DRI_PRIME=1
+                print_success "NVIDIA GPU environment configured"
+                ;;
+            amd)
+                print_info "Configuring environment for AMD GPU..."
+                export DRI_PRIME=1
+                export RADV_PERFTEST=aco
+                export AMD_VULKAN_ICD=RADV
+                print_success "AMD GPU environment configured"
+                ;;
+            intel)
+                print_info "Configuring environment for Intel iGPU..."
+                export DRI_PRIME=0
+                print_success "Intel iGPU environment configured"
+                ;;
+            *)
+                print_warning "Unknown GPU type, using default settings"
+                ;;
+        esac
+        
+        # Verify GPU is active
+        if command -v glxinfo &> /dev/null; then
+            print_step "Verifying GPU selection..."
+            local renderer=$(glxinfo 2>/dev/null | grep "OpenGL renderer" | cut -d':' -f2 | xargs)
+            if [ -n "$renderer" ]; then
+                print_success "Active renderer: $renderer"
+            fi
+        fi
+    fi
+    
+    echo ""
+    print_info "GPU configuration complete."
+    read -n 1 -s -r -p "Press any key to continue..."
+    echo ""
+}
+
 # Function to verify Windows version
 verify_windows_version() {
     local directory="$HOME/.AffinityLinux"
@@ -542,15 +736,16 @@ setup_wine() {
     # Download and install vkd3d-proton for OpenCL support (skip if AMD GPU detected)
     print_header "OpenCL Support Setup"
     
-    # Check for AMD GPU
+    # Use GPU type from detection function
     has_amd_gpu=false
-    if command -v lspci &> /dev/null; then
-        if lspci | grep -qiE "(amd|radeon|amd/ati).*vga\|3d\|display"; then
-            has_amd_gpu=true
-        fi
+    if [ "$SELECTED_GPU_TYPE" = "amd" ]; then
+        has_amd_gpu=true
     fi
     
-    if [ "$has_amd_gpu" = true ]; then
+    if [ "$SELECTED_GPU_TYPE" = "intel" ]; then
+        print_info "Intel iGPU detected - skipping vkd3d-proton installation"
+        print_info "Using Intel integrated graphics"
+    elif [ "$has_amd_gpu" = true ]; then
         print_info "AMD GPU detected - skipping vkd3d-proton installation, will use DXVK instead"
         print_info "DXVK will be configured in desktop shortcuts"
     else
@@ -638,17 +833,18 @@ setup_wine() {
             print_warning "Could not find vkd3d-proton directory after extraction"
         fi
     fi
+    fi
     
     # Setup Wine
     print_header "Wine Configuration"
     print_info "Installing required Windows libraries and configuring Wine..."
     
     print_step "Installing .NET Framework 3.5..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet35 || true
     print_progress ".NET 3.5 installation attempted"
     
     print_step "Installing .NET Framework 4.8..."
-    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet48 >/dev/null 2>&1 || true
+    WINEPREFIX="$directory" winetricks --unattended --force --no-isolate --optout dotnet48 || true
     print_progress ".NET 4.8 installation attempted"
     
     print_step "Installing Windows core fonts..."
@@ -1299,6 +1495,9 @@ main() {
     
     # Detect distribution
     detect_distro
+    
+    # Detect and select GPU (must be done early to set environment variables)
+    detect_and_select_gpu "$directory"
     
     # Quick check: Are dependencies and Wine already set up?
     if check_dependencies_quick && check_wine_setup; then
