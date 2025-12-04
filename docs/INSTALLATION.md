@@ -74,7 +74,7 @@ curl -sSL https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/
 **Usage:**
 1. Run the installer
 2. Click **"One-Click Full Setup"** for automatic configuration
-3. Choose your Wine version (10.4 recommended for most systems)
+3. Choose your Wine version (10.10 recommended for most systems)
 4. Use **"Update Affinity Applications"** to install or update Affinity apps
 5. Check the status log to see what's installed
 

@@ -10,7 +10,7 @@ This document lists known issues and their workarounds. For the latest updates, 
 **Status:** Open ([#89](https://github.com/ryzendew/AffinityOnLinux/issues/89))
 
 **Workaround:** 
-- Try a different Wine version (10.4 v2 recommended for older systems)
+- Try a different Wine version (9.14 recommended for older systems)
 - Check GPU drivers are up to date
 - Use vkd3d-proton or DXVK instead of OpenCL (see [Hardware Acceleration](HARDWARE-ACCELERATION.md))
 
@@ -78,7 +78,7 @@ This document lists known issues and their workarounds. For the latest updates, 
 ### Wine 10.17 Bugs
 **Issue:** Wine 10.17 has major bugs and issues.
 
-**Workaround:** The installer does not use Wine 10.17. Use Wine 10.4 (recommended) or another supported version. See [Wine Versions](WINE-VERSIONS.md) for details.
+**Workaround:** The installer does not use Wine 10.17. Use Wine 10.10 (recommended) or 9.14 (legacy fallback). See [Wine Versions](WINE-VERSIONS.md) for details.
 
 ## Feature Requests
 
