@@ -4,6 +4,12 @@
 
 ### Added
 
+#### Merged Pull Requests
+- **[#91](https://github.com/ryzendew/AffinityOnLinux/pull/91)** - Implement GPU detection and selection in installer for multi-GPU users
+  - Added GPU detection functionality to help users with multiple GPUs select the correct one
+  - Enhanced `AffinityLinuxInstaller.sh` with 212+ lines of GPU selection logic
+  - Improves compatibility for laptops and systems with integrated + dedicated GPUs
+
 #### New Documentation Structure
 - **Created comprehensive documentation files** in new `docs/` folder
   - `INSTALLATION.md` - Complete installation guide for all methods
@@ -50,6 +56,11 @@
 - Removed references to deprecated files from README
 
 ### Fixed
+
+#### Merged Pull Requests
+- **[#90](https://github.com/ryzendew/AffinityOnLinux/pull/90)** - Fixed missing `fi` statement in shell script
+  - Corrected syntax error in `AffinityLinuxInstaller.sh` that could cause script failures
+  - Ensures proper script execution flow
 
 #### Documentation Accuracy
 - **Updated all cross-references** after file reorganization
