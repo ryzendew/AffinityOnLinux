@@ -22,7 +22,8 @@ AffinityOnLinux provides an easy way to install and run Affinity Photo, Designer
 curl -sSL https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/main/AffinityScripts/AffinityLinuxInstaller.py | python3
 ```
 
-### Python GUI Dependencies
+<details>
+<summary><strong>Python GUI Dependencies</strong></summary>
 
 The installer will attempt to install PyQt6 automatically if missing. If automatic installation fails, install it manually:
 
@@ -47,6 +48,8 @@ sudo zypper install python313-PyQt6
 ```bash
 sudo apt install python3-pyqt6.qtsvg
 ```
+
+</details>
 
 ## Documentation
 
