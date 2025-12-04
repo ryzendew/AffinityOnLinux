@@ -120,6 +120,7 @@ The following distributions are **not officially supported** and **no support wi
 - **Manjaro** - Known stability issues. Use [AppImage](#1-appimage-recommended-for-beginners) instead.
 - **Ubuntu** - Outdated package management. Use [AppImage](#1-appimage-recommended-for-beginners) instead.
 - **Pop!_OS** - Outdated package management. Use [AppImage](#1-appimage-recommended-for-beginners) instead.
+- - **Debian** - Outdated dependencies. Use [AppImage](#1-appimage-recommended-for-beginners) instead.
 
 **Important:** While the installer may function on unsupported distributions if dependencies are manually installed, we cannot provide support. The [AppImage](#1-appimage-recommended-for-beginners) is strongly recommended for these distributions.
 
