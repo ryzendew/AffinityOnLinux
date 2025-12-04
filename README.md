@@ -66,7 +66,6 @@ sudo apt install python3-pyqt6.qtsvg
 
 ### Additional Resources
 - **[Known Issues](docs/Known-issues.md)** - Common problems and solutions
-- **[Other Software on Linux](docs/OtherSoftware-on-Linux.md)** - Additional compatibility information
 - **[Settings Guide](Guide/Settings.md)** - Configuration options
 
 ## Getting Help

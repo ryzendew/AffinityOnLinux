@@ -1,10 +1,22 @@
 1. Install opencl Drivers for your gpu
 
     Ensure the gpu drivers and opencl drivers are installed for your GPU.
-   
-    e.g. for Arch & Nvidia:
-   
+
+    **Arch Linux (NVIDIA):**
+    ```bash
     sudo pacman -S opencl-nvidia
+    ```
+
+    **Arch Linux (AMD):**
+    ```bash
+    sudo pacman -S opencl-amd apr apr-util
+    yay -S libxcrypt-compat
+    ```
+
+    **Fedora/Nobara (AMD):**
+    ```bash
+    sudo dnf install rocm-opencl apr apr-util zlib libxcrypt-compat libcurl libcurl-devel mesa-libGLU -y
+    ```
 
 3. Install VKD3D-Proton
 
