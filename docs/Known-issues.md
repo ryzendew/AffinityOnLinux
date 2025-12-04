@@ -1,6 +1,102 @@
-# Known issues ⚠️
-Some users get these errors with the script but are able to get it working with the guide method
+# Known Issues ⚠️
 
-1.wine: could not load ntdll.so: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found (required by /home/USER/.AffinityLinux/ElementalWarriorWine/bin/../lib/wine/x86_64-unix/ntdll.so)
+This document lists known issues and their workarounds. For the latest updates, check the [GitHub Issues](https://github.com/ryzendew/AffinityOnLinux/issues) page.
 
-2.wine : could not load mscoree.dll
+## Application Crashes
+
+### Crash After Affinity Window Appears
+**Issue:** Some users report that the application crashes immediately after the Affinity window is displayed.
+
+**Status:** Open ([#89](https://github.com/ryzendew/AffinityOnLinux/issues/89))
+
+**Workaround:** 
+- Try a different Wine version (10.4 v2 recommended for older systems)
+- Check GPU drivers are up to date
+- Use vkd3d-proton or DXVK instead of OpenCL (see [Hardware Acceleration](HARDWARE-ACCELERATION.md))
+
+## Installation Issues
+
+### GLIBC Version Error
+**Issue:** `wine: could not load ntdll.so: /lib/x86_64-linux-gnu/libc.so.6: version 'GLIBC_2.38' not found`
+
+**Workaround:** 
+- Use the AppImage installer instead
+- Update your system's GLIBC (may require system upgrade)
+- Use a distribution with newer dependencies
+
+### Wine mscoree.dll Error
+**Issue:** `wine: could not load mscoree.dll`
+
+**Workaround:**
+- Reinstall Wine using the GUI installer
+- Try a different Wine version
+- Use the guide method instead of scripts
+
+### Sudo Authentication Failing on Fingerprint-Enabled Systems
+**Issue:** Sudo authentication fails when fingerprint authentication is enabled on the system.
+
+**Status:** Open ([#68](https://github.com/ryzendew/AffinityOnLinux/issues/68))
+
+**Workaround:**
+- Temporarily disable fingerprint authentication during installation
+- Use `sudo -i` to get a root shell before running the installer
+- Configure sudo to use password authentication for the installer
+
+## Distribution-Specific Issues
+
+### Unsupported Distributions
+**Issue:** Linux Mint, Zorin OS, Manjaro, Ubuntu, Pop!_OS, and Debian are not officially supported.
+
+**Workaround:** Use the [AppImage installer](../INSTALLATION.md#1-appimage-recommended-for-beginners) instead. See [System Requirements](SYSTEM-REQUIREMENTS.md) for details.
+
+### PikaOS GUI Installer Not Working
+**Issue:** The Python GUI installer does not work on PikaOS.
+
+**Workaround:** Use the [AppImage installer](../INSTALLATION.md#1-appimage-recommended-for-beginners) instead.
+
+### Read-Only Filesystem Support (SteamOS, Silverblue, etc.)
+**Issue:** The installer may not work correctly on read-only filesystems like SteamOS or Silverblue.
+
+**Status:** Open ([#10](https://github.com/ryzendew/AffinityOnLinux/issues/10))
+
+**Workaround:**
+- Use the AppImage installer
+- Install to a writable location (user home directory)
+- Use overlay filesystems if available
+
+## Hardware Acceleration Issues
+
+### AMD/Intel GPU OpenCL Issues
+**Issue:** OpenCL may not work correctly on AMD and Intel GPUs.
+
+**Workaround:** Use vkd3d-proton or DXVK instead of OpenCL. See [Hardware Acceleration](HARDWARE-ACCELERATION.md) for details.
+
+**Note:** We cannot fix AMD/Intel GPU OpenCL issues as we do not have access to these GPUs for testing.
+
+## Wine Version Issues
+
+### Wine 10.17 Bugs
+**Issue:** Wine 10.17 has major bugs and issues.
+
+**Workaround:** The installer does not use Wine 10.17. Use Wine 10.4 (recommended) or another supported version. See [Wine Versions](WINE-VERSIONS.md) for details.
+
+## Feature Requests
+
+### Affinity Pen Path Fix
+**Status:** Open ([#53](https://github.com/ryzendew/AffinityOnLinux/issues/53))
+
+Request to add Affinity pen path fix to the Wine runner.
+
+### Alternate Wine Builds
+**Status:** Open ([#41](https://github.com/ryzendew/AffinityOnLinux/issues/41))
+
+Discussion about using alternative Wine builds for improved compatibility.
+
+## Getting Help
+
+If you encounter an issue not listed here:
+
+1. Check the [GitHub Issues](https://github.com/ryzendew/AffinityOnLinux/issues) page to see if it's already reported
+2. Search existing issues for similar problems
+3. Join the [Discord Community](https://discord.gg/DW2X8MHQuh) for support
+4. Create a new issue with detailed information about your system and the problem
