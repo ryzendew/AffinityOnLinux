@@ -659,10 +659,8 @@ class AffinityInstallerGUI(QMainWindow):
         
         self._update_theme_button_style()
         
-        # Update scroll area
         self._update_right_scroll_style()
         
-        # Update progress label
         self._update_progress_label_style()
     
     def get_dialog_stylesheet(self):
@@ -1597,12 +1595,10 @@ class AffinityInstallerGUI(QMainWindow):
     
     def _update_theme_button_style(self):
         """Update theme toggle button styling based on current theme"""
-        # Theme button styling is now handled by the main stylesheet
         pass
     
     def _update_top_bar_style(self):
         """Update top bar styling based on current theme"""
-        # Top bar styling is now handled by the main stylesheet
         pass
     
     def _update_right_scroll_style(self):
@@ -1677,20 +1673,16 @@ class AffinityInstallerGUI(QMainWindow):
     
     def create_ui(self):
         """Create the modern user interface"""
-        # Central widget with modern styling
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout with proper spacing
         main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Modern top bar with gradient effect (responsive)
         screen = self.screen().availableGeometry()
         screen_width = screen.width()
         
-        # Adaptive top bar height and margins
         if screen_width < 1024:
             top_bar_height = 56
             top_bar_margin = 12
@@ -1709,7 +1701,6 @@ class AffinityInstallerGUI(QMainWindow):
         top_bar_layout.setContentsMargins(top_bar_margin, 12, top_bar_margin, 12)
         top_bar_layout.setSpacing(top_bar_spacing)
         
-        # Add Affinity icon if available
         if hasattr(self, 'affinity_icon_path') and self.affinity_icon_path:
             try:
                 icon = QIcon(self.affinity_icon_path)
@@ -1730,10 +1721,8 @@ class AffinityInstallerGUI(QMainWindow):
             except Exception:
                 pass
         
-        # Title with better typography (responsive, transparent background)
         self.title_label = QLabel("Affinity on Linux")
         self.title_label.setObjectName("titleLabel")
-        # Adjust font size for small screens and ensure transparent background
         if screen_width < 1024:
             self.title_label.setStyleSheet("font-size: 18px; font-weight: 600; background-color: transparent; border: none; padding: 0px;")
         else:
@@ -1742,7 +1731,6 @@ class AffinityInstallerGUI(QMainWindow):
         
         top_bar_layout.addStretch()
         
-        # System status indicator with better design
         status_container = QWidget()
         status_container.setStyleSheet("background-color: transparent; border: none;")
         status_layout = QHBoxLayout(status_container)
@@ -1756,7 +1744,6 @@ class AffinityInstallerGUI(QMainWindow):
         
         status_text = QLabel("Initializing...")
         status_text.setObjectName("statusText")
-        # Hide status text on very small screens to save space
         if screen_width < 800:
             status_text.setVisible(False)
         status_layout.addWidget(status_text)
@@ -1764,7 +1751,6 @@ class AffinityInstallerGUI(QMainWindow):
         
         top_bar_layout.addWidget(status_container)
         
-        # Theme toggle button with modern design (responsive)
         self.theme_toggle_btn = QPushButton("☀")
         self.theme_toggle_btn.setObjectName("themeToggle")
         self.theme_toggle_btn.setToolTip("Switch Theme")
@@ -1774,12 +1760,10 @@ class AffinityInstallerGUI(QMainWindow):
         
         main_layout.addWidget(self.top_bar)
         
-        # Content area with modern card layout (responsive)
         content_widget = QWidget()
         content_widget.setObjectName("contentArea")
         content_layout = QHBoxLayout(content_widget)
         
-        # Adaptive spacing and margins based on screen size
         if screen_width < 1024:
             content_spacing = 12
             content_margin = 12
@@ -1799,11 +1783,9 @@ class AffinityInstallerGUI(QMainWindow):
         content_layout.setSpacing(content_spacing)
         content_layout.setContentsMargins(content_margin, content_margin, content_margin, content_margin)
         
-        # Left panel - Status/Log with modern card design
         left_panel = self.create_status_section()
         content_layout.addWidget(left_panel, stretch=2)
         
-        # Right panel - Buttons with modern scroll area (responsive width)
         right_scroll = QScrollArea()
         right_scroll.setWidgetResizable(True)
         right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -1824,11 +1806,9 @@ class AffinityInstallerGUI(QMainWindow):
     
     def create_status_section(self):
         """Create the modern status/log output section (responsive)"""
-        # Get screen size for responsive design
         screen = self.screen().availableGeometry()
         screen_width = screen.width()
         
-        # Adaptive spacing and margins
         if screen_width < 1024:
             card_spacing = 12
             card_margin = 12
@@ -1839,14 +1819,12 @@ class AffinityInstallerGUI(QMainWindow):
             card_spacing = 16
             card_margin = 20
         
-        # Main card container
         card = QFrame()
         card.setObjectName("statusCard")
         card_layout = QVBoxLayout(card)
         card_layout.setSpacing(card_spacing)
         card_layout.setContentsMargins(card_margin, card_margin, card_margin, card_margin)
         
-        # Header with title
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         title = QLabel("Status & Log")
@@ -1855,20 +1833,17 @@ class AffinityInstallerGUI(QMainWindow):
         header.addStretch()
         card_layout.addLayout(header)
         
-        # Progress section with modern design
         progress_section = QFrame()
         progress_section.setObjectName("progressSection")
         progress_layout = QVBoxLayout(progress_section)
         progress_layout.setSpacing(8)
         progress_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Progress status label
         self.progress_label = QLabel("Ready")
         self.progress_label.setObjectName("progressLabel")
         self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         progress_layout.addWidget(self.progress_label)
         
-        # Progress bar and cancel button container
         progress_container = QHBoxLayout()
         progress_container.setSpacing(12)
         progress_container.setContentsMargins(0, 0, 0, 0)
@@ -1881,7 +1856,6 @@ class AffinityInstallerGUI(QMainWindow):
         self.progress.setFixedHeight(8)
         progress_container.addWidget(self.progress, stretch=1)
         
-        # Cancel button (hidden by default)
         self.cancel_btn = QPushButton("✕")
         self.cancel_btn.setObjectName("cancelButton")
         self.cancel_btn.setToolTip("Cancel current operation")
@@ -1893,14 +1867,12 @@ class AffinityInstallerGUI(QMainWindow):
         progress_layout.addLayout(progress_container)
         card_layout.addWidget(progress_section)
         
-        # Log section with modern design
         log_section = QFrame()
         log_section.setObjectName("logSection")
         log_layout = QVBoxLayout(log_section)
         log_layout.setSpacing(12)
         log_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Zoom controls toolbar
         zoom_toolbar = QFrame()
         zoom_toolbar.setObjectName("zoomToolbar")
         zoom_layout = QHBoxLayout(zoom_toolbar)
@@ -1908,7 +1880,6 @@ class AffinityInstallerGUI(QMainWindow):
         zoom_layout.setSpacing(8)
         zoom_layout.addStretch()
         
-        # Zoom buttons with modern styling
         icon_name_zoom_out = "zoom-out"
         icon_path_zoom_out = self.get_icon_path(icon_name_zoom_out)
         self.zoom_out_btn = QPushButton()
@@ -1950,15 +1921,12 @@ class AffinityInstallerGUI(QMainWindow):
         
         log_layout.addWidget(zoom_toolbar)
         
-        # Log output with modern styling (responsive)
         self.log_text = ZoomableTextEdit(self)
         self.log_text.setObjectName("logText")
         self.log_text.setReadOnly(True)
-        # Ensure minimum readable font size
         min_font_size = max(9, self.log_font_size)
         self.log_text.setFont(QFont("Consolas", min_font_size))
         self.log_text.set_zoom_callbacks(self.zoom_in, self.zoom_out)
-        # Ensure log area has minimum height for readability on small screens
         screen = self.screen().availableGeometry()
         if screen.height() < 768:
             self.log_text.setMinimumHeight(150)
@@ -1968,18 +1936,15 @@ class AffinityInstallerGUI(QMainWindow):
         
         card_layout.addWidget(log_section)
         
-        # Initialize zoom button states
         self.update_zoom_buttons()
         
         return card
     
     def create_button_sections(self):
         """Create modern organized button sections (responsive)"""
-        # Get screen size for responsive spacing
         screen = self.screen().availableGeometry()
         screen_width = screen.width()
         
-        # Adaptive spacing
         if screen_width < 1024:
             container_spacing = 12
         elif screen_width < 1280:
@@ -1992,7 +1957,6 @@ class AffinityInstallerGUI(QMainWindow):
         container_layout.setSpacing(container_spacing)
         container_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Quick Start section - One-click install
         quick_group = self.create_button_group(
             "Quick Start",
             [
@@ -2004,7 +1968,6 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(quick_group)
         
-        # System Setup section
         sys_group = self.create_button_group(
             "System Setup",
             [
@@ -2015,7 +1978,6 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(sys_group)
         
-        # Update Affinity Applications section
         app_buttons = [
             ("Affinity (Unified)", "Add", "Update or install Affinity V3 unified application", "affinity-unified"),
             ("Affinity Photo", "Photo", "Update or install Affinity Photo for image editing", "camera"),
@@ -2030,7 +1992,6 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(app_group)
         
-        # Troubleshooting section
         troubleshoot_group = self.create_button_group(
             "Troubleshooting",
             [
@@ -2049,7 +2010,6 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(troubleshoot_group)
         
-        # Patches section
         patches_group = self.create_button_group(
             "Patches",
             [
@@ -2058,7 +2018,6 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(patches_group)
         
-        # Launch section
         launch_group = self.create_button_group(
             "Launch",
             [
@@ -2067,7 +2026,6 @@ class AffinityInstallerGUI(QMainWindow):
         )
         container_layout.addWidget(launch_group)
         
-        # Other section
         other_group = self.create_button_group(
             "Other",
             [
@@ -2082,11 +2040,9 @@ class AffinityInstallerGUI(QMainWindow):
     
     def create_button_group(self, title, buttons, button_refs=None, button_keys=None):
         """Create a modern grouped button section (responsive)"""
-        # Get screen size for responsive design
         screen = self.screen().availableGeometry()
         screen_width = screen.width()
         
-        # Adaptive spacing and margins
         if screen_width < 1024:
             card_spacing = 8
             card_margin = 12
@@ -2103,14 +2059,12 @@ class AffinityInstallerGUI(QMainWindow):
             button_height = 44
             icon_size = 22
         
-        # Modern card container
         card = QFrame()
         card.setObjectName("buttonCard")
         card_layout = QVBoxLayout(card)
         card_layout.setSpacing(card_spacing)
         card_layout.setContentsMargins(card_margin, 16, card_margin, card_margin)
         
-        # Section title (responsive font size, transparent background)
         title_label = QLabel(title)
         title_label.setObjectName("sectionTitle")
         if screen_width < 1024:
@@ -2119,7 +2073,6 @@ class AffinityInstallerGUI(QMainWindow):
             title_label.setStyleSheet("background-color: transparent; border: none; padding: 0px;")
         card_layout.addWidget(title_label)
         
-        # Buttons container (responsive spacing)
         buttons_layout = QVBoxLayout()
         if screen_width < 1024:
             buttons_layout.setSpacing(6)
@@ -2128,7 +2081,6 @@ class AffinityInstallerGUI(QMainWindow):
         buttons_layout.setContentsMargins(0, 0, 0, 0)
         
         for idx, button_data in enumerate(buttons):
-            # Handle (text, command), (text, command, tooltip), (text, command, tooltip, icon) formats
             tooltip = None
             icon_name = None
             if len(button_data) == 2:
@@ -2143,45 +2095,36 @@ class AffinityInstallerGUI(QMainWindow):
             btn = QPushButton(text)
             btn.setObjectName("actionButton")
             
-            # Set primary style for main CTA button
             if text == "One-Click Full Setup":
                 btn.setProperty("class", "primary")
             
-            # Wrap click to track the button and delegate to original command
             btn.clicked.connect(lambda checked=False, b=btn, cmd=command: self._handle_button_click(b, cmd))
             
-            # Add icon if provided
             if icon_name:
                 icon_path = self.get_icon_path(icon_name)
                 if icon_path:
                     icon = QIcon(str(icon_path))
                     btn.setIcon(icon)
-                    btn.setIconSize(QSize(icon_size, icon_size))  # Responsive icon size
+                    btn.setIconSize(QSize(icon_size, icon_size))
                     self.icon_buttons.append((btn, icon_name))
             
-            # Add tooltip if provided
             if tooltip:
                 btn.setToolTip(tooltip)
             
-            # Set button height and styling (responsive)
             btn.setMinimumHeight(button_height)
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            # Set minimum width to prevent buttons from being too narrow and ensure text is readable (responsive)
             if screen_width < 800:
                 btn.setMinimumWidth(220)
             elif screen_width < 1024:
                 btn.setMinimumWidth(240)
             else:
                 btn.setMinimumWidth(260)
-            # Ensure button text is readable - QPushButton automatically handles text overflow with ellipsis
             
             buttons_layout.addWidget(btn)
             
-            # Store button reference if requested
             if button_refs is not None and button_keys is not None and idx < len(button_keys):
                 button_refs[button_keys[idx]] = btn
             
-            # Store switch backend button reference
             if text.startswith("Switch to"):
                 self.switch_backend_button = btn
         
@@ -2195,7 +2138,6 @@ class AffinityInstallerGUI(QMainWindow):
             self._last_clicked_button = button
             command()
         except Exception as e:
-            # If command failed immediately, do not leave spinner state queued
             self._last_clicked_button = None
             self.log(f"Error executing command: {e}", "error")
     
@@ -2204,14 +2146,11 @@ class AffinityInstallerGUI(QMainWindow):
         try:
             if button is None or not isinstance(button, QPushButton):
                 return
-            # If already spinning, do nothing
             if button in self._button_spinner_map:
                 return
-            # Determine size from existing icon size or button height
             current_size = button.iconSize()
             size = max(16, max(current_size.width(), current_size.height())) if current_size.isValid() else max(20, button.sizeHint().height() - 6)
             color = QColor('#8ff361') if self.dark_mode else QColor('#4caf50')
-            # Prepare state
             state = {
                 'angle': 0,
                 'timer': QTimer(self),
@@ -2222,7 +2161,6 @@ class AffinityInstallerGUI(QMainWindow):
             }
             def tick():
                 state['angle'] = (state['angle'] - 30) % 360
-                # Draw spinner pixmap
                 pm = QPixmap(state['size'], state['size'])
                 pm.fill(Qt.GlobalColor.transparent)
                 painter = QPainter(pm)
@@ -2242,7 +2180,6 @@ class AffinityInstallerGUI(QMainWindow):
             t.setInterval(50)
             t.timeout.connect(tick)
             t.start()
-            # Draw initial frame immediately
             tick()
             self._button_spinner_map[button] = state
         except Exception:
@@ -2272,46 +2209,35 @@ class AffinityInstallerGUI(QMainWindow):
     
     def load_affinity_icon(self):
         """Load Affinity V3 icon (non-blocking - downloads in background if needed)"""
-        # Set default to None first (fast)
         self.affinity_icon_path = None
         
-        # Check and load icon in background thread to avoid blocking
         def check_and_load_icon():
             try:
                 icon_dir = Path.home() / ".local" / "share" / "icons"
                 icon_dir.mkdir(parents=True, exist_ok=True)
                 icon_path = icon_dir / "Affinity.svg"
                 
-                # Check if file exists and is valid SVG
                 if icon_path.exists():
                     try:
-                        # Quick check if file is valid SVG (not HTML) - read only first 100 bytes
                         with open(icon_path, 'rb') as f:
                             first_bytes = f.read(100).decode('utf-8', errors='ignore')
-                            # Valid SVG should start with <?xml or <svg, not <!DOCTYPE or <html
                             if first_bytes.strip().startswith('<?xml') or first_bytes.strip().startswith('<svg'):
                                 self.affinity_icon_path = str(icon_path)
-                                # Update window icon on main thread
                                 from PyQt6.QtCore import QTimer
                                 QTimer.singleShot(0, lambda: self.setWindowIcon(QIcon(str(icon_path))))
                                 return
                             else:
-                                # File is corrupted (likely HTML), delete it
                                 icon_path.unlink()
                     except Exception:
-                        # If we can't read it, try to use it anyway
                         self.affinity_icon_path = str(icon_path)
                         from PyQt6.QtCore import QTimer
                         QTimer.singleShot(0, lambda: self.setWindowIcon(QIcon(str(icon_path))))
                         return
                 
-                # If icon doesn't exist, download in background
                 try:
                     icon_url = "https://raw.githubusercontent.com/seapear/AffinityOnLinux/main/Assets/Icons/Affinity-Canva.svg"
                     urllib.request.urlretrieve(icon_url, str(icon_path))
-                    # Update icon path and refresh UI
                     self.affinity_icon_path = str(icon_path)
-                    # Update window icon on main thread
                     from PyQt6.QtCore import QTimer
                     QTimer.singleShot(0, lambda: self.setWindowIcon(QIcon(str(icon_path))))
                 except Exception:
@@ -2319,7 +2245,6 @@ class AffinityInstallerGUI(QMainWindow):
             except Exception:
                 pass
         
-        # Run in background thread to avoid blocking
         threading.Thread(target=check_and_load_icon, daemon=True).start()
     
     def closeEvent(self, event):
@@ -2337,12 +2262,9 @@ class AffinityInstallerGUI(QMainWindow):
     
     def sanitize_filename(self, filename):
         """Sanitize filename by replacing spaces and other problematic characters"""
-        # Replace spaces with dashes
         sanitized = filename.replace(" ", "-")
-        # Remove other potentially problematic characters
         sanitized = sanitized.replace("(", "-").replace(")", "-")
         sanitized = sanitized.replace("[", "-").replace("]", "-")
-        # Keep only one consecutive dash
         while "--" in sanitized:
             sanitized = sanitized.replace("--", "-")
         return sanitized
@@ -2459,7 +2381,6 @@ class AffinityInstallerGUI(QMainWindow):
         """Thread-safe log handler (called from main thread)"""
         timestamp = time.strftime("%H:%M:%S")
         
-        # Determine icon, color, and styling based on level
         if level == "error":
             icon = "❌"
             color = "#ff7b72"
@@ -2481,14 +2402,11 @@ class AffinityInstallerGUI(QMainWindow):
             bg_color = "transparent"
             icon_color = "#569cd6"
 
-        # Sanitize message to prevent HTML injection issues
         message = message.replace("<", "&lt;").replace(">", "&gt;")
 
-        # Format message with better styling
         timestamp_html = f'<span style="color: #6c7886; font-weight: 500;">[{timestamp}]</span>'
         icon_html = f'<span style="color: {icon_color}; font-weight: bold; font-size: 12px;">{icon}</span>'
         
-        # Add subtle background for important messages
         if level in ["error", "success", "warning"]:
             full_message = f'<div style="background-color: {bg_color}; padding: 4px 8px; margin: 2px 0; border-radius: 4px; border-left: 3px solid {icon_color};">{timestamp_html} {icon_html} <span style="color: {color};">{message}</span></div>'
         else:
@@ -2499,15 +2417,12 @@ class AffinityInstallerGUI(QMainWindow):
             self.log_text.verticalScrollBar().maximum()
         )
         
-        # Write to log file (plain text, no HTML)
         if self.log_file:
             try:
-                # Create a plain text version for the log file
                 plain_message = f"[{timestamp}] [{level.upper()}] {message}"
                 self.log_file.write(plain_message + "\n")
-                self.log_file.flush()  # Ensure it's written immediately
+                self.log_file.flush()
             except Exception:
-                # If file write fails, continue without file logging
                 pass
     
     def update_progress(self, value):
@@ -2528,7 +2443,6 @@ class AffinityInstallerGUI(QMainWindow):
     
     def cancel_operation(self):
         """Cancel the current operation with confirmation"""
-        # Ask for confirmation
         reply = QMessageBox.question(
             self,
             "Cancel Operation",
@@ -2541,10 +2455,8 @@ class AffinityInstallerGUI(QMainWindow):
         
         if reply == QMessageBox.StandardButton.Yes:
             self.operation_cancelled = True
-            # Signal cancellation early so running commands can stop
             self.cancel_event.set()
             self.update_progress_text("Cancelling...")
-            # Terminate any active subprocesses
             try:
                 self.terminate_active_processes()
             except Exception:
@@ -2553,10 +2465,9 @@ class AffinityInstallerGUI(QMainWindow):
             self.log("⚠ Operation cancelled by user", "warning")
             self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", "warning")
             self.update_progress_text("Operation cancelled")
-            self.update_progress(0.0)  # Reset progress bar
+            self.update_progress(0.0)
             self.cancel_btn.setVisible(False)
             self.operation_in_progress = False
-            # Ensure spinner is restored on cancel
             try:
                 if self._operation_button is not None:
                     self.hide_spinner_signal.emit(self._operation_button)
@@ -2569,7 +2480,6 @@ class AffinityInstallerGUI(QMainWindow):
         self.cancel_event.clear()
         self.current_operation = operation_name
         self.operation_in_progress = True
-        # Replace last clicked button with spinner (on UI thread)
         if self._last_clicked_button is not None:
             self._operation_button = self._last_clicked_button
             self.show_spinner_signal.emit(self._operation_button)
@@ -2580,15 +2490,12 @@ class AffinityInstallerGUI(QMainWindow):
         """Mark the end of an operation: restore UI, reset progress, toggle cancel."""
         self.operation_in_progress = False
         self.current_operation = None
-        # Toggle cancel button off
         if hasattr(self, 'cancel_btn'):
             self.cancel_btn.setVisible(False)
-        # Restore button icon (stop spinner)
         if self._operation_button is not None:
             self.hide_spinner_signal.emit(self._operation_button)
             self._operation_button = None
             self._last_clicked_button = None
-        # Always restore progress bar/text to idle state
         self.update_progress(0.0)
         self.update_progress_text("Ready")
     
@@ -2622,7 +2529,6 @@ class AffinityInstallerGUI(QMainWindow):
     
     def _request_sudo_password_safe(self):
         """Request sudo password from user (called from main thread)"""
-        # Create dialog without parent to avoid threading issues
         dialog = QDialog()
         dialog.setWindowTitle("Administrator Authentication Required")
         dialog.setModal(True)
@@ -2671,28 +2577,24 @@ class AffinityInstallerGUI(QMainWindow):
         margin = 20 if (screen_width >= 800 and screen_height >= 600) else 15
         main_layout.setContentsMargins(margin, margin, margin, margin)
         
-        # Title
         title_label = QLabel("Administrator Authentication Required")
         title_label.setObjectName("titleLabel")
         title_label.setWordWrap(True)
         title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(title_label)
         
-        # Description
         desc_label = QLabel("This operation requires administrator privileges.\n\nPlease enter your password to continue:")
         desc_label.setObjectName("descriptionLabel")
         desc_label.setWordWrap(True)
         desc_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(desc_label)
         
-        # Password input
         password_input = QLineEdit()
         password_input.setEchoMode(QLineEdit.EchoMode.Password)
         password_input.setPlaceholderText("Enter your password")
         password_input.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_layout.addWidget(password_input)
         
-        # Buttons
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         button_layout.addStretch()
@@ -2711,15 +2613,12 @@ class AffinityInstallerGUI(QMainWindow):
         
         main_layout.addLayout(button_layout)
         
-        # Allow Enter key to submit
         password_input.returnPressed.connect(dialog.accept)
         
-        # Show dialog
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
         
-        # Focus the password input
         password_input.setFocus()
         
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -2729,16 +2628,13 @@ class AffinityInstallerGUI(QMainWindow):
     
     def get_sudo_password(self):
         """Get sudo password from user (thread-safe)"""
-        # If we already have a validated password, return it
         if self.sudo_password_validated and self.sudo_password:
             return self.sudo_password
         
-        # Request password from main thread
         self.sudo_password = None
         self.sudo_password_dialog_signal.emit()
         
-        # Wait for password to be entered (with timeout)
-        max_wait = 300  # 30 seconds timeout
+        max_wait = 300
         waited = 0
         while self.sudo_password is None and waited < max_wait:
             time.sleep(0.1)
@@ -2749,13 +2645,9 @@ class AffinityInstallerGUI(QMainWindow):
     def validate_sudo_password(self, password):
         """Validate sudo password by running a test command"""
         try:
-            # Set up environment for sudo
             env = os.environ.copy()
-            # Unset SUDO_ASKPASS to force sudo to read password from stdin via -S flag
-            # This prevents errors when askpass programs (like ksshaskpass) don't exist
             env.pop('SUDO_ASKPASS', None)
             
-            # Test the password with a harmless sudo command
             process = subprocess.Popen(
                 ["sudo", "-S", "true"],
                 stdin=subprocess.PIPE,
@@ -2763,29 +2655,23 @@ class AffinityInstallerGUI(QMainWindow):
                 stderr=subprocess.PIPE,
                 text=True,
                 env=env,
-                preexec_fn=os.setsid  # Create new process group
+                preexec_fn=os.setsid
             )
             
-            # Send password and wait for completion with timeout
             try:
                 stdout, stderr = process.communicate(input=f"{password}\n", timeout=15)
             except subprocess.TimeoutExpired:
-                # Timeout occurred, terminate the process and all its children
                 try:
-                    # Try to kill the process group first
                     if process.pid:
                         try:
                             pgid = os.getpgid(process.pid)
                             os.killpg(pgid, signal.SIGTERM)
                             time.sleep(0.5)
-                            # Force kill if still running
                             if process.poll() is None:
                                 os.killpg(pgid, signal.SIGKILL)
                         except (ProcessLookupError, OSError, AttributeError):
-                            # Process group doesn't exist or process already terminated
                             process.kill()
                 except Exception:
-                    # Fallback to simple kill
                     try:
                         process.kill()
                     except Exception:
@@ -2798,13 +2684,11 @@ class AffinityInstallerGUI(QMainWindow):
                 self.sudo_password_validated = False
                 return False
             except Exception as e:
-                # Other I/O errors - check if process succeeded anyway
                 try:
                     if process.poll() is None:
                         process.wait(timeout=1)
                 except Exception:
                     pass
-                # If return code is 0, validation succeeded despite the error
                 if process.returncode == 0:
                     self.sudo_password_validated = True
                     return True
