@@ -20,7 +20,6 @@ from pathlib import Path
 import time
 import signal
 import shlex
-# Function to detect Linux distribution
 def detect_distro_for_install():
     """Detect distribution for package installation"""
     try:
@@ -29,7 +28,6 @@ def detect_distro_for_install():
         for line in content.split("\n"):
             if line.startswith("ID="):
                 distro = line.split("=", 1)[1].strip().strip('"').lower()
-                # Normalize "pika" to "pikaos" if detected
                 if distro == "pika":
                     distro = "pikaos"
                 return distro
@@ -37,7 +35,6 @@ def detect_distro_for_install():
         pass
     return None
 
-# Function to install Python package
 def install_package(package_name, import_name=None):
     """Install a Python package if not available"""
     if import_name is None:
@@ -49,12 +46,10 @@ def install_package(package_name, import_name=None):
     except ImportError:
         print(f"Installing {package_name}...")
         
-        # Try with --break-system-packages for PEP 668 systems
         distro = detect_distro_for_install()
         pip_flags = ["--user"]
         if distro in ["arch", "cachyos", "manjaro", "endeavouros", "xerolinux"]:
             pip_flags.append("--break-system-packages")
-        # Add quiet only if we're not showing output
         if not sys.stdout.isatty():
             pip_flags.insert(0, "--quiet")
         
@@ -78,7 +73,6 @@ def install_package(package_name, import_name=None):
             print(f"✗ Error installing {package_name}: {e}")
             return False
 
-# Check and install PyQt6
 PYQT6_AVAILABLE = False
 try:
     from PyQt6.QtWidgets import (
@@ -141,7 +135,6 @@ class ZoomableTextEdit(QTextEdit):
     def wheelEvent(self, event):
         """Handle mouse wheel events for zoom (Ctrl+Wheel) or scroll"""
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            # Zoom with Ctrl+Wheel
             delta = event.angleDelta().y()
             if delta > 0:
                 self.zoomIn(1)
@@ -152,7 +145,6 @@ class ZoomableTextEdit(QTextEdit):
                 if self.zoom_out_callback:
                     self.zoom_out_callback()
         else:
-            # Normal scrolling
             super().wheelEvent(event)
 
 
@@ -182,33 +174,31 @@ class ProgressSpinner(QWidget):
         self._angle = (self._angle - 30) % 360
         self.update()
 
-    def paintEvent(self, event):  # noqa: N802 - Qt override
+    def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect().adjusted(self._line_width, self._line_width, -self._line_width, -self._line_width)
         pen = QPen(self._color)
         pen.setWidth(self._line_width)
         painter.setPen(pen)
-        # Draw an arc (270 degrees) rotating around
         start_angle = int(self._angle * 16)
         span_angle = int(270 * 16)
         painter.drawArc(rect, start_angle, span_angle)
         painter.end()
 
 class AffinityInstallerGUI(QMainWindow):
-    # Signals for thread-safe GUI updates
-    log_signal = pyqtSignal(str, str)  # message, level
-    progress_signal = pyqtSignal(float)  # value (0.0-1.0)
-    progress_text_signal = pyqtSignal(str)  # progress text
-    show_message_signal = pyqtSignal(str, str, str)  # title, message, type (info/error/warning)
-    sudo_password_dialog_signal = pyqtSignal()  # Signal to request sudo password
-    interactive_prompt_signal = pyqtSignal(str, str)  # prompt_text, default_response
-    question_dialog_signal = pyqtSignal(str, str, list)  # title, message, buttons
-    nvidia_dxvk_vkd3d_choice_signal = pyqtSignal()  # Signal to show NVIDIA DXVK/vkd3d choice dialog
-    prompt_affinity_install_signal = pyqtSignal()  # Signal to prompt for Affinity installation
-    install_application_signal = pyqtSignal(str)  # Signal to install an application
-    show_spinner_signal = pyqtSignal(object)  # button -> show spinner
-    hide_spinner_signal = pyqtSignal(object)  # button -> hide spinner
+    log_signal = pyqtSignal(str, str)
+    progress_signal = pyqtSignal(float)
+    progress_text_signal = pyqtSignal(str)
+    show_message_signal = pyqtSignal(str, str, str)
+    sudo_password_dialog_signal = pyqtSignal()
+    interactive_prompt_signal = pyqtSignal(str, str)
+    question_dialog_signal = pyqtSignal(str, str, list)
+    nvidia_dxvk_vkd3d_choice_signal = pyqtSignal()
+    prompt_affinity_install_signal = pyqtSignal()
+    install_application_signal = pyqtSignal(str)
+    show_spinner_signal = pyqtSignal(object)
+    hide_spinner_signal = pyqtSignal(object)
     
     def __init__(self):
         import time as time_module
@@ -225,61 +215,53 @@ class AffinityInstallerGUI(QMainWindow):
         step_start = log_timing("QMainWindow.__init__", step_start)
         
         self.setWindowTitle("Affinity Linux Installer")
-        # Adaptive sizing based on screen size
         screen = self.screen().availableGeometry()
         screen_width = screen.width()
         screen_height = screen.height()
         
-        # Calculate responsive minimum size (at least 70% of screen, but not less than 640x480)
         min_width = max(640, int(screen_width * 0.7))
         min_height = max(480, int(screen_height * 0.7))
         self.setMinimumSize(min_width, min_height)
         
-        # Calculate responsive default size (80% of screen, but not more than 1200x900)
         default_width = min(1200, int(screen_width * 0.8))
         default_height = min(900, int(screen_height * 0.8))
         self.resize(default_width, default_height)
         step_start = log_timing("Window setup", step_start)
         
-        # Variables
         self.distro = None
         self.distro_version = None
         self.directory = str(Path.home() / ".AffinityLinux")
         self.setup_complete = False
         self.installer_file = None
-        self.update_buttons = {}  # Store references to update buttons
-        self.switch_backend_button = None  # Store reference to switch backend button
-        self.log_font_size = 11  # Initial font size for log area
-        self.operation_cancelled = False  # Flag to track if operation was cancelled
-        self.current_operation = None  # Track current operation name
-        self.operation_in_progress = False  # Track if an operation is running
-        self.sudo_password = None  # Cached sudo password
-        self.sudo_password_validated = False  # Whether password has been validated
-        self.interactive_response = None  # Response to interactive prompts
-        self.waiting_for_response = False  # Whether we're waiting for user response
-        self.question_dialog_response = None  # Response from question dialogs
-        self.waiting_for_question_response = False  # Whether waiting for question dialog response
-        self.nvidia_dxvk_vkd3d_choice_response = None  # Response from NVIDIA DXVK/vkd3d choice dialog
-        self.waiting_for_nvidia_choice = False  # Whether waiting for NVIDIA choice dialog response
-        self.dark_mode = True  # Track current theme mode
-        self.icon_buttons = []  # Store buttons with icons for theme updates
-        self.enable_opencl = False  # OpenCL support preference
-        # Cancellation helpers
+        self.update_buttons = {}
+        self.switch_backend_button = None
+        self.log_font_size = 11
+        self.operation_cancelled = False
+        self.current_operation = None
+        self.operation_in_progress = False
+        self.sudo_password = None
+        self.sudo_password_validated = False
+        self.interactive_response = None
+        self.waiting_for_response = False
+        self.question_dialog_response = None
+        self.waiting_for_question_response = False
+        self.nvidia_dxvk_vkd3d_choice_response = None
+        self.waiting_for_nvidia_choice = False
+        self.dark_mode = True
+        self.icon_buttons = []
+        self.enable_opencl = False
         self.cancel_event = threading.Event()
         self._process_lock = threading.Lock()
         self._active_processes = set()
-        # Spinner helpers
         self._button_spinner_map = {}
         self._last_clicked_button = None
         self._operation_button = None
         
-        # Setup log file
         self.log_file_path = Path.home() / "AffinitySetup.log"
         self.log_file = None
         self._init_log_file()
         step_start = log_timing("Log file init", step_start)
         
-        # Connect signals
         self.log_signal.connect(self._log_safe)
         self.progress_signal.connect(self._update_progress_safe)
         self.progress_text_signal.connect(self._update_progress_text_safe)
@@ -294,34 +276,21 @@ class AffinityInstallerGUI(QMainWindow):
         self.hide_spinner_signal.connect(self._hide_spinner_safe)
         step_start = log_timing("Signal connections", step_start)
         
-        # Setup UI (do this first - needed for window to display)
         self.create_ui()
         step_start = log_timing("Create UI", step_start)
         
-        # Apply dark theme (default) - needed before showing window
         self.apply_theme()
         step_start = log_timing("Apply theme", step_start)
         
-        # Center window (fast operation)
         self.center_window()
         step_start = log_timing("Center window", step_start)
         
-        # Defer non-critical operations to after window is shown
-        # Load Affinity icon (non-blocking, will load in background if needed)
-        # Setup zoom functionality (can be done after window is shown)
-        # Icons will be ensured in background - don't block startup
-        # Icons from local directory will work immediately
-        
-        # Don't auto-start initialization - user will click button
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         self.log("Affinity Linux Installer - Ready", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         
-        # Defer slow operations to background threads after window is shown
-        # This allows the window to appear immediately
         step_start = log_timing("Defer slow operations", step_start)
         
-        # Log startup timing
         total_time = time_module.time() - startup_start
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
         self.log("Startup Performance:", "info")
@@ -353,88 +322,68 @@ class AffinityInstallerGUI(QMainWindow):
                 except Exception:
                     pass
         
-        # Start background tasks after window is shown
-        # Use QTimer to defer these operations until after the window is displayed
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(50, self._deferred_startup_tasks)
-        # Check and update DXVK/vkd3d-proton in background after window is shown
         QTimer.singleShot(500, self._check_and_update_dxvk_vkd3d)
     
     def _deferred_startup_tasks(self):
         """Run slow startup tasks in background after window is shown"""
-        # Load Affinity icon (non-blocking, will load in background if needed)
         self.load_affinity_icon()
         
-        # Setup zoom functionality (can be done after window is shown)
         self.setup_zoom()
         
         def run_background_tasks():
             import time as time_module
             bg_start = time_module.time()
             
-            # Ensure icons directory exists (download from GitHub if needed) - do this first
             icons_start = time_module.time()
             self._ensure_icons_directory()
             icons_time = time_module.time() - icons_start
             if icons_time > 0.1:
-                # Update icons after download completes
                 QTimer.singleShot(100, self._update_button_icons)
             
-            # Ensure patcher files are available (silently) - might download from network
             patcher_start = time_module.time()
             self.ensure_patcher_files(silent=True)
             patcher_time = time_module.time() - patcher_start
             
-            # Check installation status and update button states - might run commands
             status_start = time_module.time()
             self.check_installation_status()
             status_time = time_module.time() - status_start
             
             total_bg_time = time_module.time() - bg_start
             
-            # Log timing in GUI (thread-safe via signal)
             if icons_time > 0.1 or patcher_time > 0.1 or status_time > 0.1:
                 self.log(f"Background tasks completed: icons={icons_time:.3f}s, patcher={patcher_time:.3f}s, status={status_time:.3f}s, total={total_bg_time:.3f}s", "info")
             
-            # Update welcome message based on Wine status
             wine_path = self.get_wine_path("wine")
             if not wine_path.exists():
                 self.log("Click 'Setup Wine Environment' or 'One-Click Full Setup' to begin.", "info")
             else:
                 self.log("Wine is set up. Use 'Update Affinity Applications' to install or update apps.", "info")
         
-        # Run in background thread to avoid blocking UI
         threading.Thread(target=run_background_tasks, daemon=True).start()
     
     def check_installation_status(self):
-        # Update switch backend button text when checking status
         self.update_switch_backend_button()
         """Check if Wine and Affinity applications are installed, and update button states"""
-        # Check if Wine is set up
         wine = self.get_wine_path("wine")
         wine_exists = wine.exists()
         
-        # Detect Wine version if installed
         wine_version_display = "Wine"
         if wine_exists:
             try:
-                # Try to get Wine version
                 success, stdout, _ = self.run_command([str(wine), "--version"], check=False, capture=True)
                 if success and stdout:
-                    # Extract version number (e.g., "wine-10.4" or "wine-9.14")
                     version_match = re.search(r'wine-(\d+\.\d+)', stdout)
                     if version_match:
                         wine_version_display = f"Wine {version_match.group(1)}"
                     else:
-                        # Fallback: check if it's the 10.4 archive or legacy
                         wine_dir = Path(self.directory) / "ElementalWarriorWine"
                         if (wine_dir / "bin" / "wine").exists():
-                            # Check archive name in directory or use default
                             wine_version_display = "Wine (patched)"
             except Exception:
                 wine_version_display = "Wine (patched)"
         
-        # Update system status indicator
         if hasattr(self, 'system_status_label'):
             if wine_exists:
                 self.system_status_label.setStyleSheet("font-size: 12px; color: #4ec9b0; background-color: transparent; border: none; padding: 0px;")
@@ -447,13 +396,11 @@ class AffinityInstallerGUI(QMainWindow):
                 if hasattr(self, 'status_text_label'):
                     self.status_text_label.setText("Not Ready")
         
-        # Log Wine status
         if wine_exists:
             self.log(f"Wine: ✓ Installed ({wine_version_display})", "success")
         else:
             self.log("Wine: ✗ Not installed", "error")
         
-        # Check each Affinity application
         app_status = {}
         app_names_display = {
             "Add": "Affinity (Unified)",
@@ -480,17 +427,14 @@ class AffinityInstallerGUI(QMainWindow):
             else:
                 self.log(f"  {display_name}: ✗ Not installed", "error")
             
-            # Update button text to show installation status
             if app_name in self.update_buttons:
                 btn = self.update_buttons[app_name]
                 if is_installed:
-                    # Add checkmark to button text if installed
                     current_text = btn.text()
                     if "✓" not in current_text:
                         btn.setText(current_text.split("✓")[0].strip() + " ✓")
                     btn.setEnabled(True)
         
-        # Check dependencies
         self.log("System Dependencies:", "info")
         deps = ["wine", "winetricks", "wget", "curl", "7z", "tar", "jq"]
         deps_installed = True
@@ -501,33 +445,27 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log(f"  {dep}: ✗ Not installed", "error")
                 deps_installed = False
         
-        # Check zstd (optional - only needed for some archives)
         if self.check_command("unzstd") or self.check_command("zstd"):
             self.log(f"  zstd: ✓ Installed", "success")
         else:
             self.log(f"  zstd: ✗ Not installed (optional)", "warning")
         
-        # Check xz (optional - Python's lzma can handle .xz, but xz command is useful as fallback)
         if self.check_command("xz") or self.check_command("unxz"):
             self.log(f"  xz: ✓ Installed", "success")
         else:
             self.log(f"  xz: ✗ Not installed (optional - Python lzma will be used)", "warning")
         
-        # Check .NET SDK
         if self.check_dotnet_sdk():
             self.log(f"  .NET SDK: ✓ Installed", "success")
         else:
             self.log(f"  .NET SDK: ✗ Not installed", "error")
-            # Don't set deps_installed = False since .NET SDK is optional (only needed for settings fix)
         
-        # Check Winetricks Dependencies (only if Wine is set up)
         if wine_exists:
             self.log("Winetricks Dependencies:", "info")
             env = os.environ.copy()
             env["WINEPREFIX"] = self.directory
             wine = self.get_wine_path("wine")
             
-            # List of winetricks components to check
             winetricks_components = [
                 ("dotnet35sp1", ".NET Framework 3.5 SP1"),
                 ("dotnet48", ".NET Framework 4.8"),
@@ -544,7 +482,6 @@ class AffinityInstallerGUI(QMainWindow):
                 else:
                     self.log(f"  {description}: ✗ Not installed", "error")
             
-            # Check Vulkan renderer
             try:
                 success, stdout, _ = self.run_command(
                     [str(wine), "reg", "query", "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D"],
@@ -553,7 +490,6 @@ class AffinityInstallerGUI(QMainWindow):
                     capture=True
                 )
                 if success:
-                    # Check if renderer is set to vulkan
                     vulkan_set = False
                     try:
                         renderer_success, renderer_stdout, _ = self.run_command(
@@ -576,27 +512,23 @@ class AffinityInstallerGUI(QMainWindow):
             except Exception:
                 self.log(f"  Vulkan Renderer: ✗ Not configured", "error")
             
-            # Check WebView2 Runtime
             self.log("WebView2 Runtime:", "info")
             if self.check_webview2_installed():
                 self.log(f"  Microsoft Edge WebView2 Runtime: ✓ Installed", "success")
             else:
                 self.log(f"  Microsoft Edge WebView2 Runtime: ✗ Not installed", "error")
         
-        self.log("", "info")  # Empty line for spacing
+        self.log("", "info")
         
-        # Update button states
         for app_name, button in self.update_buttons.items():
             if button is None:
                 continue
             
-            # Button should be enabled only if Wine is set up AND the app is installed
             is_installed = app_status.get(app_name, False)
             enabled = wine_exists and is_installed
             
             button.setEnabled(enabled)
             if enabled:
-                # Reset to default style
                 button.setStyleSheet("")
     
     def center_window(self):
@@ -608,19 +540,16 @@ class AffinityInstallerGUI(QMainWindow):
     
     def setup_zoom(self):
         """Setup zoom in/out functionality for log area"""
-        # Zoom in: Ctrl+Plus or Ctrl+=
         zoom_in_shortcut = QShortcut(QKeySequence("Ctrl+Plus"), self)
         zoom_in_shortcut.activated.connect(self.zoom_in)
         zoom_in_shortcut_alt = QShortcut(QKeySequence("Ctrl+="), self)
         zoom_in_shortcut_alt.activated.connect(self.zoom_in)
         
-        # Zoom out: Ctrl+Minus or Ctrl+-
         zoom_out_shortcut = QShortcut(QKeySequence("Ctrl+Minus"), self)
         zoom_out_shortcut.activated.connect(self.zoom_out)
         zoom_out_shortcut_alt = QShortcut(QKeySequence("Ctrl+-"), self)
         zoom_out_shortcut_alt.activated.connect(self.zoom_out)
         
-        # Reset zoom: Ctrl+0
         zoom_reset_shortcut = QShortcut(QKeySequence("Ctrl+0"), self)
         zoom_reset_shortcut.activated.connect(self.zoom_reset)
     
@@ -634,7 +563,6 @@ class AffinityInstallerGUI(QMainWindow):
             self.log_font_size = new_size
             font = QFont("Consolas", self.log_font_size)
             self.log_text.setFont(font)
-            # Also set document default font to affect HTML content
             self.log_text.document().setDefaultFont(font)
             self.update_zoom_buttons()
     
@@ -648,7 +576,6 @@ class AffinityInstallerGUI(QMainWindow):
             self.log_font_size = new_size
             font = QFont("Consolas", self.log_font_size)
             self.log_text.setFont(font)
-            # Also set document default font to affect HTML content
             self.log_text.document().setDefaultFont(font)
             self.update_zoom_buttons()
     
@@ -660,7 +587,6 @@ class AffinityInstallerGUI(QMainWindow):
         self.log_font_size = 11
         font = QFont("Consolas", 11)
         self.log_text.setFont(font)
-        # Also set document default font to affect HTML content
         self.log_text.document().setDefaultFont(font)
         self.update_zoom_buttons()
     
@@ -685,21 +611,16 @@ class AffinityInstallerGUI(QMainWindow):
         
         theme_suffix = "light" if self.dark_mode else "dark"
         
-        # First check standard location in user's config directory
-        # This works even when script is piped from curl
         icons_dir = Path.home() / ".config" / "AffinityOnLinux" / "AffinityScripts" / "icons"
         
-        # Check for theme-specific icon first
         themed_icon_path = icons_dir / f"{icon_name}-{theme_suffix}.svg"
         if themed_icon_path.exists():
             return themed_icon_path
         
-        # Fallback to base icon name if theme-specific one doesn't exist
         base_icon_path = icons_dir / f"{icon_name}.svg"
         if base_icon_path.exists():
             return base_icon_path
         
-        # Fallback to local script directory (for development/local installations)
         local_icons_dir = Path(__file__).parent / "icons"
         if local_icons_dir.exists():
             local_themed_icon = local_icons_dir / f"{icon_name}-{theme_suffix}.svg"
@@ -725,7 +646,6 @@ class AffinityInstallerGUI(QMainWindow):
         self.dark_mode = not self.dark_mode
         self.apply_theme()
         
-        # Update theme button
         if self.dark_mode:
             self.theme_toggle_btn.setText("☀")
             self.theme_toggle_btn.setToolTip("Switch to Light Mode")
@@ -733,13 +653,10 @@ class AffinityInstallerGUI(QMainWindow):
             self.theme_toggle_btn.setText("🌙")
             self.theme_toggle_btn.setToolTip("Switch to Dark Mode")
         
-        # Update button icons
         self._update_button_icons()
         
-        # Update top bar
         self._update_top_bar_style()
         
-        # Update theme button style
         self._update_theme_button_style()
         
         # Update scroll area
@@ -11299,6 +11216,35 @@ class AffinityInstallerGUI(QMainWindow):
             else:
                 self.log(f".NET SDK found but version {version} is too old (need 8.0+)", "warning")
         
+        common_paths = [
+            "/usr/bin/dotnet",
+            "/usr/local/bin/dotnet",
+            "/opt/dotnet/dotnet",
+            Path.home() / ".dotnet" / "dotnet",
+            Path.home() / "bin" / "dotnet" / "dotnet",
+            Path.home() / "bin" / "dotnet",
+        ]
+        # Also check DOTNET_ROOT environment variable if set
+        dotnet_root = os.environ.get("DOTNET_ROOT")
+        if dotnet_root:
+            common_paths.insert(0, Path(dotnet_root) / "dotnet")
+            common_paths.insert(1, Path(dotnet_root))
+        
+        for path in common_paths:
+            path_obj = Path(path)
+            if path_obj.exists() and path_obj.is_file():
+                # Try running it
+                success, stdout, _ = self.run_command(
+                    [str(path), "--version"],
+                    check=False,
+                    capture=True
+                )
+                if success and stdout:
+                    version = stdout.strip()
+                    if self._is_version_sufficient(version):
+                        self.log(f".NET SDK found at {path}: {version} - using installed version", "success")
+                        return True
+        
         # If dotnet command not found, check if it's installed via package manager
         # This is useful when dotnet is installed but not in PATH
         if self.distro in ["fedora", "nobara"]:
@@ -11409,6 +11355,57 @@ class AffinityInstallerGUI(QMainWindow):
                                                 self.log(f".NET SDK found at {path}: {version} - using installed version", "success")
                                                 return True
                                 return True  # Package is installed
+        
+        elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
+            # Check for any dotnet-sdk package via zypper
+            success, stdout, _ = self.run_command(
+                ["zypper", "search", "-i", "dotnet-sdk*"],
+                check=False,
+                capture=True
+            )
+            if success and stdout:
+                # Look for any installed dotnet-sdk package
+                for line in stdout.split('\n'):
+                    if 'dotnet-sdk' in line.lower() and '|' in line:
+                        # Extract version from package name (e.g., dotnet-sdk-8.0, dotnet-sdk-9.0)
+                        match = re.search(r'dotnet-sdk-(\d+)\.(\d+)', line)
+                        if match:
+                            major = int(match.group(1))
+                            if major >= 8:
+                                # Extract package name (first field before |)
+                                package_name = line.split('|')[0].strip()
+                                self.log(f".NET SDK package found via zypper: {package_name}", "success")
+                                # Try common paths
+                                common_paths = [
+                                    "/usr/bin/dotnet",
+                                    "/usr/local/bin/dotnet",
+                                    "/opt/dotnet/dotnet",
+                                    Path.home() / ".dotnet" / "dotnet",
+                                    Path.home() / "bin" / "dotnet" / "dotnet",
+                                    Path.home() / "bin" / "dotnet",
+                                ]
+                                # Also check DOTNET_ROOT if set
+                                dotnet_root = os.environ.get("DOTNET_ROOT")
+                                if dotnet_root:
+                                    common_paths.insert(0, Path(dotnet_root) / "dotnet")
+                                    common_paths.insert(1, Path(dotnet_root))
+                                for path in common_paths:
+                                    path_obj = Path(path)
+                                    if path_obj.exists() and path_obj.is_file():
+                                        success, stdout, _ = self.run_command(
+                                            [str(path), "--version"],
+                                            check=False,
+                                            capture=True
+                                        )
+                                        if success and stdout:
+                                            version = stdout.strip()
+                                            if self._is_version_sufficient(version):
+                                                self.log(f".NET SDK found at {path}: {version} - using installed version", "success")
+                                                return True
+                                # Package is installed but dotnet command not accessible
+                                self.log(".NET SDK package is installed but 'dotnet' command not found in PATH", "warning")
+                                self.log("You may need to add the dotnet directory to your PATH or restart your terminal", "info")
+                                return True  # Return True anyway since package is installed
         
         return False
     
