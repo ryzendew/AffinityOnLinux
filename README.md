@@ -1,5 +1,19 @@
 # AffinityOnLinux
 
+> **⚠️ IMPORTANT: Before Opening Issues**
+> 
+> **DO NOT open GitHub issues until you have:**
+> - Read this README completely
+> - Read all documentation pages (Installation Guide, Known Issues, System Requirements, etc.)
+> - Searched existing issues for similar problems
+> - Checked the [Known Issues](docs/Known-issues.md) page
+> 
+> **Issues opened without reading the documentation will be closed immediately.**
+> 
+> Please take the time to read through all the documentation - it contains answers to most common questions and problems.
+
+---
+
 A comprehensive solution for running [Affinity software](https://www.affinity.studio/) on GNU/Linux systems using Wine with hardware acceleration support.
 
 <img width="1275" height="1323" alt="Affinity Linux Installer" src="https://github.com/user-attachments/assets/b04e7307-ed95-484d-931a-713aadfe6c47" />

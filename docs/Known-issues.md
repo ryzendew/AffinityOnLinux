@@ -73,6 +73,25 @@ This document lists known issues and their workarounds. For the latest updates, 
 
 **Note:** We cannot fix AMD/Intel GPU OpenCL issues as we do not have access to these GPUs for testing.
 
+## Application Features
+
+### Microsoft Edge WebView2 Runtime Not Working
+**Issue:** The Microsoft Edge WebView2 Runtime is broken and does not work properly in Wine. This affects features in Affinity v3 that rely on WebView2, such as the Help system and some web-based dialogs.
+
+**Status:** Known limitation - cannot be fixed
+
+**Impact:**
+- Help system in Affinity v3 may not work
+- Some web-based dialogs may fail to load
+- Canva sign-in dialog may not function properly
+
+**Workaround:**
+- Use the application's built-in help files if available
+- Access documentation online instead of using in-app help
+- This is a Wine limitation and cannot be resolved until Wine improves WebView2 support
+
+**Note:** Do not open issues about WebView2 - this is a known limitation that cannot be fixed.
+
 ## Wine Version Issues
 
 ### Wine 10.17 Bugs
