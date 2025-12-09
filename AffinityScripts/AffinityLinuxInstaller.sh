@@ -377,7 +377,7 @@ install_dependencies() {
             exit 1
             ;;
         "arch"|"cachyos"|"endeavouros"|"xerolinux")
-            sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd
+            sudo pacman -S --needed wine winetricks wget curl p7zip tar jq zstd dotnet-sdk
             ;;
         "fedora"|"nobara")
             sudo dnf install -y wine winetricks wget curl p7zip p7zip-plugins tar jq zstd
