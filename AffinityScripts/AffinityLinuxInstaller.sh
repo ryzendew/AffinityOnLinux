@@ -136,7 +136,7 @@ check_dependencies() {
     
     # Check if this is an unsupported distribution
     case $DISTRO in
-        "ubuntu"|"linuxmint"|"zorin")
+        "ubuntu"|"linuxmint"|"zorin"|"bazzite")
             print_header ""
             echo ""
             echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -182,7 +182,7 @@ check_dependencies() {
     
     # For unsupported distributions, check if we can continue
     case $DISTRO in
-        "ubuntu"|"linuxmint"|"zorin")
+        "ubuntu"|"linuxmint"|"zorin"|"bazzite")
             if [ -n "$missing_deps" ]; then
                 echo ""
                 echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -369,7 +369,7 @@ install_dependencies() {
             sudo apt install -y winetricks wget curl p7zip-full tar jq zstd
             print_success "All dependencies installed for Pop!_OS"
             ;;
-        "ubuntu"|"linuxmint"|"zorin")
+        "ubuntu"|"linuxmint"|"zorin"|"bazzite")
             # This should never be reached if check_dependencies works correctly,
             # but if it is, we'll show the warning and exit
             print_error "Unsupported distribution detected in install_dependencies()"

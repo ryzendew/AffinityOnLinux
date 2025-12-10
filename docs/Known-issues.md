@@ -45,7 +45,7 @@ This document lists known issues and their workarounds. For the latest updates, 
 ## Distribution-Specific Issues
 
 ### Unsupported Distributions
-**Issue:** Linux Mint, Zorin OS, Manjaro, Ubuntu, Pop!_OS, and Debian are not officially supported.
+**Issue:** Bazzite, Linux Mint, Zorin OS, Manjaro, Ubuntu, Pop!_OS, and Debian are not officially supported.
 
 **Workaround:** Use the [AppImage installer](../INSTALLATION.md#1-appimage-recommended-for-beginners) instead. See [System Requirements](SYSTEM-REQUIREMENTS.md) for details.
 

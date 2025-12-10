@@ -37,7 +37,7 @@ detect_distro
 
 # Check for unsupported distributions
 case $DISTRO in
-    "ubuntu"|"linuxmint"|"zorin")
+    "ubuntu"|"linuxmint"|"zorin"|"bazzite")
         echo ""
         echo -e "${RED}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${RED}${BOLD}                    ⚠️   WARNING: UNSUPPORTED DISTRIBUTION   ⚠️${NC}"

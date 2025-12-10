@@ -23,7 +23,7 @@ curl -sSL https://raw.githubusercontent.com/ryzendew/AffinityOnLinux/refs/heads/
 The AppImage is a portable, self-contained installer that works on most Linux distributions without requiring system-wide dependencies.
 
 **Best for:**
-- Users on unsupported distributions (Linux Mint, Zorin OS, Manjaro, Ubuntu, Pop!_OS)
+- Users on unsupported distributions (Bazzite, Linux Mint, Zorin OS, Manjaro, Ubuntu, Pop!_OS)
 - Users who prefer not to install Python/PyQt6 system-wide
 - Quick testing or portable installations
 - Older CPUs (use AppImage v2 for best compatibility)

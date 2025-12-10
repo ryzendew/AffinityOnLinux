@@ -93,7 +93,7 @@ sudo apt install python3-pyqt6.qtsvg
 ### Support Limitations
 
 - **AMD/Intel GPU Issues:** I cannot fix OpenCL or Wine GPU bugs for AMD/Intel GPUs as I do not have access to these GPUs for testing. Use vkd3d-proton or DXVK instead (see [Hardware Acceleration](docs/HARDWARE-ACCELERATION.md)).
-- **Unsupported Distributions:** No support provided for Linux Mint, Zorin OS, Manjaro, Ubuntu, or Pop!_OS. Use AppImage at your own risk (see [System Requirements](docs/SYSTEM-REQUIREMENTS.md)).
+- **Unsupported Distributions:** No support provided for Bazzite, Linux Mint, Zorin OS, Manjaro, Ubuntu, or Pop!_OS. Use AppImage at your own risk (see [System Requirements](docs/SYSTEM-REQUIREMENTS.md)).
 - **PikaOS:** GUI installer does not work. Use AppImage instead.
 
 ### Wine 10.17 Warning

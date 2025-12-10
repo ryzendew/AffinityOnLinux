@@ -6761,7 +6761,7 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress(0.0)
         
         # Show unsupported warning
-        if self.distro in ["ubuntu", "linuxmint", "zorin"]:
+        if self.distro in ["ubuntu", "linuxmint", "zorin", "bazzite"]:
             self.show_unsupported_warning()
         
         missing = []
@@ -6816,7 +6816,7 @@ class AffinityInstallerGUI(QMainWindow):
             self.log(".NET SDK is installed", "success")
         
         # Handle unsupported distributions - show warning and allow retry
-        if self.distro in ["ubuntu", "linuxmint", "pop", "zorin"]:
+        if self.distro in ["ubuntu", "linuxmint", "pop", "zorin", "bazzite"]:
             if missing:
                 self.log("\n" + "="*80, "error")
                 self.log("⚠️  WARNING: UNSUPPORTED DISTRIBUTION", "error")
@@ -6847,7 +6847,7 @@ class AffinityInstallerGUI(QMainWindow):
                 self.log("No support will be provided if issues arise.", "warning")
         
         # Install missing dependencies (only for supported distributions)
-        if missing and self.distro not in ["ubuntu", "linuxmint", "pop", "zorin"]:
+        if missing and self.distro not in ["ubuntu", "linuxmint", "pop", "zorin", "bazzite"]:
             self.log(f"\nInstalling missing dependencies: {', '.join(missing)}", "info")
             self.update_progress_text(f"Installing {len(missing)} missing packages...")
             self.update_progress(0.5)  # Start second half of progress

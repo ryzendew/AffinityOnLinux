@@ -17,6 +17,7 @@
 
 The following distributions are **not officially supported** and **no support will be provided** for issues:
 
+- **Bazzite** - Immutable filesystem and specialized gaming distribution. Use [AppImage](INSTALLATION.md#1-appimage-recommended-for-beginners) instead.
 - **Linux Mint** - Outdated dependencies. Use [AppImage](INSTALLATION.md#1-appimage-recommended-for-beginners) instead.
 - **Zorin OS** - Outdated dependencies. Use [AppImage](INSTALLATION.md#1-appimage-recommended-for-beginners) instead.
 - **Manjaro** - Known stability issues. Use [AppImage](INSTALLATION.md#1-appimage-recommended-for-beginners) instead.
@@ -30,10 +31,12 @@ The following distributions are **not officially supported** and **no support wi
 
 These are automatically installed by the GUI installer. For legacy scripts, install manually:
 
-- Wine (provided automatically by installer)
+- Wine
 - winetricks
-- wget, curl
+- wget, 
+- curl
 - p7zip or 7z
-- tar, jq
-- xz (optional)
+- tar, 
+- jq
+- xz
 
