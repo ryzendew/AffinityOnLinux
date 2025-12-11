@@ -40,3 +40,14 @@ C:\\\users\$USERNAME\AppData\Roaming\Affinity\Publisher\2.0\Settings\ -> drive_c
 ## Editing The Settings Files
 
 The settings files use the `.xml` format and can be modified using a text editor.
+
+## Appimage Settings
+
+Changing UI scaling add this cmd to the end of the Appimage
+```
+--dpi
+```
+To use winecfg add this to the end of the Appimage
+```
+--winecfg
+```
