@@ -102,7 +102,7 @@ sudo pacman -S python-pyqt6
 
 **Fedora/Nobara:**
 ```bash
-sudo dnf install python3-pyqt6
+sudo dnf install python3-pyqt6 python3-pyqt6-svg
 ```
 
 **openSUSE (Tumbleweed/Leap):**

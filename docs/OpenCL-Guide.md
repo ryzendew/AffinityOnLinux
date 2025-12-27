@@ -25,7 +25,7 @@ Install the appropriate OpenCL drivers for your GPU and distribution:
 #### Arch Linux (NVIDIA)
 
 ```bash
-sudo pacman -S opencl-nvidia
+    sudo pacman -S opencl-nvidia
 ```
 
 #### Arch Linux (AMD)

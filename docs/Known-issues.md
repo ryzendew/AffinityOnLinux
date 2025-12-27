@@ -9,10 +9,31 @@ This document lists known issues and their workarounds. For the latest updates, 
 
 **Status:** Open ([#89](https://github.com/ryzendew/AffinityOnLinux/issues/89))
 
-**Workaround:** 
+**Workaround:**
 - Try a different Wine version (9.14 recommended for older systems)
 - Check GPU drivers are up to date
 - Use vkd3d-proton or DXVK instead of OpenCL (see [Hardware Acceleration](HARDWARE-ACCELERATION.md))
+
+### Window Management Issues (Moving UI Elements Causes Crashes)
+**Issue:** Moving or undocking any part of the Affinity UI causes the application to crash. Windows cannot be docked properly and undocked windows are unreliable.
+
+**Status:** Open ([#108](https://github.com/ryzendew/Linux-Affinity-Installer/issues/108))
+
+**Note:** This is a Wine/Windows compatibility limitation that cannot be fixed within the scope of this project. The issue stems from Wine's window management implementation not properly handling Affinity's complex UI layout system.
+
+**Workaround:** None available. Keep all UI elements in their default docked positions.
+
+### AppImage Memory Issues (Excessive RAM Usage and Random Crashes)
+**Issue:** The Affinity AppImage consumes unusually large amounts of RAM during normal usage and may randomly crash, affecting system stability.
+
+**Status:** Open ([#106](https://github.com/ryzendew/Linux-Affinity-Installer/issues/106))
+
+**Note:** This appears to be a random bug affecting the AppImage build. The issue occurs inconsistently and may be related to how the AppImage packages Wine and Affinity together.
+
+**Workaround:**
+- Use the Python GUI installer instead of AppImage for more stable performance
+- Close other memory-intensive applications when using Affinity
+- Save work frequently due to potential crashes
 
 ## Installation Issues
 
@@ -91,6 +112,15 @@ This document lists known issues and their workarounds. For the latest updates, 
 - This is a Wine limitation and cannot be resolved until Wine improves WebView2 support
 
 **Note:** Do not open issues about WebView2 - this is a known limitation that cannot be fixed.
+
+### Login/Authentication Issues
+**Issue:** Logging into Affinity applications does not work properly. Authentication dialogs may fail or not function as expected.
+
+**Note:** This is due to Wine's limited support for web-based authentication systems.
+
+**Workaround:**
+- Use Affinity applications without logging in (they work fully offline)
+- If account features are needed, consider using the Windows version in a virtual machine
 
 ## Wine Version Issues
 

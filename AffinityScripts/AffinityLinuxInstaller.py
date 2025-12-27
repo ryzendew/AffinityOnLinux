@@ -83,7 +83,19 @@ try:
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
     from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent, QPainter, QPen
-    from PyQt6.QtSvgWidgets import QSvgWidget
+
+    # Try to import SVG widget (may not be available on all distributions)
+    try:
+        from PyQt6.QtSvgWidgets import QSvgWidget
+        SVG_WIDGET_AVAILABLE = True
+    except ImportError:
+        print("⚠️  QSvgWidget not available - some icons may not display correctly")
+        SVG_WIDGET_AVAILABLE = False
+        # Create a dummy QSvgWidget class to prevent import errors
+        class QSvgWidget(QWidget):
+            def load(self, content): pass
+            def setFixedSize(self, size): super().setFixedSize(size)
+
     PYQT6_AVAILABLE = True
 except ImportError:
     print("PyQt6 not found. Attempting to install...")
@@ -96,8 +108,20 @@ except ImportError:
                 QButtonGroup, QRadioButton, QInputDialog, QSlider, QLineEdit, QSizePolicy
             )
             from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
-            from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent
-            from PyQt6.QtSvgWidgets import QSvgWidget
+            from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap, QShortcut, QKeySequence, QWheelEvent, QPainter, QPen
+
+            # Try to import SVG widget after installation
+            try:
+                from PyQt6.QtSvgWidgets import QSvgWidget
+                SVG_WIDGET_AVAILABLE = True
+            except ImportError:
+                print("⚠️  QSvgWidget not available after installation - some icons may not display correctly")
+                SVG_WIDGET_AVAILABLE = False
+                # Create a dummy QSvgWidget class to prevent import errors
+                class QSvgWidget(QWidget):
+                    def load(self, content): pass
+                    def setFixedSize(self, size): super().setFixedSize(size)
+
             PYQT6_AVAILABLE = True
             print("✓ PyQt6 installed and imported successfully")
         except ImportError as e:

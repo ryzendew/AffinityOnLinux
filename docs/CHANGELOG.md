@@ -57,6 +57,14 @@
 
 ### Fixed
 
+#### PyQt6 Import Issues on Fedora
+- **Fixed QSvgWidget import failure** on Fedora and other distributions where SVG support is in a separate package
+  - Added graceful fallback when `PyQt6.QtSvgWidgets.QSvgWidget` is not available
+  - Installer now continues to work even when SVG widget is missing (with warning)
+  - Some icons may not display correctly when SVG widget is unavailable
+- **Updated Fedora installation instructions** to include `python3-pyqt6-svg` package
+  - Added to both README and installation documentation
+
 #### Merged Pull Requests
 - **[#90](https://github.com/ryzendew/AffinityOnLinux/pull/90)** - Fixed missing `fi` statement in shell script
   - Corrected syntax error in `AffinityLinuxInstaller.sh` that could cause script failures
@@ -66,6 +74,15 @@
 - **Updated all cross-references** after file reorganization
 - Fixed relative paths in documentation files after moving to `docs/` folder
 - Updated Wine version references throughout all documentation files
+- **Added window management crash issue** to known issues
+  - Documented UI element moving causing crashes ([#108](https://github.com/ryzendew/Linux-Affinity-Installer/issues/108))
+  - Clarified this is a Wine limitation that cannot be fixed
+- **Added AppImage memory issue** to known issues
+  - Documented excessive RAM usage and random crashes ([#106](https://github.com/ryzendew/Linux-Affinity-Installer/issues/106))
+  - Noted this appears to be a random bug affecting the AppImage build
+- **Added login/authentication issue** to known issues
+  - Documented that logging into Affinity applications does not work due to Wine limitations
+  - Clarified that applications work fully offline without authentication
 
 ### Technical Details
 
