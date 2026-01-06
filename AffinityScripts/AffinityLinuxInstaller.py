@@ -7096,62 +7096,11 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ repository...", "info")
         
-        # Detect the actual Debian codename (not PikaOS's codename)
-        # PikaOS uses its own codenames, but we need the underlying Debian codename
-        codename = None
-        pikaos_codenames = ["nest", "forky"]  # Known PikaOS-specific codenames
-        
-        # Method 1: Try lsb_release to get the codename
-        try:
-            success, output, _ = self.run_command(["lsb_release", "-cs"])
-            if success and output.strip():
-                detected = output.strip().lower()
-                # If it's not a PikaOS codename, use it
-                if detected not in [c.lower() for c in pikaos_codenames]:
-                    codename = detected
-                    self.log(f"Detected Debian codename from lsb_release: {codename}", "info")
-        except Exception:
-            pass
-        
-        # Method 2: Check /etc/debian_version to determine base Debian version
-        if not codename:
-            try:
-                with open("/etc/debian_version", "r") as f:
-                    debian_ver = f.read().strip().lower()
-                    # Map Debian version numbers to codenames
-                    if "bookworm" in debian_ver or "12" in debian_ver:
-                        codename = "bookworm"
-                    elif "bullseye" in debian_ver or "11" in debian_ver:
-                        codename = "bullseye"
-                    elif "trixie" in debian_ver or "testing" in debian_ver:
-                        codename = "trixie"
-                    elif "sid" in debian_ver or "unstable" in debian_ver:
-                        codename = "trixie"  # Use testing for unstable
-                    if codename:
-                        self.log(f"Detected Debian codename from /etc/debian_version: {codename}", "info")
-            except (IOError, FileNotFoundError):
-                pass
-        
-        # Method 3: Check /etc/os-release for DEBIAN_CODENAME
-        if not codename:
-            try:
-                with open("/etc/os-release", "r") as f:
-                    for line in f:
-                        if line.startswith("DEBIAN_CODENAME="):
-                            detected = line.split("=", 1)[1].strip().strip('"').lower()
-                            if detected not in [c.lower() for c in pikaos_codenames]:
-                                codename = detected
-                                self.log(f"Detected Debian codename from DEBIAN_CODENAME: {codename}", "info")
-                                break
-            except (IOError, FileNotFoundError):
-                pass
-        
-        # Fallback: Default to bookworm (Debian 12) if we can't detect
-        if not codename:
-            codename = "bookworm"
-            self.log(f"Could not detect Debian codename, defaulting to: {codename}", "warning")
-        
-        self.log(f"Using Debian codename: {codename} for WineHQ repository", "info")
+        # Always use Debian testing repository for the newest WineHQ packages
+        # This ensures we get the latest WineHQ versions without needing to update
+        # the script every Debian release. Debian testing codename is currently "forky"
+        codename = "forky"  # Debian testing
+        self.log(f"Using Debian testing (forky) repository for latest WineHQ packages", "info")
         
         # Remove existing WineHQ repository files first to avoid conflicts
         repo_pattern = Path("/etc/apt/sources.list.d/")
