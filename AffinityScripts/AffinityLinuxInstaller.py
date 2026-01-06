@@ -7019,39 +7019,65 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ GPG key...")
         self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ GPG key...", "info")
-        success, stdout, _ = self.run_command(["wget", "-O", "-", "https://dl.winehq.org/wine-builds/winehq.key"])
-        if success:
-            # Get sudo password for GPG operation
-            password = self.get_sudo_password()
-            if password is None:
-                self.log("Authentication cancelled by user", "error")
+        
+        # Get sudo password for GPG operation
+        password = self.get_sudo_password()
+        if password is None:
+            self.log("Authentication cancelled by user", "error")
+            return False
+        
+        # Validate password if not already validated
+        if not self.sudo_password_validated:
+            if not self.validate_sudo_password(password):
+                self.log("Authentication failed", "error")
+                return False
+        
+        # Download GPG key to temporary file first (handles binary data correctly)
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_key_path = tmp_file.name
+        
+        try:
+            # Download the key in binary mode
+            success, _, _ = self.run_command(["wget", "-O", tmp_key_path, "https://dl.winehq.org/wine-builds/winehq.key"])
+            if not success:
+                self.log("Failed to download GPG key", "error")
+                os.unlink(tmp_key_path)
                 return False
             
-            # Validate password if not already validated
-            if not self.sudo_password_validated:
-                if not self.validate_sudo_password(password):
-                    self.log("Authentication failed", "error")
-                    return False
+            # Read the key file in binary mode
+            with open(tmp_key_path, 'rb') as key_file:
+                key_data = key_file.read()
             
-            # Run GPG command with sudo
+            # Clean up temp file
+            os.unlink(tmp_key_path)
+            
+            # Run GPG command with sudo, passing binary key data
             gpg_proc = subprocess.Popen(
                 ["sudo", "-S", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                stderr=subprocess.PIPE
             )
-            # Send password first, then the key data
-            gpg_input = f"{self.sudo_password}\n" + stdout
+            
+            # Send password first (as bytes), then the key data (binary)
+            gpg_input = f"{self.sudo_password}\n".encode() + key_data
             gpg_stdout, gpg_stderr = gpg_proc.communicate(input=gpg_input)
             
             if gpg_proc.returncode == 0:
                 self.log("WineHQ GPG key added", "success")
             else:
-                self.log(f"Failed to add GPG key: {gpg_stderr}", "error")
+                error_msg = gpg_stderr.decode('utf-8', errors='ignore') if gpg_stderr else "Unknown error"
+                self.log(f"Failed to add GPG key: {error_msg}", "error")
                 return False
-        else:
-            self.log("Failed to download GPG key", "error")
+        except Exception as e:
+            # Clean up temp file on error
+            if os.path.exists(tmp_key_path):
+                try:
+                    os.unlink(tmp_key_path)
+                except:
+                    pass
+            self.log(f"Failed to add GPG key: {str(e)}", "error")
             return False
         
         # Add i386 architecture
@@ -7069,17 +7095,77 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ repository...")
         self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ repository...", "info")
-        # Remove existing file first to avoid overwrite prompt
-        repo_file = Path("/etc/apt/sources.list.d/winehq-forky.sources")
-        if repo_file.exists():
+        
+        # Detect the actual Debian codename (not PikaOS's codename)
+        # PikaOS uses its own codenames, but we need the underlying Debian codename
+        codename = None
+        pikaos_codenames = ["nest", "forky"]  # Known PikaOS-specific codenames
+        
+        # Method 1: Try lsb_release to get the codename
+        try:
+            success, output, _ = self.run_command(["lsb_release", "-cs"])
+            if success and output.strip():
+                detected = output.strip().lower()
+                # If it's not a PikaOS codename, use it
+                if detected not in [c.lower() for c in pikaos_codenames]:
+                    codename = detected
+                    self.log(f"Detected Debian codename from lsb_release: {codename}", "info")
+        except Exception:
+            pass
+        
+        # Method 2: Check /etc/debian_version to determine base Debian version
+        if not codename:
+            try:
+                with open("/etc/debian_version", "r") as f:
+                    debian_ver = f.read().strip().lower()
+                    # Map Debian version numbers to codenames
+                    if "bookworm" in debian_ver or "12" in debian_ver:
+                        codename = "bookworm"
+                    elif "bullseye" in debian_ver or "11" in debian_ver:
+                        codename = "bullseye"
+                    elif "trixie" in debian_ver or "testing" in debian_ver:
+                        codename = "trixie"
+                    elif "sid" in debian_ver or "unstable" in debian_ver:
+                        codename = "trixie"  # Use testing for unstable
+                    if codename:
+                        self.log(f"Detected Debian codename from /etc/debian_version: {codename}", "info")
+            except (IOError, FileNotFoundError):
+                pass
+        
+        # Method 3: Check /etc/os-release for DEBIAN_CODENAME
+        if not codename:
+            try:
+                with open("/etc/os-release", "r") as f:
+                    for line in f:
+                        if line.startswith("DEBIAN_CODENAME="):
+                            detected = line.split("=", 1)[1].strip().strip('"').lower()
+                            if detected not in [c.lower() for c in pikaos_codenames]:
+                                codename = detected
+                                self.log(f"Detected Debian codename from DEBIAN_CODENAME: {codename}", "info")
+                                break
+            except (IOError, FileNotFoundError):
+                pass
+        
+        # Fallback: Default to bookworm (Debian 12) if we can't detect
+        if not codename:
+            codename = "bookworm"
+            self.log(f"Could not detect Debian codename, defaulting to: {codename}", "warning")
+        
+        self.log(f"Using Debian codename: {codename} for WineHQ repository", "info")
+        
+        # Remove existing WineHQ repository files first to avoid conflicts
+        repo_pattern = Path("/etc/apt/sources.list.d/")
+        for repo_file in repo_pattern.glob("winehq-*.sources"):
             self.run_command(["sudo", "rm", "-f", str(repo_file)], check=False)
         
+        # Add the repository using the detected codename
+        # Use -NP flags: -N for timestamping, -P for directory
         success, _, _ = self.run_command([
-            "sudo", "wget", "-P", "/etc/apt/sources.list.d/",
-            "https://dl.winehq.org/wine-builds/debian/dists/forky/winehq-forky.sources"
+            "sudo", "wget", "-NP", "/etc/apt/sources.list.d/",
+            f"https://dl.winehq.org/wine-builds/debian/dists/{codename}/winehq-{codename}.sources"
         ])
         if not success:
-            self.log("Failed to add repository", "error")
+            self.log(f"Failed to add repository for {codename}", "error")
             return False
         
         # Update package lists
@@ -7146,39 +7232,65 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress_text(f"Step {current_step}/{total_steps}: Adding WineHQ GPG key...")
         self.update_progress(current_step / total_steps)
         self.log("Adding WineHQ GPG key...", "info")
-        success, stdout, _ = self.run_command(["wget", "-O", "-", "https://dl.winehq.org/wine-builds/winehq.key"])
-        if success:
-            # Get sudo password for GPG operation
-            password = self.get_sudo_password()
-            if password is None:
-                self.log("Authentication cancelled by user", "error")
+        
+        # Get sudo password for GPG operation
+        password = self.get_sudo_password()
+        if password is None:
+            self.log("Authentication cancelled by user", "error")
+            return False
+        
+        # Validate password if not already validated
+        if not self.sudo_password_validated:
+            if not self.validate_sudo_password(password):
+                self.log("Authentication failed", "error")
+                return False
+        
+        # Download GPG key to temporary file first (handles binary data correctly)
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_key_path = tmp_file.name
+        
+        try:
+            # Download the key in binary mode
+            success, _, _ = self.run_command(["wget", "-O", tmp_key_path, "https://dl.winehq.org/wine-builds/winehq.key"])
+            if not success:
+                self.log("Failed to download GPG key", "error")
+                os.unlink(tmp_key_path)
                 return False
             
-            # Validate password if not already validated
-            if not self.sudo_password_validated:
-                if not self.validate_sudo_password(password):
-                    self.log("Authentication failed", "error")
-                    return False
+            # Read the key file in binary mode
+            with open(tmp_key_path, 'rb') as key_file:
+                key_data = key_file.read()
             
-            # Run GPG command with sudo
+            # Clean up temp file
+            os.unlink(tmp_key_path)
+            
+            # Run GPG command with sudo, passing binary key data
             gpg_proc = subprocess.Popen(
                 ["sudo", "-S", "gpg", "--dearmor", "-o", "/etc/apt/keyrings/winehq-archive.key", "-"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                stderr=subprocess.PIPE
             )
-            # Send password first, then the key data
-            gpg_input = f"{self.sudo_password}\n" + stdout
+            
+            # Send password first (as bytes), then the key data (binary)
+            gpg_input = f"{self.sudo_password}\n".encode() + key_data
             gpg_stdout, gpg_stderr = gpg_proc.communicate(input=gpg_input)
             
             if gpg_proc.returncode == 0:
                 self.log("WineHQ GPG key added", "success")
             else:
-                self.log(f"Failed to add GPG key: {gpg_stderr}", "error")
+                error_msg = gpg_stderr.decode('utf-8', errors='ignore') if gpg_stderr else "Unknown error"
+                self.log(f"Failed to add GPG key: {error_msg}", "error")
                 return False
-        else:
-            self.log("Failed to download GPG key", "error")
+        except Exception as e:
+            # Clean up temp file on error
+            if os.path.exists(tmp_key_path):
+                try:
+                    os.unlink(tmp_key_path)
+                except:
+                    pass
+            self.log(f"Failed to add GPG key: {str(e)}", "error")
             return False
         
         # Add i386 architecture

@@ -281,10 +281,80 @@ install_dependencies() {
             fi
             
             print_progress "Adding WineHQ repository..."
-            if sudo wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/debian/dists/forky/winehq-forky.sources 2>/dev/null; then
-                print_success "WineHQ repository added"
+            # Detect the actual Debian codename (not PikaOS's codename)
+            # PikaOS uses its own codenames, but we need the underlying Debian codename
+            codename="bookworm"  # Default to Debian 12
+            pikaos_codenames=("nest" "forky")
+            
+            # Method 1: Try lsb_release
+            if command -v lsb_release >/dev/null 2>&1; then
+                detected=$(lsb_release -cs 2>/dev/null | tr '[:upper:]' '[:lower:]')
+                if [ -n "$detected" ]; then
+                    is_pikaos_codename=false
+                    for pika_codename in "${pikaos_codenames[@]}"; do
+                        if [ "$detected" = "$pika_codename" ]; then
+                            is_pikaos_codename=true
+                            break
+                        fi
+                    done
+                    if [ "$is_pikaos_codename" = false ]; then
+                        codename="$detected"
+                        print_info "Detected Debian codename from lsb_release: $codename"
+                    fi
+                fi
+            fi
+            
+            # Method 2: Check /etc/debian_version
+            if [ "$codename" = "bookworm" ] && [ -f /etc/debian_version ]; then
+                debian_ver=$(cat /etc/debian_version | tr '[:upper:]' '[:lower:]')
+                case "$debian_ver" in
+                    *bookworm*|*12*)
+                        codename="bookworm"
+                        ;;
+                    *bullseye*|*11*)
+                        codename="bullseye"
+                        ;;
+                    *trixie*|*testing*)
+                        codename="trixie"
+                        ;;
+                    *sid*|*unstable*)
+                        codename="trixie"  # Use testing for unstable
+                        ;;
+                esac
+                if [ "$codename" != "bookworm" ]; then
+                    print_info "Detected Debian codename from /etc/debian_version: $codename"
+                fi
+            fi
+            
+            # Method 3: Check /etc/os-release for DEBIAN_CODENAME
+            if [ "$codename" = "bookworm" ] && [ -f /etc/os-release ]; then
+                detected=$(grep "^DEBIAN_CODENAME=" /etc/os-release | cut -d'=' -f2 | tr -d '"' | tr '[:upper:]' '[:lower:]')
+                if [ -n "$detected" ]; then
+                    is_pikaos_codename=false
+                    for pika_codename in "${pikaos_codenames[@]}"; do
+                        if [ "$detected" = "$pika_codename" ]; then
+                            is_pikaos_codename=true
+                            break
+                        fi
+                    done
+                    if [ "$is_pikaos_codename" = false ]; then
+                        codename="$detected"
+                        print_info "Detected Debian codename from DEBIAN_CODENAME: $codename"
+                    fi
+                fi
+            fi
+            
+            print_info "Using Debian codename: $codename for WineHQ repository"
+            
+            # Remove existing WineHQ repository files first
+            sudo rm -f /etc/apt/sources.list.d/winehq-*.sources 2>/dev/null
+            
+            # Add the repository using the detected codename
+            # Use -NP flags: -N for timestamping, -P for directory
+            if sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/debian/dists/$codename/winehq-$codename.sources" 2>/dev/null; then
+                print_success "WineHQ repository added for $codename"
             else
-                print_error "Failed to add WineHQ repository"
+                print_error "Failed to add WineHQ repository for $codename"
                 exit 1
             fi
             
