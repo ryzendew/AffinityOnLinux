@@ -4,7 +4,8 @@ The installer supports multiple Wine versions, all patched for Affinity compatib
 
 | Version | Best For | Description |
 |---------|----------|-------------|
-| **10.10** (Recommended) | Most users | Latest version with best compatibility and performance |
+|**11.0** (Latest) | Most users | Latest version with best compatibility and performance |
+| **10.10** (Legacy) | Most users | Latest version with best compatibility and performance |
 | **9.14** (Legacy) | Fallback | Legacy version if newer versions have issues |
 
 ## Features
