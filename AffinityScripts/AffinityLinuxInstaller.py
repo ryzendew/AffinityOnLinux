@@ -391,21 +391,33 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_switch_backend_button()
         """Check if Wine and Affinity applications are installed, and update button states"""
         wine = self.get_wine_path("wine")
-        wine_exists = wine.exists()
-        
+        wine_staging = self.get_wine_path("wine-staging")
+
+        # Check if either wine or wine-staging exists
+        wine_exists = wine.exists() or wine_staging.exists()
+
         wine_version_display = "Wine"
         if wine_exists:
-            try:
-                success, stdout, _ = self.run_command([str(wine), "--version"], check=False, capture=True)
-                if success and stdout:
-                    version_match = re.search(r'wine-(\d+\.\d+)', stdout)
-                    if version_match:
-                        wine_version_display = f"Wine {version_match.group(1)}"
-                    else:
-                        wine_dir = Path(self.directory) / "ElementalWarriorWine"
-                        if (wine_dir / "bin" / "wine").exists():
-                            wine_version_display = "Wine (patched)"
-            except Exception:
+            # Try both wine and wine-staging binaries
+            for wine_bin in [wine, wine_staging]:
+                if wine_bin.exists():
+                    try:
+                        success, stdout, _ = self.run_command([str(wine_bin), "--version"], check=False, capture=True)
+                        if success and stdout:
+                            version_match = re.search(r'wine-(\d+\.\d+)', stdout)
+                            if version_match:
+                                wine_version_display = f"Wine {version_match.group(1)}"
+                                break  # Found a working wine binary, no need to check further
+                            else:
+                                wine_dir = Path(self.directory) / "ElementalWarriorWine"
+                                if (wine_dir / "bin" / "wine").exists():
+                                    wine_version_display = "Wine (patched)"
+                                    break
+                    except Exception:
+                        continue
+
+            # If we still haven't found a version, mark as patched
+            if wine_version_display == "Wine":
                 wine_version_display = "Wine (patched)"
         
         if hasattr(self, 'system_status_label'):
@@ -3113,23 +3125,40 @@ class AffinityInstallerGUI(QMainWindow):
         # Create button group to ensure only one radio button is selected at a time
         button_group = QButtonGroup(dialog)
         
-        # Wine 10.10 option - clean frame with radio button and description (Recommended)
+        # Wine 11.0 option - clean frame with radio button and description (Recommended)
+        wine_110_frame = QFrame()
+        wine_110_frame.setObjectName("optionFrame")
+        wine_110_layout = QVBoxLayout(wine_110_frame)
+        wine_110_layout.setContentsMargins(12, 10, 12, 10)
+        wine_110_layout.setSpacing(6)
+        wine_110_radio = QRadioButton("Wine 11.0 (Recommended)")
+        wine_110_radio.setChecked(True)
+        wine_110_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        wine_110_layout.addWidget(wine_110_radio)
+        wine_110_desc = QLabel("ElementalWarrior Wine 11.0 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance for most systems.")
+        wine_110_desc.setObjectName("optionDescription")
+        wine_110_desc.setWordWrap(True)
+        wine_110_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        wine_110_layout.addWidget(wine_110_desc)
+        options_layout.addWidget(wine_110_frame)
+        button_group.addButton(wine_110_radio, 0)
+
+        # Wine 10.10 option - clean frame with radio button and description
         wine_1010_frame = QFrame()
         wine_1010_frame.setObjectName("optionFrame")
         wine_1010_layout = QVBoxLayout(wine_1010_frame)
         wine_1010_layout.setContentsMargins(12, 10, 12, 10)
         wine_1010_layout.setSpacing(6)
-        wine_1010_radio = QRadioButton("Wine 10.10 (Recommended)")
-        wine_1010_radio.setChecked(True)
+        wine_1010_radio = QRadioButton("Wine 10.10")
         wine_1010_radio.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         wine_1010_layout.addWidget(wine_1010_radio)
-        wine_1010_desc = QLabel("ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance for most systems.")
+        wine_1010_desc = QLabel("ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Previous stable version.")
         wine_1010_desc.setObjectName("optionDescription")
         wine_1010_desc.setWordWrap(True)
         wine_1010_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         wine_1010_layout.addWidget(wine_1010_desc)
         options_layout.addWidget(wine_1010_frame)
-        button_group.addButton(wine_1010_radio, 0)
+        button_group.addButton(wine_1010_radio, 1)
         
         # Wine 9.14 option - clean frame with radio button and description
         wine_914_frame = QFrame()
@@ -3146,7 +3175,7 @@ class AffinityInstallerGUI(QMainWindow):
         wine_914_desc.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         wine_914_layout.addWidget(wine_914_desc)
         options_layout.addWidget(wine_914_frame)
-        button_group.addButton(wine_914_radio, 1)
+        button_group.addButton(wine_914_radio, 2)
         
         # Add scroll area to main layout with stretch factor
         main_layout.addWidget(scroll_area, 1)
@@ -3178,8 +3207,10 @@ class AffinityInstallerGUI(QMainWindow):
         # Get result
         result = dialog.exec()
         if result == QDialog.DialogCode.Accepted:
-            if wine_1010_radio.isChecked():
-                self.question_dialog_response = "Wine 10.10 (Recommended)"
+            if wine_110_radio.isChecked():
+                self.question_dialog_response = "Wine 11.0 (Recommended)"
+            elif wine_1010_radio.isChecked():
+                self.question_dialog_response = "Wine 10.10"
             elif wine_914_radio.isChecked():
                 self.question_dialog_response = "Wine 9.14 (Legacy)"
         else:
@@ -3385,13 +3416,50 @@ class AffinityInstallerGUI(QMainWindow):
         """Get the path to a Wine binary"""
         return self.get_wine_dir() / "bin" / binary
     
+    def get_current_wine_version(self):
+        """Get the current ElementalWarrior Wine version (9.14, 10.10, or 11.0)"""
+        # Try regular wine first
+        wine = self.get_wine_path("wine")
+        wine_staging = self.get_wine_path("wine-staging")
+
+        # Check both wine and wine-staging binaries
+        for wine_bin in [wine, wine_staging]:
+            if wine_bin.exists():
+                try:
+                    success, stdout, _ = self.run_command([str(wine_bin), "--version"], check=False, capture=True)
+                    if success and stdout:
+                        version_match = re.search(r'wine-(\d+\.\d+)', stdout)
+                        if version_match:
+                            version = version_match.group(1)
+                            # Map actual Wine version to ElementalWarrior version
+                            if version.startswith("9."):
+                                return "9.14"
+                            elif version.startswith("10."):
+                                return "10.10"
+                            elif version.startswith("11."):
+                                return "11.0"
+                except Exception:
+                    continue
+        return None
+
     def get_wine_tkg_for_installer(self, binary="wine"):
-        """Get wine-tkg binary path for running installers, fallback to regular wine if not available"""
+        """Get wine-tkg binary path for running installers, fallback to regular wine or wine-staging if not available"""
         wine_tkg_bin = self.get_wine_tkg_path(binary)
         if wine_tkg_bin and wine_tkg_bin.exists():
             return str(wine_tkg_bin)
+
         # Fallback to regular wine
-        return str(self.get_wine_path(binary))
+        wine_bin = self.get_wine_path(binary)
+        if wine_bin.exists():
+            return str(wine_bin)
+
+        # Final fallback to wine-staging
+        wine_staging_bin = self.get_wine_path(f"{binary}-staging")
+        if wine_staging_bin.exists():
+            return str(wine_staging_bin)
+
+        # Ultimate fallback
+        return str(wine_bin)
     
     def get_wine_tkg_dir(self):
         """Get the wine-tkg directory path"""
@@ -3527,8 +3595,8 @@ class AffinityInstallerGUI(QMainWindow):
         
         # Step 3: Setup download parameters
         self.log("DEBUG: Step 3 - Setting up download parameters", "info")
-        wine_tkg_url = "https://github.com/Kron4ek/Wine-Builds/releases/download/10.19/wine-10.19-staging-amd64.tar.xz"
-        wine_tkg_file = wine_tkg_dir / "wine-10.19-staging-amd64.tar.xz"
+        wine_tkg_url = "https://github.com/Kron4ek/Wine-Builds/releases/download/11.0/wine-11.0-staging-tkg-amd64-wow64.tar.xz"
+        wine_tkg_file = wine_tkg_dir / "wine-11.0-staging-tkg-amd64-wow64.tar.xz"
         self.log(f"DEBUG: Download URL: {wine_tkg_url}", "info")
         self.log(f"DEBUG: Target file: {wine_tkg_file}", "info")
         
@@ -6359,20 +6427,23 @@ class AffinityInstallerGUI(QMainWindow):
         wine_version = self.show_question_dialog(
             "Choose Wine Version",
             "Which Wine version would you like to install?\n\n"
-            "• Wine 10.10 (Recommended) - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance.\n"
+            "• Wine 11.0 (Recommended) - ElementalWarrior Wine 11.0 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance.\n"
+            "• Wine 10.10 - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Previous stable version.\n"
             "• Wine 9.14 (Legacy) - Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.\n\n"
             "Note: You can switch versions later by running 'Setup Wine Environment' again.",
-            ["Wine 10.10 (Recommended)", "Wine 9.14 (Legacy)"]
+            ["Wine 11.0 (Recommended)", "Wine 10.10", "Wine 9.14 (Legacy)"]
         )
-        
-        if wine_version == "Wine 10.10 (Recommended)":
+
+        if wine_version == "Wine 11.0 (Recommended)":
+            wine_version_choice = "11.0"
+        elif wine_version == "Wine 10.10":
             wine_version_choice = "10.10"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
         else:
             self.log("Wine setup cancelled", "warning")
             return
-        
+
         self.setup_wine(wine_version_choice)
         
         if self.check_cancelled():
@@ -6950,14 +7021,15 @@ class AffinityInstallerGUI(QMainWindow):
             return self.install_popos_dependencies()
         
         commands = {
-            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
-            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
-            "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
-            "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
-            "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
-            "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
-            "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"],
-            "opensuse-leap": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0"]
+            "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "manjaro": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "fedora": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "nobara": ["sudo", "dnf", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "p7zip-plugins", "tar", "jq", "zstd", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0", "dotnet-sdk-10.0"],
+            "opensuse-leap": ["sudo", "zypper", "install", "-y", "wine", "winetricks", "wget", "curl", "p7zip", "tar", "jq", "zstd", "dotnet-sdk-8.0", "dotnet-sdk-10.0"]
         }
         
         if self.distro in commands:
@@ -6999,9 +7071,9 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
         self.log("PikaOS's built-in Wine has compatibility issues.", "warning")
         self.log("Setting up WineHQ staging from Debian...\n", "info")
-        
-        # Total steps: keyrings, gpg key, i386, repo, apt update, wine install, deps install = 7 steps
-        total_steps = 7
+
+        # Total steps: keyrings, gpg key, i386, repo, apt update, wine install, deps install, winetricks install = 8 steps
+        total_steps = 8
         current_step = 0
         
         # Create keyrings directory
@@ -7143,11 +7215,35 @@ class AffinityInstallerGUI(QMainWindow):
         self.update_progress(current_step / total_steps)
         self.log("Installing remaining dependencies...", "info")
         success, _, _ = self.run_command([
-            "sudo", "apt", "install", "-y", "winetricks", "wget", "curl", "p7zip-full", "tar", "jq", "zstd"
+            "sudo", "apt", "install", "-y", "wget", "curl", "p7zip-full", "tar", "jq", "zstd"
         ])
         if not success:
             self.log("Failed to install remaining dependencies", "error")
             return False
+
+        # Install winetricks from source
+        self.log("Installing winetricks from source...", "info")
+        success, _, _ = self.run_command([
+            "git", "clone", "https://github.com/Winetricks/winetricks"
+        ])
+        if not success:
+            self.log("Failed to clone winetricks repository", "error")
+            return False
+
+        # Change to winetricks directory and install
+        import os
+        os.chdir("winetricks")
+        success, _, _ = self.run_command(["sudo", "make", "install"])
+        if not success:
+            self.log("Failed to install winetricks", "error")
+            return False
+
+        # Go back to original directory
+        os.chdir("..")
+
+        # Clean up
+        import shutil
+        shutil.rmtree("winetricks")
         
         self.update_progress(1.0)
         self.update_progress_text("PikaOS dependencies installed")
@@ -7318,11 +7414,11 @@ class AffinityInstallerGUI(QMainWindow):
         self.log("All dependencies installed for Pop!_OS", "success")
         return True
     
-    def setup_wine(self, wine_version="10.10"):
-        """Setup Wine environment - installs custom Wine 9.14 or 10.10 with AMD GPU and OpenCL patches
-        
+    def setup_wine(self, wine_version="11.0"):
+        """Setup Wine environment - installs custom Wine 9.14, 10.10, or 11.0 with AMD GPU and OpenCL patches
+
         Args:
-            wine_version: "9.14" for Wine 9.14 (legacy), or "10.10" for Wine 10.10 (recommended)
+            wine_version: "9.14" for Wine 9.14 (legacy), "10.10" for Wine 10.10, or "11.0" for Wine 11.0 (recommended)
         """
         self.start_operation("Setting up Wine environment")
         
@@ -7484,10 +7580,13 @@ class AffinityInstallerGUI(QMainWindow):
             if self.check_cancelled():
                 return False
             
-            # Setup WinMetadata
-            self.update_progress_text("Setting up Windows Metadata...")
-            self.update_progress(0.70)
-            self.setup_winmetadata()
+            # Setup WinMetadata (only needed for Wine 9.14 and 10.10, not 11.0+)
+            if wine_version in ["9.14", "10.10"]:
+                self.update_progress_text("Setting up Windows Metadata...")
+                self.update_progress(0.70)
+                self.setup_winmetadata()
+            else:
+                self.log("Skipping WinMetadata setup for Wine 11.0+ (not needed)", "info")
             
             if self.check_cancelled():
                 return False
@@ -8394,28 +8493,31 @@ class AffinityInstallerGUI(QMainWindow):
         wine_version = self.show_question_dialog(
             "Choose Wine Version",
             "Which Wine version would you like to install?\n\n"
-            "• Wine 10.10 (Recommended) - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance.\n"
+            "• Wine 11.0 (Recommended) - ElementalWarrior Wine 11.0 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance.\n"
+            "• Wine 10.10 - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Previous stable version.\n"
             "• Wine 9.14 (Legacy) - Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.\n\n"
             "Note: You can switch versions later by running this setup again.",
-            ["Wine 10.10 (Recommended)", "Wine 9.14 (Legacy)"]
+            ["Wine 11.0 (Recommended)", "Wine 10.10", "Wine 9.14 (Legacy)"]
         )
-        
-        if wine_version == "Wine 10.10 (Recommended)":
+
+        if wine_version == "Wine 11.0 (Recommended)":
+            wine_version_choice = "11.0"
+        elif wine_version == "Wine 10.10":
             wine_version_choice = "10.10"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
         else:
             self.log("Wine setup cancelled", "warning")
             return
-        
+
         threading.Thread(target=self.setup_wine, args=(wine_version_choice,), daemon=True).start()
     
     def _get_wine_version_config(self, wine_version):
         """Get Wine version configuration (URL, filename, etc.)
-        
+
         Args:
-            wine_version: "9.14" or "10.10"
-        
+            wine_version: "9.14", "10.10", or "11.0"
+
         Returns:
             dict with wine_url, wine_file_name, wine_dir_name, wine_dir_pattern, archive_format, wine_display_name
         """
@@ -8428,7 +8530,7 @@ class AffinityInstallerGUI(QMainWindow):
                 "archive_format": "gz",
                 "wine_display_name": "Wine 9.14 (Legacy - with AMD GPU and OpenCL patches)"
             }
-        else:  # Default to 10.10
+        elif wine_version == "10.10":
             return {
                 "wine_url": "https://github.com/ryzendew/Affinity-Wine-Builder/releases/download/10.10/ElementalWarrior-wine-10.10.tar.xz",
                 "wine_file_name": "ElementalWarrior-wine-10.10.tar.xz",
@@ -8437,14 +8539,23 @@ class AffinityInstallerGUI(QMainWindow):
                 "archive_format": "xz",
                 "wine_display_name": "Wine 10.10 (with AMD GPU and OpenCL patches)"
             }
+        else:  # Default to 11.0
+            return {
+                "wine_url": "https://github.com/ryzendew/Affinity-Wine-Builder/releases/download/11.0/ElementalWarrior-wine-11.0.tar.xz",
+                "wine_file_name": "ElementalWarrior-wine-11.0.tar.xz",
+                "wine_dir_name": "ElementalWarriorWine",
+                "wine_dir_pattern": "ElementalWarrior-wine-11.0*",
+                "archive_format": "xz",
+                "wine_display_name": "Wine 11.0 (Latest - with AMD GPU and OpenCL patches)"
+            }
     
     def _download_wine_to_cache(self, wine_version, cache_dir):
         """Download a Wine version to cache directory
-        
+
         Args:
-            wine_version: "9.14" or "10.10"
+            wine_version: "9.14", "10.10", or "11.0"
             cache_dir: Path to cache directory
-        
+
         Returns:
             True if successful, False otherwise
         """
@@ -8809,13 +8920,16 @@ class AffinityInstallerGUI(QMainWindow):
         wine_version = self.show_question_dialog(
             "Choose Wine Version",
             "Which Wine version would you like to install?\n\n"
-            "• Wine 10.10 (Recommended) - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance.\n"
+            "• Wine 11.0 (Recommended) - ElementalWarrior Wine 11.0 with AMD GPU and OpenCL patches. Latest version with best compatibility and performance.\n"
+            "• Wine 10.10 - ElementalWarrior Wine 10.10 with AMD GPU and OpenCL patches. Previous stable version.\n"
             "• Wine 9.14 (Legacy) - Legacy version with AMD GPU and OpenCL patches. Fallback option if you encounter issues with newer versions.\n\n"
             "Note: This will replace your current Wine installation.",
-            ["Wine 10.10 (Recommended)", "Wine 9.14 (Legacy)"]
+            ["Wine 11.0 (Recommended)", "Wine 10.10", "Wine 9.14 (Legacy)"]
         )
-        
-        if wine_version == "Wine 10.10 (Recommended)":
+
+        if wine_version == "Wine 11.0 (Recommended)":
+            wine_version_choice = "11.0"
+        elif wine_version == "Wine 10.10":
             wine_version_choice = "10.10"
         elif wine_version == "Wine 9.14 (Legacy)":
             wine_version_choice = "9.14"
@@ -8948,7 +9062,35 @@ class AffinityInstallerGUI(QMainWindow):
         
         if not self.distro:
             self.detect_distro()
-        
+
+        # Check for distributions that should be directed to PikaOS instead
+        if self.distro in ["linuxmint", "zorin"]:
+            distro_name = self.format_distro_name()
+            message = f"""{distro_name} is not officially supported for optimal Affinity compatibility.
+
+For better support and compatibility, we recommend installing PikaOS - a Debian-based distribution specifically optimized for gaming and compatibility:
+
+https://wiki.pika-os.com/en/home
+
+PikaOS provides:
+• Better Wine compatibility
+• Gaming-focused optimizations
+• Regular updates for Affinity applications
+• Debian base with enhanced package management
+
+Would you like to continue with {distro_name} anyway?"""
+
+            reply = self.show_question_dialog(
+                f"{distro_name} Not Recommended",
+                message,
+                ["Continue Anyway", "Cancel"]
+            )
+
+            if reply == "Cancel":
+                self.log(f"Installation cancelled by user due to {distro_name} recommendation", "warning")
+                self.end_operation()
+                return False
+
         self.log(f"Installing dependencies for {self.format_distro_name()}...", "info")
         success = self.install_dependencies()
         
@@ -10109,8 +10251,12 @@ class AffinityInstallerGUI(QMainWindow):
             #     installer_file.unlink()
             # self.log("Installer file removed", "success")
             
-            # Restore WinMetadata
-            self.restore_winmetadata()
+            # Restore WinMetadata (only needed for Wine 9.14 and 10.10, not 11.0+)
+            wine_version = self.get_current_wine_version()
+            if wine_version in ["9.14", "10.10"]:
+                self.restore_winmetadata()
+            else:
+                self.log("Skipping WinMetadata restore for Wine 11.0+ (not needed)", "info")
             
             # Set up wintypes.dll and Wine overrides for Affinity apps (v2 and v3)
             if app_name in ["Photo", "Designer", "Publisher", "Add"]:
@@ -10542,10 +10688,14 @@ class AffinityInstallerGUI(QMainWindow):
             else:
                 self.log(f"Installer kept in .AffinityLinux/Installer/: {installer_file.name}", "info")
             
-            # Restore WinMetadata
-            self.update_progress_text("Restoring Windows Metadata...")
-            self.update_progress(0.6)
-            self.restore_winmetadata()
+            # Restore WinMetadata (only needed for Wine 9.14 and 10.10, not 11.0+)
+            wine_version = self.get_current_wine_version()
+            if wine_version in ["9.14", "10.10"]:
+                self.update_progress_text("Restoring Windows Metadata...")
+                self.update_progress(0.6)
+                self.restore_winmetadata()
+            else:
+                self.log("Skipping WinMetadata restore for Wine 11.0+ (not needed)", "info")
             
             # Configure OpenCL (if enabled)
             if self.is_opencl_enabled():
