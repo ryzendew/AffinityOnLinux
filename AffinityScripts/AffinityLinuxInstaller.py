@@ -7815,17 +7815,21 @@ class AffinityInstallerGUI(QMainWindow):
         # Ensure system32 directory exists
         system32_dir.mkdir(parents=True, exist_ok=True)
         
-        # Reinstall WinMetadata by downloading and extracting
-        self.log("Installing fresh WinMetadata...", "info")
-        self.setup_winmetadata()
-        
-        # Set up wintypes.dll override
-        self.log("Setting up wintypes.dll override...", "info")
-        self.setup_wintypes_dll_override()
-        
-        # Copy wintypes.dll for all installed Affinity apps (v2 and v3)
-        self.log("Copying wintypes.dll for installed Affinity apps...", "info")
-        self.copy_wintypes_dll_for_all_apps()
+        # Reinstall WinMetadata by downloading and extracting (only for Wine < 11.0)
+        wine_version = self.get_current_wine_version()
+        if wine_version in ["9.14", "10.10"]:
+            self.log("Installing fresh WinMetadata...", "info")
+            self.setup_winmetadata()
+
+            # Set up wintypes.dll override
+            self.log("Setting up wintypes.dll override...", "info")
+            self.setup_wintypes_dll_override()
+
+            # Copy wintypes.dll for all installed Affinity apps (v2 and v3)
+            self.log("Copying wintypes.dll for installed Affinity apps...", "info")
+            self.copy_wintypes_dll_for_all_apps()
+        else:
+            self.log("Skipping WinMetadata and wintypes.dll setup for Wine 11.0+ (not needed)", "info")
         
         self.log("\n✓ WinMetadata reinstallation completed!", "success")
     
@@ -10258,13 +10262,17 @@ Would you like to continue with {distro_name} anyway?"""
             else:
                 self.log("Skipping WinMetadata restore for Wine 11.0+ (not needed)", "info")
             
-            # Set up wintypes.dll and Wine overrides for Affinity apps (v2 and v3)
+            # Set up wintypes.dll and Wine overrides for Affinity apps (v2 and v3) - only for Wine < 11.0
             if app_name in ["Photo", "Designer", "Publisher", "Add"]:
-                self.log("Setting up wintypes.dll and Wine overrides...", "info")
-                # Set up DLL override for wintypes.dll
-                self.setup_wintypes_dll_override()
-                # Copy wintypes.dll for the installed app
-                self.setup_wintypes_dll(app_name)
+                wine_version = self.get_current_wine_version()
+                if wine_version in ["9.14", "10.10"]:
+                    self.log("Setting up wintypes.dll and Wine overrides...", "info")
+                    # Set up DLL override for wintypes.dll
+                    self.setup_wintypes_dll_override()
+                    # Copy wintypes.dll for the installed app
+                    self.setup_wintypes_dll(app_name)
+                else:
+                    self.log("Skipping wintypes.dll setup for Wine 11.0+ (not needed)", "info")
             
             # If it's an Affinity app, automatically create desktop entry and configure OpenCL
             if app_name in ["Photo", "Designer", "Publisher"]:
@@ -10705,18 +10713,26 @@ Would you like to continue with {distro_name} anyway?"""
             else:
                 self.log("OpenCL support is disabled, skipping configuration", "info")
             
-            # For Affinity v2 apps (Photo, Designer, Publisher), copy wintypes.dll and set override
+            # For Affinity v2 apps (Photo, Designer, Publisher), copy wintypes.dll and set override (only for Wine < 11.0)
             if is_affinity_v2:
-                self.update_progress_text("Configuring wintypes.dll for v2 app...")
-                self.update_progress(0.82)
-                self.setup_wintypes_dll(app_name)
-            
-            # For Affinity v3 (Unified), copy wintypes.dll and set override, then patch the DLL
+                wine_version = self.get_current_wine_version()
+                if wine_version in ["9.14", "10.10"]:
+                    self.update_progress_text("Configuring wintypes.dll for v2 app...")
+                    self.update_progress(0.82)
+                    self.setup_wintypes_dll(app_name)
+                else:
+                    self.log("Skipping wintypes.dll setup for Wine 11.0+ (not needed)", "info")
+
+            # For Affinity v3 (Unified), copy wintypes.dll and set override, then patch the DLL (only for Wine < 11.0)
             if app_name == "Add" or app_name == "Affinity (Unified)":
-                # Copy wintypes.dll and set override
-                self.update_progress_text("Configuring wintypes.dll for v3 app...")
-                self.update_progress(0.82)
-                self.setup_wintypes_dll(app_name)
+                wine_version = self.get_current_wine_version()
+                if wine_version in ["9.14", "10.10"]:
+                    # Copy wintypes.dll and set override
+                    self.update_progress_text("Configuring wintypes.dll for v3 app...")
+                    self.update_progress(0.82)
+                    self.setup_wintypes_dll(app_name)
+                else:
+                    self.log("Skipping wintypes.dll setup for Wine 11.0+ (not needed)", "info")
                 
                 # Patch the DLL to fix settings saving
                 self.update_progress_text("Patching DLL for settings fix...")
