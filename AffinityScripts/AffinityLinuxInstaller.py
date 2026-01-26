@@ -4913,7 +4913,8 @@ class AffinityInstallerGUI(QMainWindow):
         for line in lspci_stdout.split('\n'):
             line_lower = line.lower()
             # Check if this is a graphics/display device
-            if any(keyword in line_lower for keyword in ['vga', '3d', 'display controller', 'graphics']):
+            # GREP defined more explicitly, avoids wrong lines
+            if any(keyword in line_lower for keyword in ['vga', '3d controller', 'display controller', 'graphics']):
                 gpu_lines.append(line)
         
         # Process each GPU line to extract type and model
