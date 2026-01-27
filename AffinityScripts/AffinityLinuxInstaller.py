@@ -16,6 +16,7 @@ import urllib.request
 import urllib.error
 import re
 import json
+import tempfile
 from pathlib import Path
 import time
 import signal
@@ -225,16 +226,15 @@ class AffinityInstallerGUI(QMainWindow):
     hide_spinner_signal = pyqtSignal(object)
     
     def __init__(self):
-        import time as time_module
-        startup_start = time_module.time()
+        startup_start = time.time()
         timing_log = []
         
         def log_timing(step_name, start_time):
-            elapsed = time_module.time() - start_time
+            elapsed = time.time() - start_time
             timing_log.append((step_name, elapsed))
-            return time_module.time()
+            return time.time()
         
-        step_start = time_module.time()
+        step_start = time.time()
         super().__init__()
         step_start = log_timing("QMainWindow.__init__", step_start)
         
@@ -315,7 +315,7 @@ class AffinityInstallerGUI(QMainWindow):
         
         step_start = log_timing("Defer slow operations", step_start)
         
-        total_time = time_module.time() - startup_start
+        total_time = time.time() - startup_start
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
         self.log("Startup Performance:", "info")
         self.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "info")
@@ -4787,7 +4787,6 @@ class AffinityInstallerGUI(QMainWindow):
             if local_icons_dir.exists():
                 # If local icons exist, copy them quickly instead of downloading
                 try:
-                    import shutil
                     local_icons = list(local_icons_dir.glob("*.svg"))
                     if local_icons:
                         # Copy missing icons from local directory
@@ -6184,7 +6183,7 @@ class AffinityInstallerGUI(QMainWindow):
             "manjaro": "Manjaro"
         }
         
-        return distro_names.get(distro.lower(), distro.title())
+        return distro_names.get(distro.lower() if distro else "", distro.title() if distro else "Unknown")
     
     def download_file(self, url, output_path, description=""):
         """Download file with progress tracking"""
@@ -7106,7 +7105,6 @@ class AffinityInstallerGUI(QMainWindow):
                 return False
         
         # Download GPG key to temporary file first (handles binary data correctly)
-        import tempfile
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_key_path = tmp_file.name
         
@@ -7145,9 +7143,10 @@ class AffinityInstallerGUI(QMainWindow):
                 return False
         except Exception as e:
             # Clean up temp file on error
-            if os.path.exists(tmp_key_path):
+            import os as _os
+            if _os.path.exists(tmp_key_path):
                 try:
-                    os.unlink(tmp_key_path)
+                    _os.unlink(tmp_key_path)
                 except:
                     pass
             self.log(f"Failed to add GPG key: {str(e)}", "error")
@@ -7232,7 +7231,6 @@ class AffinityInstallerGUI(QMainWindow):
             return False
 
         # Change to winetricks directory and install
-        import os
         os.chdir("winetricks")
         success, _, _ = self.run_command(["sudo", "make", "install"])
         if not success:
@@ -7243,7 +7241,6 @@ class AffinityInstallerGUI(QMainWindow):
         os.chdir("..")
 
         # Clean up
-        import shutil
         shutil.rmtree("winetricks")
         
         self.update_progress(1.0)
@@ -7292,7 +7289,6 @@ class AffinityInstallerGUI(QMainWindow):
                 return False
         
         # Download GPG key to temporary file first (handles binary data correctly)
-        import tempfile
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             tmp_key_path = tmp_file.name
         
@@ -9531,7 +9527,6 @@ Would you like to continue with {distro_name} anyway?"""
             
             # Set permissions (make sure files are readable)
             try:
-                import os
                 for root, dirs, files in os.walk(target_dir):
                     for d in dirs:
                         os.chmod(os.path.join(root, d), 0o755)
@@ -10103,7 +10098,6 @@ Would you like to continue with {distro_name} anyway?"""
                 
                 # Set permissions (make sure files are readable)
                 try:
-                    import os
                     for root, dirs, files in os.walk(target_dir):
                         for d in dirs:
                             os.chmod(os.path.join(root, d), 0o755)
@@ -11659,9 +11653,6 @@ Would you like to continue with {distro_name} anyway?"""
                 # Fallback: Download as zip and extract
                 if not returncolors_project_exists:
                     try:
-                        import zipfile
-                        import tempfile
-                        
                         # Download zip from GitHub
                         zip_url = "https://github.com/ShawnTheBeachy/return-affinity-colors/archive/refs/heads/main.zip"
                         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
@@ -12043,8 +12034,12 @@ Would you like to continue with {distro_name} anyway?"""
         
         with open(desktop_file, "w") as f:
             f.write("[Desktop Entry]\n")
-            f.write(f"Name=Affinity {name}\n")
-            f.write(f"Comment=A powerful {name.lower()} software.\n")
+            if app_name == "Add":
+                f.write("Name=Affinity Suite\n")
+                f.write("Comment=A powerful creative suite.\n")
+            else:
+                f.write(f"Name=Affinity {name}\n")
+                f.write(f"Comment=A powerful {name.lower()} software.\n")
             f.write(f"Icon={icon_path_str}\n")
             f.write(f"Path={directory_str}\n")
             # Use Linux path format with proper quoting for spaces
@@ -12691,31 +12686,37 @@ Would you like to continue with {distro_name} anyway?"""
         self.log("\n✓ Windows 11 and renderer configuration completed", "success")
         self.end_operation()
     
-    def install_dotnet_sdk(self):
+    def install_dotnet_sdk(self, version="8.0"):
         """Install .NET SDK based on distribution"""
         try:
-            self.log("Installing .NET SDK...", "info")
+            self.log(f"Installing .NET SDK {version}...", "info")
             
-            if self.distro in ["pikaos", "pop", "debian"]:
-                # Try installing dotnet-sdk-8.0 (may need Microsoft repo)
+            # Determine package name based on version
+            if version == "10.0":
+                package_name = "dotnet-sdk-10.0"
+            else:
+                package_name = "dotnet-sdk-8.0"
+            
+            if self.distro in ["pikaos", "pop", "debian", "ubuntu", "linuxmint", "zorin"]:
+                # Try installing dotnet-sdk (may need Microsoft repo)
                 success, _, stderr = self.run_command([
-                    "sudo", "apt", "install", "-y", "dotnet-sdk-8.0"
+                    "sudo", "apt", "install", "-y", package_name
                 ], check=False)
                 if not success:
-                    self.log("Failed to install dotnet-sdk-8.0 from default repos", "warning")
+                    self.log(f"Failed to install {package_name} from default repos", "warning")
                     self.log("You may need to add Microsoft's .NET repository. See: https://learn.microsoft.com/dotnet/core/install/linux", "info")
                     return False
                 return True
             
             commands = {
-                "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
-                "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
-                "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
-                "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-8.0"],
-                "fedora": ["sudo", "dnf", "install", "-y", "dotnet-sdk-8.0"],
-                "nobara": ["sudo", "dnf", "install", "-y", "dotnet-sdk-8.0"],
-                "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", "dotnet-sdk-8.0"],
-                "opensuse-leap": ["sudo", "zypper", "install", "-y", "dotnet-sdk-8.0"]
+                "arch": ["sudo", "pacman", "-S", "--needed", "--noconfirm", package_name],
+                "cachyos": ["sudo", "pacman", "-S", "--needed", "--noconfirm", package_name],
+                "endeavouros": ["sudo", "pacman", "-S", "--needed", "--noconfirm", package_name],
+                "xerolinux": ["sudo", "pacman", "-S", "--needed", "--noconfirm", package_name],
+                "fedora": ["sudo", "dnf", "install", "-y", package_name],
+                "nobara": ["sudo", "dnf", "install", "-y", package_name],
+                "opensuse-tumbleweed": ["sudo", "zypper", "install", "-y", package_name],
+                "opensuse-leap": ["sudo", "zypper", "install", "-y", package_name]
             }
             
             if self.distro in commands:
@@ -12774,40 +12775,104 @@ Would you like to continue with {distro_name} anyway?"""
         
         # Check if .NET SDK 10.0+ is installed (required for ReturnColors)
         if not self.check_dotnet_sdk_10():
-            self.log(".NET SDK 10.0+ is required for ReturnColors patch", "error")
-            self.log("ReturnColors requires .NET SDK 10.0 or newer to build.", "info")
-            self.log("Please install .NET SDK 10.0 manually:", "info")
+            self.log(".NET SDK 10.0+ is required for ReturnColors patch", "warning")
+            self.log("Attempting to install .NET SDK 10.0 automatically...", "info")
             
-            install_instructions = ""
-            if self.distro in ["arch", "cachyos"]:
-                self.log("  sudo pacman -S dotnet-sdk-10.0", "info")
-                install_instructions = "sudo pacman -S dotnet-sdk-10.0"
+            # Try to install dotnet-sdk-10.0 automatically
+            install_success = False
+            if self.distro in ["pikaos", "pop", "debian", "ubuntu", "linuxmint", "zorin"]:
+                success, _, _ = self.run_command([
+                    "sudo", "apt", "install", "-y", "dotnet-sdk-10.0"
+                ], check=False)
+                if success:
+                    install_success = True
+                else:
+                    self.log("Failed to install dotnet-sdk-10.0 from default repos", "warning")
+            elif self.distro in ["arch", "cachyos"]:
+                success, _, _ = self.run_command([
+                    "sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-10.0"
+                ], check=False)
+                if success:
+                    install_success = True
             elif self.distro in ["endeavouros", "xerolinux"]:
-                self.log("  sudo pacman -S dotnet-sdk-10.0", "info")
-                install_instructions = "sudo pacman -S dotnet-sdk-10.0"
+                success, _, _ = self.run_command([
+                    "sudo", "pacman", "-S", "--needed", "--noconfirm", "dotnet-sdk-10.0"
+                ], check=False)
+                if success:
+                    install_success = True
             elif self.distro in ["fedora", "nobara"]:
-                self.log("  sudo dnf install dotnet-sdk-10.0", "info")
-                install_instructions = "sudo dnf install dotnet-sdk-10.0"
-            elif self.distro in ["pikaos", "pop", "debian"]:
-                self.log("  sudo apt install dotnet-sdk-10.0", "info")
-                self.log("  (May require Microsoft's .NET repository)", "warning")
-                install_instructions = "sudo apt install dotnet-sdk-10.0\n(May require Microsoft's .NET repository)"
+                success, _, _ = self.run_command([
+                    "sudo", "dnf", "install", "-y", "dotnet-sdk-10.0"
+                ], check=False)
+                if success:
+                    install_success = True
             elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
-                self.log("  sudo zypper install dotnet-sdk-10.0", "info")
-                install_instructions = "sudo zypper install dotnet-sdk-10.0"
-            else:
-                self.log("  Please install .NET SDK 10.0 from: https://dotnet.microsoft.com/download", "info")
-                install_instructions = "Install from: https://dotnet.microsoft.com/download"
+                success, _, _ = self.run_command([
+                    "sudo", "zypper", "install", "-y", "dotnet-sdk-10.0"
+                ], check=False)
+                if success:
+                    install_success = True
             
-            self.end_operation()
-            self.show_message(
-                ".NET SDK 10.0 Required",
-                "ReturnColors patch requires .NET SDK 10.0 or newer to build.\n\n"
-                f"Please install it manually:\n{install_instructions}\n\n"
-                "After installing, restart the installer and try again.",
-                "error"
-            )
-            return
+            # Check again if installation succeeded
+            if install_success and self.check_dotnet_sdk_10():
+                self.log(".NET SDK 10.0 installed successfully", "success")
+            else:
+                # Installation failed or still not detected, show manual instructions
+                self.log(".NET SDK 10.0+ is required for ReturnColors patch", "error")
+                self.log("ReturnColors requires .NET SDK 10.0 or newer to build.", "info")
+                self.log("Please install .NET SDK 10.0 manually:", "info")
+                
+                install_instructions = ""
+                if self.distro in ["arch", "cachyos"]:
+                    self.log("  sudo pacman -S dotnet-sdk-10.0", "info")
+                    install_instructions = "sudo pacman -S dotnet-sdk-10.0"
+                elif self.distro in ["endeavouros", "xerolinux"]:
+                    self.log("  sudo pacman -S dotnet-sdk-10.0", "info")
+                    install_instructions = "sudo pacman -S dotnet-sdk-10.0"
+                elif self.distro in ["fedora", "nobara"]:
+                    self.log("  sudo dnf install dotnet-sdk-10.0", "info")
+                    install_instructions = "sudo dnf install dotnet-sdk-10.0"
+                elif self.distro in ["pikaos", "pop", "debian", "ubuntu", "linuxmint", "zorin"]:
+                    self.log("  sudo apt install dotnet-sdk-10.0", "info")
+                    self.log("  (May require Microsoft's .NET repository)", "warning")
+                    install_instructions = "sudo apt install dotnet-sdk-10.0\n(May require Microsoft's .NET repository)"
+                elif self.distro in ["opensuse-tumbleweed", "opensuse-leap"]:
+                    self.log("  sudo zypper install dotnet-sdk-10.0", "info")
+                    install_instructions = "sudo zypper install dotnet-sdk-10.0"
+                else:
+                    self.log("  Please install .NET SDK 10.0 from: https://dotnet.microsoft.com/download", "info")
+                    install_instructions = "Install from: https://dotnet.microsoft.com/download"
+                
+                # Ensure distro is detected before trying alternative method
+                if not self.distro:
+                    self.detect_distro()
+                
+                # Try to install using the install_dotnet_sdk method as fallback
+                self.log("Attempting to install .NET SDK using alternative method...", "info")
+                if self.install_dotnet_sdk(version="10.0"):
+                    # Check again if installation succeeded
+                    if self.check_dotnet_sdk_10():
+                        self.log(".NET SDK 10.0 installed successfully via alternative method", "success")
+                    else:
+                        self.end_operation()
+                        self.show_message(
+                            ".NET SDK 10.0 Required",
+                            "ReturnColors patch requires .NET SDK 10.0 or newer to build.\n\n"
+                            f"Please install it manually:\n{install_instructions}\n\n"
+                            "After installing, restart the installer and try again.",
+                            "error"
+                        )
+                        return
+                else:
+                    self.end_operation()
+                    self.show_message(
+                        ".NET SDK 10.0 Required",
+                        "ReturnColors patch requires .NET SDK 10.0 or newer to build.\n\n"
+                        f"Please install it manually:\n{install_instructions}\n\n"
+                        "After installing, restart the installer and try again.",
+                        "error"
+                    )
+                    return
         
         # Run ReturnColors colorize
         success = self.run_return_colors_colorize(str(affinity_dir))
