@@ -10524,7 +10524,7 @@ Would you like to continue with {distro_name} anyway?"""
             
             # Map display names to possible Wine desktop entry names
             wine_entry_names = []
-            if display_name and ("Unified" in display_name or display_name == "Affinity (Unified)"):
+            if display_name and ("Suite" in display_name or display_name == "Affinity Suite"):
                 wine_entry_names = ["Affinity.desktop"]
             elif display_name and "Photo" in display_name:
                 wine_entry_names = ["Affinity Photo 2.desktop", "Affinity Photo.desktop"]
